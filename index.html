@@ -237,29 +237,24 @@
         </div>
     </div>
 
-    <script type="module">
-        import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js';
-        import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js';
-        import { getFirestore, collection, doc, setDoc, addDoc, updateDoc, onSnapshot, deleteDoc } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js';
+    <script>
+        // ===== TaskJournal (IndexedDB 永続化版) =====
+        // ローカルの IndexedDB を「真実」とし、GAS(Drive) と push+pull で同期する。
+        // - push: 変更時に { tasks, markdown } を POST（no-cors / text-plain で preflight回避）
+        // - pull: 起動時・同期アイコンクリック時に GET して updatedAt ベースの LWW でマージ
 
-        // --- Firebase Initialization ---
-        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
-        const app = initializeApp(firebaseConfig);
-        const auth = getAuth(app);
-        const db = getFirestore(app);
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-
-        // --- State Management ---
-        let currentUser = null;
+        // ---- State ----
         let tasks = [];
-        let gasWebhookUrl = '';
-        let aiEndpointUrl = 'http://localhost:1234/v1/chat/completions'; // Default
-        let aiModelName = 'local-model'; // Default
+        let settings = {
+            webhookUrl: '',
+            aiEndpointUrl: 'http://localhost:1234/v1/chat/completions',
+            aiModelName: 'local-model'
+        };
         let currentTaskIdForMemo = null;
-        let isInitialLoad = true;
         let syncTimeout = null;
+        let db = null;
 
-        // --- Categories Data ---
+        // ---- Categories Data ----
         const categoryStyles = {
             "Work": "bg-blue-100 text-blue-700 border-blue-200",
             "Personal": "bg-emerald-100 text-emerald-700 border-emerald-200",
@@ -267,7 +262,6 @@
             "Idea": "bg-purple-100 text-purple-700 border-purple-200",
             "Other": "bg-zinc-100 text-zinc-600 border-zinc-200"
         };
-
         const categoryLabels = {
             "Work": "💼 仕事",
             "Personal": "🏠 プライベート",
@@ -276,100 +270,190 @@
             "Other": "📦 その他"
         };
 
-        // --- Auth & Setup ---
-        async function initAuth() {
+        // ---- IndexedDB ----
+        const DB_NAME = 'taskjournal';
+        const DB_VERSION = 1;
+
+        function openDB() {
+            return new Promise((resolve, reject) => {
+                const req = indexedDB.open(DB_NAME, DB_VERSION);
+                req.onupgradeneeded = (e) => {
+                    const d = e.target.result;
+                    if (!d.objectStoreNames.contains('tasks')) d.createObjectStore('tasks', { keyPath: 'id' });
+                    if (!d.objectStoreNames.contains('meta')) d.createObjectStore('meta', { keyPath: 'key' });
+                };
+                req.onsuccess = (e) => resolve(e.target.result);
+                req.onerror = (e) => reject(e.target.error);
+            });
+        }
+        function store(name, mode) { return db.transaction(name, mode).objectStore(name); }
+        function idb(request) {
+            return new Promise((res, rej) => {
+                request.onsuccess = () => res(request.result);
+                request.onerror = () => rej(request.error);
+            });
+        }
+        const dbGetAllTasks = () => idb(store('tasks', 'readonly').getAll());
+        const dbPutTask = (t) => idb(store('tasks', 'readwrite').put(t));
+        const dbDeleteTask = (id) => idb(store('tasks', 'readwrite').delete(id));
+        function dbBulkPutTasks(arr) {
+            return new Promise((res, rej) => {
+                const tx = db.transaction('tasks', 'readwrite');
+                tx.oncomplete = () => res();
+                tx.onerror = () => rej(tx.error);
+                const s = tx.objectStore('tasks');
+                arr.forEach(x => s.put(x));
+            });
+        }
+        const dbGetMeta = (key) => idb(store('meta', 'readonly').get(key));
+        const dbPutMeta = (obj) => idb(store('meta', 'readwrite').put(obj));
+
+        // ---- Utilities ----
+        function uid() {
+            return (crypto && crypto.randomUUID) ? crypto.randomUUID()
+                : 'id-' + Date.now() + '-' + Math.random().toString(36).slice(2);
+        }
+        const now = () => Date.now();
+        function getTimeString() {
+            const n = new Date();
+            return `[${String(n.getHours()).padStart(2, '0')}:${String(n.getMinutes()).padStart(2, '0')}]`;
+        }
+        function escapeHtml(s) {
+            return String(s == null ? '' : s).replace(/[&<>"']/g, c =>
+                ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+        }
+        function sortTasks() { tasks.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)); }
+        function normalizeTask(t) {
+            return {
+                id: t.id || uid(),
+                text: t.text || '',
+                dueDate: t.dueDate || null,
+                category: t.category || null,
+                status: t.status || 'todo',
+                logs: Array.isArray(t.logs) ? t.logs : [],
+                createdAt: t.createdAt || Date.now(),
+                updatedAt: t.updatedAt || t.createdAt || Date.now()
+            };
+        }
+
+        // ---- Cloud sync (push) ----
+        window.triggerDriveSync = () => {
+            if (!settings.webhookUrl) return;
+            updateSyncStatus('syncing');
+            clearTimeout(syncTimeout);
+            syncTimeout = setTimeout(async () => {
+                try {
+                    await fetch(settings.webhookUrl, {
+                        method: 'POST',
+                        // text/plain にすると preflight(OPTIONS) を回避できる
+                        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                        body: JSON.stringify({ tasks, markdown: generateMarkdown() }),
+                        mode: 'no-cors'
+                    });
+                    updateSyncStatus('success');
+                } catch (e) {
+                    console.error('Drive sync error', e);
+                    updateSyncStatus('error');
+                }
+            }, 1500);
+        };
+
+        // ---- Cloud sync (pull) ----
+        function mergeRemote(remote) {
+            const byId = new Map(tasks.map(t => [t.id, t]));
+            remote.forEach(r => {
+                if (!r || !r.id) return;
+                const local = byId.get(r.id);
+                if (!local) {
+                    byId.set(r.id, normalizeTask(r));
+                } else {
+                    const lu = local.updatedAt || local.createdAt || 0;
+                    const ru = r.updatedAt || r.createdAt || 0;
+                    if (ru > lu) byId.set(r.id, normalizeTask(r));
+                }
+            });
+            tasks = Array.from(byId.values());
+        }
+        async function pullFromCloud(showOverlay) {
+            if (!settings.webhookUrl) return;
             try {
-                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                    await signInWithCustomToken(auth, __initial_auth_token);
-                } else {
-                    await signInAnonymously(auth);
+                if (showOverlay) showLoading(true);
+                const res = await fetch(settings.webhookUrl, { method: 'GET' });
+                const remote = await res.json();
+                if (Array.isArray(remote)) {
+                    mergeRemote(remote);
+                    await dbBulkPutTasks(tasks);
+                    sortTasks();
+                    render();
                 }
-            } catch (error) {
-                console.error("Auth error:", error);
-                document.getElementById('loading-overlay').classList.add('hidden');
+                updateSyncStatus('success');
+            } catch (e) {
+                console.error('Pull error', e);
+                // 取得失敗してもローカルデータで継続
+            } finally {
+                if (showOverlay) showLoading(false);
             }
         }
 
-        onAuthStateChanged(auth, user => {
-            currentUser = user;
-            if (user) {
-                setupListeners();
-            } else {
-                document.getElementById('loading-overlay').classList.add('hidden');
-            }
-        });
+        // ---- NotebookLM 用 Markdown 生成 ----
+        function generateMarkdown() {
+            const d = new Date();
+            const pad = n => String(n).padStart(2, '0');
+            const stamp = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+            const active = tasks.filter(t => t.status !== 'done');
+            const done = tasks.filter(t => t.status === 'done');
 
-        function setupListeners() {
-            if (!currentUser) return;
-
-            const tasksRef = collection(db, 'artifacts', appId, 'users', currentUser.uid, 'tasks');
-            onSnapshot(tasksRef, (snapshot) => {
-                tasks = [];
-                snapshot.forEach(doc => {
-                    tasks.push({ id: doc.id, ...doc.data() });
+            const section = (title, arr) => {
+                let s = `## ${title}\n\n`;
+                if (arr.length === 0) return s + `(なし)\n\n`;
+                arr.forEach(t => {
+                    const statusLabel = t.status === 'done' ? '✅ 完了'
+                        : (t.status === 'doing' ? '🚀 進行中' : '⏳ 未着手');
+                    s += `### ${t.text}\n\n`;
+                    s += `- 状態: ${statusLabel}\n`;
+                    if (t.category) s += `- カテゴリ: ${categoryLabels[t.category] || t.category}\n`;
+                    if (t.dueDate) s += `- 予定日時: ${t.dueDate}\n`;
+                    if (t.logs && t.logs.length) {
+                        s += `- ログ:\n`;
+                        t.logs.forEach(l => { s += `  - ${l}\n`; });
+                    }
+                    s += `\n`;
                 });
-                tasks.sort((a, b) => b.createdAt - a.createdAt);
-                
-                render();
-                document.getElementById('loading-overlay').classList.add('hidden');
-                
-                if (!isInitialLoad) {
-                    triggerDriveSync();
-                }
-            }, (error) => {
-                console.error("Firestore tasks error:", error);
-            });
+                return s;
+            };
 
-            const settingsRef = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'settings', 'config');
-            onSnapshot(settingsRef, (docSnap) => {
-                if (docSnap.exists()) {
-                    const data = docSnap.data();
-                    gasWebhookUrl = data.webhookUrl || '';
-                    aiEndpointUrl = data.aiEndpointUrl || 'http://localhost:1234/v1/chat/completions';
-                    aiModelName = data.aiModelName || 'local-model';
-                    
-                    document.getElementById('webhook-input').value = gasWebhookUrl;
-                    document.getElementById('ai-endpoint-input').value = aiEndpointUrl;
-                    document.getElementById('ai-model-input').value = aiModelName;
-
-                    if(gasWebhookUrl) updateSyncStatus('success');
-                    else updateSyncStatus('off');
-                } else {
-                    updateSyncStatus('off');
-                    document.getElementById('ai-endpoint-input').value = aiEndpointUrl;
-                    document.getElementById('ai-model-input').value = aiModelName;
-                }
-                setTimeout(() => { isInitialLoad = false; }, 2000);
-            }, (error) => {
-                console.error("Firestore settings error:", error);
-            });
+            let md = `# TaskJournal\n\n最終更新: ${stamp}\n\n`;
+            md += section('進行中・未完了', active);
+            md += section('完了済み', done);
+            return md;
         }
 
-        // --- Auto Drive Sync Logic ---
+        // ---- Sync status indicator ----
         function updateSyncStatus(status) {
             const el = document.getElementById('sync-status');
-            el.className = 'flex items-center justify-center w-10 h-10 rounded-xl transition-all cursor-help border';
-            
-            if(status === 'off') {
+            if (!el) return;
+            el.className = 'flex items-center justify-center w-10 h-10 rounded-xl transition-all cursor-pointer border';
+
+            if (status === 'off') {
                 el.innerHTML = '<i data-lucide="cloud-off" class="w-5 h-5"></i>';
                 el.title = '同期未連携 (同期設定からURLを登録してください)';
                 el.classList.add('text-zinc-400', 'hover:bg-zinc-50', 'border-transparent', 'hover:border-zinc-200');
-            } else if(status === 'syncing') {
+            } else if (status === 'idle') {
+                el.innerHTML = '<i data-lucide="cloud" class="w-5 h-5"></i>';
+                el.title = '同期設定済み (クリックで手動取得)';
+                el.classList.add('text-zinc-400', 'hover:bg-zinc-50', 'border-transparent', 'hover:border-zinc-200');
+            } else if (status === 'syncing') {
                 el.innerHTML = '<div class="w-5 h-5 border-2 border-violet-200 border-t-violet-600 rounded-full animate-spin"></div>';
                 el.title = 'バックグラウンドで自動同期中...';
                 el.classList.add('bg-violet-50', 'border-violet-100');
-            } else if(status === 'success') {
+            } else if (status === 'success') {
                 el.innerHTML = '<i data-lucide="cloud-check" class="w-5 h-5 text-emerald-500"></i>';
                 el.title = '同期完了';
                 el.classList.add('bg-emerald-50', 'border-emerald-100');
                 setTimeout(() => {
-                    if(el.title === '同期完了') {
-                        el.className = 'flex items-center justify-center w-10 h-10 rounded-xl transition-all cursor-help border text-zinc-400 hover:bg-zinc-50 border-transparent hover:border-zinc-200';
-                        el.innerHTML = '<i data-lucide="cloud" class="w-5 h-5 text-emerald-500/70"></i>';
-                        lucide.createIcons();
-                    }
+                    if (el.title === '同期完了') updateSyncStatus('idle');
                 }, 3000);
-            } else if(status === 'error') {
+            } else if (status === 'error') {
                 el.innerHTML = '<i data-lucide="cloud-alert" class="w-5 h-5 text-rose-500"></i>';
                 el.title = '同期エラー (URLが正しいか確認してください)';
                 el.classList.add('bg-rose-50', 'border-rose-100');
@@ -377,45 +461,22 @@
             lucide.createIcons();
         }
 
-        window.triggerDriveSync = () => {
-            if (!gasWebhookUrl) return;
-            updateSyncStatus('syncing');
+        function showLoading(on) {
+            const el = document.getElementById('loading-overlay');
+            if (!el) return;
+            el.classList.toggle('hidden', !on);
+        }
 
-            clearTimeout(syncTimeout);
-            syncTimeout = setTimeout(async () => {
-                const payload = JSON.stringify({
-                    tasks: tasks
-                });
-
-                try {
-                    await fetch(gasWebhookUrl, {
-                        method: 'POST',
-                        body: payload,
-                        mode: 'no-cors' 
-                    });
-                    updateSyncStatus('success');
-                } catch (e) {
-                    console.error('Drive sync error', e);
-                    updateSyncStatus('error');
-                }
-            }, 2000); 
-        };
-
-        // --- Notifications & Downloads ---
+        // ---- Notifications & Downloads ----
         window.showToast = (message, type = 'error') => {
             const toast = document.createElement('div');
             const bgClass = type === 'error' ? 'bg-rose-100 border-rose-200 text-rose-800' : 'bg-emerald-100 border-emerald-200 text-emerald-800';
             const icon = type === 'error' ? '<i data-lucide="alert-triangle" class="w-5 h-5 text-rose-600 shrink-0"></i>' : '<i data-lucide="check-circle" class="w-5 h-5 text-emerald-600 shrink-0"></i>';
-            
             toast.className = `fixed top-4 right-4 left-4 sm:left-auto sm:w-96 ${bgClass} border p-4 rounded-2xl shadow-xl text-sm font-medium z-[100] transition-all duration-300 transform -translate-y-full opacity-0 flex items-start gap-3`;
             toast.innerHTML = `${icon}<div>${message}</div>`;
             document.body.appendChild(toast);
             lucide.createIcons();
-            
-            requestAnimationFrame(() => {
-                toast.classList.remove('-translate-y-full', 'opacity-0');
-            });
-
+            requestAnimationFrame(() => toast.classList.remove('-translate-y-full', 'opacity-0'));
             setTimeout(() => {
                 toast.classList.add('-translate-y-full', 'opacity-0');
                 setTimeout(() => toast.remove(), 300);
@@ -436,73 +497,41 @@
             window.showToast('HTMLファイルをダウンロードしました。PC上で開いてご利用ください。', 'success');
         };
 
-        // --- Local AI Logic ---
-        
-        // 豆知識機能
-        window.showTrivia = async () => {
-            const modal = document.getElementById('trivia-modal');
-            const content = document.getElementById('trivia-content');
-            const title = document.getElementById('trivia-title');
-            
-            const d = new Date();
-            const month = d.getMonth() + 1;
-            const day = d.getDate();
-            
-            title.innerText = `${month}月${day}日の豆知識`;
-            content.innerHTML = `<div class="flex flex-col items-center gap-2"><i data-lucide="loader-2" class="w-5 h-5 animate-spin text-amber-500"></i><span class="text-xs text-zinc-400">AIに聞いています...</span></div>`;
-            lucide.createIcons();
-            modal.classList.remove('hidden');
-
-            if (!aiEndpointUrl) {
-                content.innerHTML = `<div class="text-rose-500 text-xs text-center">設定からローカルAIのエンドポイントを登録してください。</div>`;
-                return;
-            }
-
+        // ---- Local AI ----
+        async function aiCategorize(text) {
             try {
-                const response = await fetch(aiEndpointUrl, {
+                const res = await fetch(settings.aiEndpointUrl, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer dummy' },
                     body: JSON.stringify({
-                        model: aiModelName || "local-model",
+                        model: settings.aiModelName || 'local-model',
+                        temperature: 0.1,
                         messages: [
-                            {
-                                role: "system", 
-                                content: "あなたは雑学王です。指定された日付にまつわる、歴史的な出来事や面白い豆知識を1つ、日本語で100文字以内で簡潔に教えてください。"
-                            },
-                            {
-                                role: "user", 
-                                content: `今日（${month}月${day}日）の豆知識を教えて。`
-                            }
-                        ],
-                        temperature: 0.8
+                            { role: 'system', content: 'You are an assistant that categorizes tasks. Read the task and respond ONLY with a valid JSON object in this format: {"category": "<Category>"}. The <Category> must be exactly one of the following: Work, Personal, Study, Idea, Other. Do not include any other text.' },
+                            { role: 'user', content: `Categorize this task: "${text}"` }
+                        ]
                     })
                 });
-                
-                if (!response.ok) throw new Error("API Connection Error");
-                
-                const result = await response.json();
-                let text = result.choices[0].message.content;
-                content.innerHTML = `<span class="text-zinc-700 font-medium">${text}</span>`;
-            } catch(e) {
-                console.error("Trivia Error:", e);
-                content.innerHTML = `<div class="text-rose-500 text-xs text-center"><i data-lucide="alert-triangle" class="w-4 h-4 mx-auto mb-1 text-rose-400"></i>AIへの接続に失敗しました。<br>ローカル環境で実行しているか確認してください。</div>`;
-                lucide.createIcons();
+                if (!res.ok) throw new Error('API Connection Error');
+                const result = await res.json();
+                let cat = 'Other';
+                const content = result.choices[0].message.content;
+                const m = content.match(/\{[\s\S]*\}/);
+                if (m) { try { cat = JSON.parse(m[0]).category; } catch (e) {} }
+                else { ['Work', 'Personal', 'Study', 'Idea'].forEach(c => { if (content.includes(c)) cat = c; }); }
+                if (!['Work', 'Personal', 'Study', 'Idea'].includes(cat)) cat = 'Other';
+                return cat;
+            } catch (e) {
+                console.error('AI classify error', e);
+                return null;
             }
-        };
+        }
 
-        window.closeTriviaModal = () => {
-            document.getElementById('trivia-modal').classList.add('hidden');
-        };
-
-        // 自動分類機能
         window.classifyTasks = async () => {
-            if (!aiEndpointUrl) {
-                alert("設定からローカルAIのエンドポイントを登録してください。");
-                return;
-            }
-            const unclassifiedTasks = tasks.filter(t => t.status !== 'done' && !t.category);
-            if (unclassifiedTasks.length === 0) return;
-            
+            if (!settings.aiEndpointUrl) { alert('設定からローカルAIのエンドポイントを登録してください。'); return; }
+            const targets = tasks.filter(t => t.status !== 'done' && !t.category);
+            if (targets.length === 0) return;
+
             const btn = document.getElementById('ai-classify-btn');
             const originalHTML = btn.innerHTML;
             btn.innerHTML = `<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i> 解析中...`;
@@ -510,219 +539,154 @@
             lucide.createIcons();
 
             let hasError = false;
-
-            for (const task of unclassifiedTasks) {
-                try {
-                    const response = await fetch(aiEndpointUrl, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer dummy' },
-                        body: JSON.stringify({
-                            model: aiModelName || "local-model",
-                            messages: [
-                                {
-                                    role: "system", 
-                                    content: "You are an assistant that categorizes tasks. Read the task and respond ONLY with a valid JSON object in this format: {\"category\": \"<Category>\"}. The <Category> must be exactly one of the following: Work, Personal, Study, Idea, Other. Do not include any other text."
-                                },
-                                {
-                                    role: "user", 
-                                    content: `Categorize this task: "${task.text}"`
-                                }
-                            ],
-                            temperature: 0.1
-                        })
-                    });
-                    const result = await response.json();
-                    let cat = "Other";
-                    
-                    try {
-                        const content = result.choices[0].message.content;
-                        const match = content.match(/\{[\s\S]*\}/);
-                        if(match) {
-                            cat = JSON.parse(match[0]).category;
-                        } else {
-                            if(content.includes("Work")) cat = "Work";
-                            else if(content.includes("Personal")) cat = "Personal";
-                            else if(content.includes("Study")) cat = "Study";
-                            else if(content.includes("Idea")) cat = "Idea";
-                        }
-                    } catch(e){
-                        console.error("Failed to parse AI response:", e);
-                    }
-                    
-                    if (!["Work", "Personal", "Study", "Idea"].includes(cat)) cat = "Other";
-
-                    if (currentUser) {
-                        await updateDoc(doc(db, 'artifacts', appId, 'users', currentUser.uid, 'tasks', task.id), { category: cat });
-                    } else {
-                        task.category = cat;
-                        render();
-                    }
-                } catch(e) {
-                    console.error("AI Classification Request Error:", e);
-                    hasError = true;
-                    break;
-                }
+            for (const t of targets) {
+                const cat = await aiCategorize(t.text);
+                if (cat === null) { hasError = true; break; }
+                t.category = cat;
+                t.updatedAt = now();
+                await dbPutTask(t);
             }
-            
+
             btn.classList.remove('pointer-events-none', 'opacity-70');
-            
+            render();
+
             if (hasError) {
                 btn.innerHTML = `<i data-lucide="alert-triangle" class="w-4 h-4 text-rose-600"></i> 接続エラー`;
-                window.showToast("<strong class='block mb-1'>ローカルAIへの接続に失敗しました</strong>Webプレビュー画面(HTTPS)からはセキュリティ制限により localhost への通信がブロックされます。設定からアプリ(HTML)をダウンロードし、ローカル環境で開いてお試しください。", 'error');
+                window.showToast("<strong class='block mb-1'>ローカルAIへの接続に失敗しました</strong>HTTPS環境ではセキュリティ制限により localhost への通信がブロックされます。設定からアプリ(HTML)をダウンロードし、ローカル環境で開いてお試しください。", 'error');
                 setTimeout(() => { btn.innerHTML = originalHTML; lucide.createIcons(); }, 5000);
             } else {
                 btn.innerHTML = `<i data-lucide="check" class="w-4 h-4"></i> 完了`;
                 setTimeout(() => { btn.innerHTML = originalHTML; lucide.createIcons(); }, 2000);
+                triggerDriveSync();
             }
             lucide.createIcons();
-            if(!currentUser) render();
-        };
-        
-        window.classifySingleTask = async (taskId, text) => {
-             if (!aiEndpointUrl) return;
-             
-             try {
-                 const response = await fetch(aiEndpointUrl, {
-                     method: 'POST',
-                     headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer dummy' },
-                     body: JSON.stringify({
-                         model: aiModelName || "local-model",
-                         messages: [
-                             {
-                                 role: "system", 
-                                 content: "You are an assistant that categorizes tasks. Read the task and respond ONLY with a valid JSON object in this format: {\"category\": \"<Category>\"}. The <Category> must be exactly one of the following: Work, Personal, Study, Idea, Other. Do not include any other text."
-                             },
-                             {
-                                 role: "user", 
-                                 content: `Categorize this task: "${text}"`
-                             }
-                         ],
-                         temperature: 0.1
-                     })
-                 });
-                 const result = await response.json();
-                 let cat = "Other";
-                 
-                 try {
-                     const content = result.choices[0].message.content;
-                     const match = content.match(/\{[\s\S]*\}/);
-                     if(match) {
-                         cat = JSON.parse(match[0]).category;
-                     } else {
-                         if(content.includes("Work")) cat = "Work";
-                         else if(content.includes("Personal")) cat = "Personal";
-                         else if(content.includes("Study")) cat = "Study";
-                         else if(content.includes("Idea")) cat = "Idea";
-                     }
-                 } catch(e){
-                     console.error("Failed to parse AI response:", e);
-                 }
-                 
-                 if (!["Work", "Personal", "Study", "Idea"].includes(cat)) cat = "Other";
-
-                 if (currentUser) {
-                     await updateDoc(doc(db, 'artifacts', appId, 'users', currentUser.uid, 'tasks', taskId), { category: cat });
-                 } else {
-                     const task = tasks.find(t => t.id === taskId);
-                     if(task) {
-                         task.category = cat;
-                         render();
-                     }
-                 }
-             } catch(e) {
-                 console.error("AI Single Classification Request Error:", e);
-             }
         };
 
-        // --- Utilities ---
-        function getTimeString() {
-            const now = new Date();
-            return `[${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}]`;
-        }
+        window.classifySingleTask = async (id, text) => {
+            if (!settings.aiEndpointUrl) return;
+            const cat = await aiCategorize(text);
+            if (cat === null) return;
+            const t = tasks.find(x => x.id === id);
+            if (!t) return;
+            t.category = cat;
+            t.updatedAt = now();
+            await dbPutTask(t);
+            render();
+            triggerDriveSync();
+        };
 
-        // --- Action Handlers ---
+        window.showTrivia = async () => {
+            const modal = document.getElementById('trivia-modal');
+            const content = document.getElementById('trivia-content');
+            const title = document.getElementById('trivia-title');
+            const d = new Date();
+            const month = d.getMonth() + 1;
+            const day = d.getDate();
+
+            title.innerText = `${month}月${day}日の豆知識`;
+            content.innerHTML = `<div class="flex flex-col items-center gap-2"><i data-lucide="loader-2" class="w-5 h-5 animate-spin text-amber-500"></i><span class="text-xs text-zinc-400">AIに聞いています...</span></div>`;
+            lucide.createIcons();
+            modal.classList.remove('hidden');
+
+            if (!settings.aiEndpointUrl) {
+                content.innerHTML = `<div class="text-rose-500 text-xs text-center">設定からローカルAIのエンドポイントを登録してください。</div>`;
+                return;
+            }
+            try {
+                const response = await fetch(settings.aiEndpointUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer dummy' },
+                    body: JSON.stringify({
+                        model: settings.aiModelName || 'local-model',
+                        temperature: 0.8,
+                        messages: [
+                            { role: 'system', content: 'あなたは雑学王です。指定された日付にまつわる、歴史的な出来事や面白い豆知識を1つ、日本語で100文字以内で簡潔に教えてください。' },
+                            { role: 'user', content: `今日（${month}月${day}日）の豆知識を教えて。` }
+                        ]
+                    })
+                });
+                if (!response.ok) throw new Error('API Connection Error');
+                const result = await response.json();
+                const text = result.choices[0].message.content;
+                content.innerHTML = `<span class="text-zinc-700 font-medium">${escapeHtml(text)}</span>`;
+            } catch (e) {
+                console.error('Trivia Error:', e);
+                content.innerHTML = `<div class="text-rose-500 text-xs text-center"><i data-lucide="alert-triangle" class="w-4 h-4 mx-auto mb-1 text-rose-400"></i>AIへの接続に失敗しました。<br>ローカル環境で実行しているか確認してください。</div>`;
+                lucide.createIcons();
+            }
+        };
+        window.closeTriviaModal = () => document.getElementById('trivia-modal').classList.add('hidden');
+
+        // ---- Task actions ----
         window.addTask = async (e) => {
             e.preventDefault();
-            if (!currentUser) return;
             const input = document.getElementById('task-input');
             const dateInput = document.getElementById('task-datetime');
             const textValue = input.value.trim();
             if (!textValue) return;
-            
-            const addBtn = document.getElementById('add-task-btn');
-            addBtn.innerHTML = '<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i>';
-            addBtn.classList.add('opacity-70', 'pointer-events-none');
-            lucide.createIcons();
 
-            try {
-                const docRef = await addDoc(collection(db, 'artifacts', appId, 'users', currentUser.uid, 'tasks'), {
-                    text: textValue,
-                    dueDate: dateInput.value || null,
-                    category: null,
-                    status: 'todo',
-                    logs: [],
-                    createdAt: Date.now()
-                });
-                
-                classifySingleTask(docRef.id, textValue);
-                
-                input.value = '';
-                dateInput.value = '';
-                input.blur();
-            } catch(err) { 
-                console.error("Error adding task:", err); 
-            } finally {
-                addBtn.innerHTML = '<span>追加</span>';
-                addBtn.classList.remove('opacity-70', 'pointer-events-none');
-            }
+            const task = {
+                id: uid(),
+                text: textValue,
+                dueDate: dateInput.value || null,
+                category: null,
+                status: 'todo',
+                logs: [],
+                createdAt: now(),
+                updatedAt: now()
+            };
+            tasks.push(task);
+            await dbPutTask(task);
+            sortTasks();
+            render();
+            triggerDriveSync();
+
+            input.value = '';
+            dateInput.value = '';
+            input.blur();
+
+            classifySingleTask(task.id, textValue); // ベストエフォート（AI未設定なら何もしない）
         };
 
         window.updateDueDate = async (id, newDate) => {
-            if (!currentUser) return;
-            try {
-                await updateDoc(doc(db, 'artifacts', appId, 'users', currentUser.uid, 'tasks', id), {
-                    dueDate: newDate || null
-                });
-            } catch(err) { console.error("Error updating date:", err); }
+            const t = tasks.find(x => x.id === id);
+            if (!t) return;
+            t.dueDate = newDate || null;
+            t.updatedAt = now();
+            await dbPutTask(t);
+            triggerDriveSync();
         };
 
         window.toggleStatus = async (id) => {
-            if (!currentUser) return;
-            const task = tasks.find(t => t.id === id);
-            if (!task) return;
-
-            let newStatus = task.status === 'done' ? 'todo' : 'done';
-            let logMsg = newStatus === 'done' ? '完了しました' : '未完了に戻しました';
-            const newLogs = [...(task.logs || []), `${getTimeString()} ${logMsg}`];
-
-            try {
-                await updateDoc(doc(db, 'artifacts', appId, 'users', currentUser.uid, 'tasks', id), {
-                    status: newStatus,
-                    logs: newLogs
-                });
-            } catch(err) { console.error("Error toggling status:", err); }
+            const t = tasks.find(x => x.id === id);
+            if (!t) return;
+            const newStatus = t.status === 'done' ? 'todo' : 'done';
+            const logMsg = newStatus === 'done' ? '完了しました' : '未完了に戻しました';
+            t.status = newStatus;
+            t.logs = [...(t.logs || []), `${getTimeString()} ${logMsg}`];
+            t.updatedAt = now();
+            await dbPutTask(t);
+            render();
+            triggerDriveSync();
         };
 
         window.startTask = async (id) => {
-            if (!currentUser) return;
-            const task = tasks.find(t => t.id === id);
-            if (!task || task.status === 'doing') return;
-
-            const newLogs = [...(task.logs || []), `${getTimeString()} 🚀 開始しました`];
-            try {
-                await updateDoc(doc(db, 'artifacts', appId, 'users', currentUser.uid, 'tasks', id), {
-                    status: 'doing',
-                    logs: newLogs
-                });
-            } catch(err) { console.error("Error starting task:", err); }
+            const t = tasks.find(x => x.id === id);
+            if (!t || t.status === 'doing') return;
+            t.status = 'doing';
+            t.logs = [...(t.logs || []), `${getTimeString()} 🚀 開始しました`];
+            t.updatedAt = now();
+            await dbPutTask(t);
+            render();
+            triggerDriveSync();
         };
 
         window.deleteTask = async (id) => {
-            if (!currentUser) return;
-            if(!confirm('タスクを削除しますか？')) return;
-            try {
-                await deleteDoc(doc(db, 'artifacts', appId, 'users', currentUser.uid, 'tasks', id));
-            } catch(err) { console.error("Error deleting task:", err); }
+            if (!confirm('タスクを削除しますか？')) return;
+            tasks = tasks.filter(x => x.id !== id);
+            await dbDeleteTask(id);
+            render();
+            triggerDriveSync();
         };
 
         function formatToGoogleCalendarDate(datetimeLocalStr) {
@@ -737,16 +701,12 @@
             if (!task) return;
             const title = encodeURIComponent(`[タスク] ${task.text}`);
             let detailsStr = `文脈ログ:\n`;
-            if(task.logs && task.logs.length > 0) {
-                task.logs.forEach(l => detailsStr += `- ${l}\n`);
-            } else {
-                detailsStr += `(まだログはありません)\n`;
-            }
+            if (task.logs && task.logs.length > 0) task.logs.forEach(l => detailsStr += `- ${l}\n`);
+            else detailsStr += `(まだログはありません)\n`;
             detailsStr += `\n---\nTaskJournal for NotebookLM から作成`;
             const details = encodeURIComponent(detailsStr);
-            
+
             let url = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&details=${details}`;
-            
             if (task.dueDate) {
                 const startStr = formatToGoogleCalendarDate(task.dueDate);
                 const d = new Date(task.dueDate);
@@ -755,11 +715,10 @@
                 const endStr = `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}T${pad(d.getHours())}${pad(d.getMinutes())}00`;
                 url += `&dates=${startStr}/${endStr}`;
             }
-            
             window.open(url, '_blank');
         };
 
-        // Modal Controls
+        // ---- Modal controls ----
         window.openMemoModal = (id) => {
             const task = tasks.find(t => t.id === id);
             if (!task) return;
@@ -769,70 +728,47 @@
             document.getElementById('memo-modal').classList.remove('hidden');
             setTimeout(() => document.getElementById('memo-input').focus(), 50);
         };
-
-        window.closeMemoModal = () => {
-            document.getElementById('memo-modal').classList.add('hidden');
-        };
+        window.closeMemoModal = () => document.getElementById('memo-modal').classList.add('hidden');
 
         window.saveMemo = async () => {
-            if (!currentUser || !currentTaskIdForMemo) return;
+            if (!currentTaskIdForMemo) return;
             const memoInput = document.getElementById('memo-input');
             if (!memoInput.value.trim()) return;
-
-            const task = tasks.find(t => t.id === currentTaskIdForMemo);
-            if(!task) return;
-
-            const newLogs = [...(task.logs||[]), `${getTimeString()} 📝 ${memoInput.value}`];
-            let newStatus = task.status;
-            if(task.status === 'todo') newStatus = 'doing'; 
-
-            try {
-                await updateDoc(doc(db, 'artifacts', appId, 'users', currentUser.uid, 'tasks', task.id), {
-                    status: newStatus,
-                    logs: newLogs
-                });
-                closeMemoModal();
-            } catch(err) { console.error("Error saving memo:", err); }
+            const t = tasks.find(x => x.id === currentTaskIdForMemo);
+            if (!t) return;
+            t.logs = [...(t.logs || []), `${getTimeString()} 📝 ${memoInput.value}`];
+            if (t.status === 'todo') t.status = 'doing';
+            t.updatedAt = now();
+            await dbPutTask(t);
+            closeMemoModal();
+            render();
+            triggerDriveSync();
         };
 
         window.openSettingsModal = () => document.getElementById('settings-modal').classList.remove('hidden');
         window.closeSettingsModal = () => document.getElementById('settings-modal').classList.add('hidden');
-        
-        window.saveSettings = async () => {
-            if(!currentUser) return;
-            const hookUrl = document.getElementById('webhook-input').value.trim();
-            const aiEndpoint = document.getElementById('ai-endpoint-input').value.trim();
-            const aiModel = document.getElementById('ai-model-input').value.trim();
 
-            try {
-                await setDoc(doc(db, 'artifacts', appId, 'users', currentUser.uid, 'settings', 'config'), {
-                    webhookUrl: hookUrl,
-                    aiEndpointUrl: aiEndpoint,
-                    aiModelName: aiModel
-                });
-                closeSettingsModal();
-                window.triggerDriveSync();
-            } catch(err) { console.error("Error saving settings:", err); }
+        window.saveSettings = async () => {
+            settings.webhookUrl = document.getElementById('webhook-input').value.trim();
+            settings.aiEndpointUrl = document.getElementById('ai-endpoint-input').value.trim() || 'http://localhost:1234/v1/chat/completions';
+            settings.aiModelName = document.getElementById('ai-model-input').value.trim() || 'local-model';
+            await dbPutMeta({ key: 'config', ...settings });
+            closeSettingsModal();
+            updateSyncStatus(settings.webhookUrl ? 'idle' : 'off');
+            if (settings.webhookUrl) {
+                await pullFromCloud(true);
+                triggerDriveSync();
+            }
         };
 
-        document.getElementById('memo-modal').addEventListener('click', (e) => {
-            if (e.target.id === 'memo-modal') closeMemoModal();
-        });
-        document.getElementById('settings-modal').addEventListener('click', (e) => {
-            if (e.target.id === 'settings-modal') closeSettingsModal();
-        });
-        document.getElementById('trivia-modal').addEventListener('click', (e) => {
-            if (e.target.id === 'trivia-modal') closeTriviaModal();
-        });
-
-        // --- Render Logic ---
+        // ---- Render ----
         function createTaskHTML(task) {
             const isCompleted = task.status === 'done';
             const isDoing = task.status === 'doing';
-            
+            const safeText = escapeHtml(task.text);
+
             const baseClass = "task-card p-4 rounded-2xl border transition-all flex flex-col gap-3 task-enter relative overflow-hidden group bg-white z-0";
             let stateClass = "border-zinc-200 hover:border-violet-300";
-            
             let checkIcon = `<div class="custom-checkbox w-6 h-6 rounded-[8px] border-2 border-zinc-300 group-hover:border-violet-400 bg-zinc-50 cursor-pointer shrink-0" onclick="toggleStatus('${task.id}')"></div>`;
 
             if (isCompleted) {
@@ -844,21 +780,22 @@
 
             let categoryBadge = '';
             if (task.category) {
-                const style = categoryStyles[task.category] || categoryStyles["Other"];
+                const styleCls = categoryStyles[task.category] || categoryStyles["Other"];
                 const label = categoryLabels[task.category] || categoryLabels["Other"];
-                categoryBadge = `<span class="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold border ${style} shadow-sm">${label}</span>`;
+                categoryBadge = `<span class="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold border ${styleCls} shadow-sm">${label}</span>`;
             }
 
-            let html = `
+            const lastLog = (task.logs && task.logs.length > 0)
+                ? escapeHtml(task.logs[task.logs.length - 1])
+                : '<span class="opacity-40 italic">メモはありません</span>';
+
+            return `
                 <div class="${baseClass} ${stateClass}">
                     ${isDoing ? '<div class="absolute left-0 top-0 bottom-0 w-1 bg-violet-500"></div>' : ''}
                     <div class="flex items-start gap-4 w-full relative z-10">
-                        <div class="mt-0.5">
-                            ${checkIcon}
-                        </div>
+                        <div class="mt-0.5">${checkIcon}</div>
                         <div class="flex-1 min-w-0 pt-0.5">
-                            <h3 class="text-[15px] font-semibold leading-snug break-words pr-2 ${isCompleted ? 'text-zinc-400 line-through' : 'text-zinc-800'}">${task.text}</h3>
-                            
+                            <h3 class="text-[15px] font-semibold leading-snug break-words pr-2 ${isCompleted ? 'text-zinc-400 line-through' : 'text-zinc-800'}">${safeText}</h3>
                             <div class="flex flex-wrap items-center gap-2 mt-2">
                                 ${categoryBadge}
                                 <div class="flex items-center gap-1.5 bg-zinc-50/80 px-2 py-1 rounded-lg border border-zinc-100 w-fit hover:border-zinc-300 transition-colors">
@@ -866,21 +803,16 @@
                                     <input type="datetime-local" value="${task.dueDate || ''}" onchange="updateDueDate('${task.id}', this.value)" class="text-[10px] font-medium text-zinc-500 bg-transparent border-none focus:outline-none p-0 cursor-pointer" title="日時を設定・変更">
                                 </div>
                             </div>
-
                             <div class="mt-2.5 text-xs text-zinc-500 flex items-start gap-1.5">
                                 <i data-lucide="align-left" class="w-3.5 h-3.5 mt-0.5 opacity-40 shrink-0"></i>
-                                <span class="truncate">
-                                    ${task.logs && task.logs.length > 0 ? task.logs[task.logs.length-1] : '<span class="opacity-40 italic">メモはありません</span>'}
-                                </span>
+                                <span class="truncate">${lastLog}</span>
                             </div>
                         </div>
-                        
                         <div class="opacity-0 group-hover:opacity-100 transition-opacity flex gap-1 shrink-0 bg-white/80 backdrop-blur-sm rounded-xl p-1 shadow-sm border border-zinc-100">
                              ${!isCompleted && !isDoing ? `
                                 <button onclick="startTask('${task.id}')" class="p-1.5 text-zinc-400 hover:text-violet-600 hover:bg-violet-50 rounded-lg transition-colors" title="開始する">
                                     <i data-lucide="play" class="w-4 h-4 fill-current"></i>
-                                </button>
-                            ` : ''}
+                                </button>` : ''}
                             <button onclick="addToCalendar('${task.id}')" class="p-1.5 text-zinc-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title="カレンダーに追加 (日時を引き継ぎます)">
                                 <i data-lucide="calendar-plus" class="w-4 h-4"></i>
                             </button>
@@ -892,22 +824,19 @@
                             </button>
                         </div>
                     </div>
-                </div>
-            `;
-            return html;
+                </div>`;
         }
 
         function render() {
             const activeList = document.getElementById('active-task-list');
             const completedList = document.getElementById('completed-task-list');
-            
             activeList.innerHTML = '';
             completedList.innerHTML = '';
 
             const activeTasks = tasks.filter(t => t.status !== 'done');
             const doneTasks = tasks.filter(t => t.status === 'done');
 
-            if(activeTasks.length === 0) {
+            if (activeTasks.length === 0) {
                 activeList.innerHTML = `
                     <div class="flex flex-col items-center justify-center py-10 px-4 text-center border-2 border-dashed border-zinc-200 rounded-[1.5rem] bg-zinc-50/50">
                         <div class="w-12 h-12 bg-white rounded-2xl shadow-sm border border-zinc-100 flex items-center justify-center mb-3">
@@ -920,42 +849,62 @@
                 activeTasks.forEach(task => { activeList.innerHTML += createTaskHTML(task); });
             }
 
-            if(doneTasks.length === 0) {
+            if (doneTasks.length === 0) {
                 completedList.innerHTML = `<div class="text-xs font-medium text-zinc-400 py-6 text-center">完了したタスクはまだありません。</div>`;
             } else {
                 doneTasks.forEach(task => { completedList.innerHTML += createTaskHTML(task); });
             }
-
             lucide.createIcons();
         }
 
-        // --- DOM Event Listeners ---
-        document.getElementById('task-form').addEventListener('submit', window.addTask);
-        document.getElementById('settings-btn').addEventListener('click', window.openSettingsModal);
-
-        // --- Initial DOM Setup ---
-        document.addEventListener('DOMContentLoaded', () => {
+        // ---- Init ----
+        document.addEventListener('DOMContentLoaded', async () => {
             const d = new Date();
             const days = ['日', '月', '火', '水', '木', '金', '土'];
             document.getElementById('current-date').innerText = `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日 (${days[d.getDay()]})`;
-            
+
+            // settings-modal は静的HTMLに hidden が無いため初期状態で閉じる
+            document.getElementById('settings-modal').classList.add('hidden');
+
+            // イベント登録
+            document.getElementById('task-form').addEventListener('submit', window.addTask);
+            document.getElementById('settings-btn').addEventListener('click', window.openSettingsModal);
+            document.getElementById('memo-modal').addEventListener('click', (e) => { if (e.target.id === 'memo-modal') closeMemoModal(); });
+            document.getElementById('settings-modal').addEventListener('click', (e) => { if (e.target.id === 'settings-modal') closeSettingsModal(); });
+            document.getElementById('trivia-modal').addEventListener('click', (e) => { if (e.target.id === 'trivia-modal') closeTriviaModal(); });
+            document.getElementById('sync-status').addEventListener('click', () => { if (settings.webhookUrl) pullFromCloud(true); });
+
             lucide.createIcons();
-            
-            if (typeof __app_id === 'undefined') {
-                setTimeout(() => {
-                    document.getElementById('loading-overlay').classList.add('hidden');
-                    tasks = [
-                        { id: '1', text: 'NotebookLMの新しいソースを読み込む', status: 'done', logs: ['[10:00] 📝 PDF資料を3件アップロード完了'], dueDate: '2026-05-26T10:00', category: 'Work' },
-                        { id: '2', text: 'UIデザインのモックアップ作成', status: 'doing', logs: ['[11:30] 🚀 開始しました'], dueDate: '', category: 'Idea' },
-                        { id: '3', text: '休日の旅行プランを立てる', status: 'todo', logs: [], dueDate: '', category: null },
-                    ];
-                    render();
-                }, 1000);
-            } else {
-                initAuth();
+
+            try {
+                db = await openDB();
+
+                const cfg = await dbGetMeta('config');
+                if (cfg) {
+                    settings.webhookUrl = cfg.webhookUrl || '';
+                    settings.aiEndpointUrl = cfg.aiEndpointUrl || settings.aiEndpointUrl;
+                    settings.aiModelName = cfg.aiModelName || settings.aiModelName;
+                }
+                document.getElementById('webhook-input').value = settings.webhookUrl;
+                document.getElementById('ai-endpoint-input').value = settings.aiEndpointUrl;
+                document.getElementById('ai-model-input').value = settings.aiModelName;
+                updateSyncStatus(settings.webhookUrl ? 'idle' : 'off');
+
+                tasks = (await dbGetAllTasks()).map(normalizeTask);
+                sortTasks();
+                render();
+
+                if (settings.webhookUrl) {
+                    await pullFromCloud(true);
+                }
+            } catch (err) {
+                console.error('Init error', err);
+                window.showToast('ローカルDB(IndexedDB)の初期化に失敗しました。プライベートブラウズ等では利用できない場合があります。', 'error');
+                render();
+            } finally {
+                showLoading(false);
             }
         });
-
     </script>
 
 </body></html>
