@@ -508,7 +508,7 @@
             try {
                 const res = await fetch(settings.aiEndpointUrl, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer dummy' },
+                    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + (settings.aiApiKey || 'dummy') },
                     body: JSON.stringify({
                         model: settings.aiModelName || 'local-model',
                         temperature: 0.1,
@@ -601,7 +601,7 @@
             try {
                 const response = await fetch(settings.aiEndpointUrl, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer dummy' },
+                    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + (settings.aiApiKey || 'dummy') },
                     body: JSON.stringify({
                         model: settings.aiModelName || 'local-model',
                         temperature: 0.8,
@@ -891,10 +891,12 @@
                     settings.webhookUrl = cfg.webhookUrl || '';
                     settings.aiEndpointUrl = cfg.aiEndpointUrl || settings.aiEndpointUrl;
                     settings.aiModelName = cfg.aiModelName || settings.aiModelName;
+                    settings.aiApiKey = cfg.aiApiKey || '';
                 }
                 document.getElementById('webhook-input').value = settings.webhookUrl;
                 document.getElementById('ai-endpoint-input').value = settings.aiEndpointUrl;
                 document.getElementById('ai-model-input').value = settings.aiModelName;
+                document.getElementById('ai-apikey-input').value = settings.aiApiKey;
                 updateSyncStatus(settings.webhookUrl ? 'idle' : 'off');
 
                 tasks = (await dbGetAllTasks()).map(normalizeTask);
