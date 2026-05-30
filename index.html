@@ -211,11 +211,16 @@
 
                 <div class="mb-4">
                     <label class="block text-xs font-bold text-zinc-400 uppercase tracking-wider mb-2 ml-1">Endpoint URL (OpenAI互換)</label>
-                    <input type="text" id="ai-endpoint-input" class="w-full bg-zinc-50 border-2 border-zinc-100 rounded-2xl p-4 text-sm focus:outline-none focus:border-zinc-300 focus:bg-white transition-colors" placeholder="http://localhost:1234/v1/chat/completions" autocomplete="off">
+                    <input type="text" id="ai-endpoint-input" class="w-full bg-zinc-50 border-2 border-zinc-100 rounded-2xl p-4 text-sm focus:outline-none focus:border-zinc-300 focus:bg-white transition-colors" placeholder="http://localhost:1234/v1/chat/completions または https://api.example.com/v1/chat/completions" autocomplete="off">
+                </div>
+                <div class="mb-4">
+                    <label class="block text-xs font-bold text-zinc-400 uppercase tracking-wider mb-2 ml-1">Model Name</label>
+                    <input type="text" id="ai-model-input" class="w-full bg-zinc-50 border-2 border-zinc-100 rounded-2xl p-4 text-sm focus:outline-none focus:border-zinc-300 focus:bg-white transition-colors" placeholder="google/gemma-4-e4b" autocomplete="off">
                 </div>
                 <div class="mb-2">
-                    <label class="block text-xs font-bold text-zinc-400 uppercase tracking-wider mb-2 ml-1">Model Name</label>
-                    <input type="text" id="ai-model-input" class="w-full bg-zinc-50 border-2 border-zinc-100 rounded-2xl p-4 text-sm focus:outline-none focus:border-zinc-300 focus:bg-white transition-colors" placeholder="local-model" autocomplete="off">
+                    <label class="block text-xs font-bold text-zinc-400 uppercase tracking-wider mb-2 ml-1">API Key (任意 / Bearer)</label>
+                    <input type="password" id="ai-apikey-input" class="w-full bg-zinc-50 border-2 border-zinc-100 rounded-2xl p-4 text-sm focus:outline-none focus:border-zinc-300 focus:bg-white transition-colors" placeholder="Cloudflare等のプロキシ利用時のみ入力 (空欄ならローカル直結)" autocomplete="off">
+                    <p class="text-[11px] text-zinc-400 mt-2 ml-1 leading-relaxed">HTTPSのプロキシ経由(例: <code class="text-zinc-500">https://api.example.com/v1/chat/completions</code>)ならPages版からも利用できます。キーはこの端末のローカルDBにのみ保存されます。</p>
                 </div>
 
                 <div class="mt-6 p-4 bg-zinc-50 border border-zinc-200 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-4">
@@ -248,7 +253,8 @@
         let settings = {
             webhookUrl: '',
             aiEndpointUrl: 'http://localhost:1234/v1/chat/completions',
-            aiModelName: 'local-model'
+            aiModelName: 'local-model',
+            aiApiKey: ''
         };
         let currentTaskIdForMemo = null;
         let syncTimeout = null;
@@ -752,6 +758,7 @@
             settings.webhookUrl = document.getElementById('webhook-input').value.trim();
             settings.aiEndpointUrl = document.getElementById('ai-endpoint-input').value.trim() || 'http://localhost:1234/v1/chat/completions';
             settings.aiModelName = document.getElementById('ai-model-input').value.trim() || 'local-model';
+            settings.aiApiKey = document.getElementById('ai-apikey-input').value.trim();
             await dbPutMeta({ key: 'config', ...settings });
             closeSettingsModal();
             updateSyncStatus(settings.webhookUrl ? 'idle' : 'off');
