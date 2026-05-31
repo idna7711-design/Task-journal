@@ -111,9 +111,14 @@
                             <div class="w-2 h-2 rounded-full bg-violet-500"></div>
                             <h3 class="text-sm font-bold text-zinc-800 tracking-wide">進行中・未完了</h3>
                         </div>
-                        <button id="ai-classify-btn" onclick="classifyTasks()" class="text-xs font-bold bg-violet-100 text-violet-700 hover:bg-violet-200 px-3 py-1.5 rounded-xl transition-all shadow-sm active:scale-95 flex items-center gap-1.5">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="bot" aria-hidden="true" class="lucide lucide-bot w-4 h-4"><path d="M12 8V4H8"></path><rect width="16" height="12" x="4" y="8" rx="2"></rect><path d="M2 14h2"></path><path d="M20 14h2"></path><path d="M15 13v2"></path><path d="M9 13v2"></path></svg> AI自動分類
-                        </button>
+                        <div class="flex items-center gap-2">
+                            <button id="genre-manage-btn" onclick="openGenreModal()" class="text-xs font-bold bg-white text-zinc-600 border border-zinc-200 hover:bg-zinc-50 hover:text-violet-600 px-3 py-1.5 rounded-xl transition-all shadow-sm active:scale-95 flex items-center gap-1.5" title="ジャンルの作成・編集・AI提案">
+                                <i data-lucide="tags" class="w-4 h-4"></i> ジャンル管理
+                            </button>
+                            <button id="ai-classify-btn" onclick="classifyTasks()" class="text-xs font-bold bg-violet-100 text-violet-700 hover:bg-violet-200 px-3 py-1.5 rounded-xl transition-all shadow-sm active:scale-95 flex items-center gap-1.5">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="bot" aria-hidden="true" class="lucide lucide-bot w-4 h-4"><path d="M12 8V4H8"></path><rect width="16" height="12" x="4" y="8" rx="2"></rect><path d="M2 14h2"></path><path d="M20 14h2"></path><path d="M15 13v2"></path><path d="M9 13v2"></path></svg> AI自動分類
+                            </button>
+                        </div>
                     </div>
                     <div id="active-task-list" class="space-y-3">
                     <div class="flex flex-col items-center justify-center py-10 px-4 text-center border-2 border-dashed border-zinc-200 rounded-[1.5rem] bg-zinc-50/50">
@@ -173,6 +178,64 @@
             <button onclick="showTrivia()" class="mt-5 w-full py-2.5 text-xs font-bold text-amber-600 bg-amber-50 hover:bg-amber-100 rounded-xl transition-colors flex items-center justify-center gap-2">
                 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="refresh-cw" aria-hidden="true" class="lucide lucide-refresh-cw w-3.5 h-3.5"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"></path><path d="M21 3v5h-5"></path><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"></path><path d="M8 16H3v5"></path></svg> 別の豆知識を聞く
             </button>
+        </div>
+    </div>
+
+    <!-- ジャンル管理モーダル -->
+    <div id="genre-modal" class="hidden fixed inset-0 bg-zinc-900/40 backdrop-blur-md flex items-center justify-center z-50 p-4">
+        <div class="bg-white rounded-[2rem] shadow-2xl w-full max-w-lg p-8 overflow-hidden transform transition-all flex flex-col max-h-[90vh]">
+            <div class="flex items-center gap-3 mb-2">
+                <div class="w-10 h-10 rounded-2xl bg-violet-50 flex items-center justify-center text-violet-600">
+                    <i data-lucide="tags" class="w-5 h-5"></i>
+                </div>
+                <h3 class="font-bold text-zinc-900 text-lg">ジャンル管理</h3>
+            </div>
+            <p class="text-xs text-zinc-500 mb-5 leading-relaxed">
+                ジャンルは<strong>あなたが作成・管理</strong>します。AIはこのジャンルの中からタスクを振り分け、<br>
+                該当が無いときは新しいジャンルを「提案」します（採用するかはあなたが決めます）。
+            </p>
+
+            <div class="overflow-y-auto pr-2 -mr-2 flex-1">
+                <label class="block text-xs font-bold text-zinc-400 uppercase tracking-wider mb-2 ml-1">ジャンル一覧</label>
+                <div id="genre-list" class="space-y-2 mb-5"></div>
+
+                <label class="block text-xs font-bold text-zinc-400 uppercase tracking-wider mb-2 ml-1">新しいジャンルを追加</label>
+                <div class="flex gap-2 mb-6">
+                    <input type="text" id="genre-new-input" maxlength="20" class="flex-1 bg-zinc-50 border-2 border-zinc-100 rounded-xl p-3 text-sm focus:outline-none focus:border-violet-300 focus:bg-white transition-colors" placeholder="例: 🏃 運動" autocomplete="off" onkeydown="if(event.key==='Enter'){event.preventDefault();addGenreFromInput();}">
+                    <button onclick="addGenreFromInput()" class="shrink-0 px-4 py-2 text-sm font-bold bg-zinc-900 text-white hover:bg-zinc-800 rounded-xl transition-all active:scale-95">追加</button>
+                </div>
+
+                <div class="p-4 bg-violet-50/60 border border-violet-100 rounded-2xl">
+                    <div class="flex items-center justify-between gap-3 mb-2">
+                        <div class="text-xs font-bold text-violet-700 flex items-center gap-1.5"><i data-lucide="sparkles" class="w-4 h-4"></i> AIにジャンルを提案してもらう</div>
+                        <button id="genre-suggest-btn" onclick="runGenreSuggestion()" class="shrink-0 text-xs font-bold bg-white text-violet-700 border border-violet-200 hover:bg-violet-100 px-3 py-1.5 rounded-lg transition-all active:scale-95">提案</button>
+                    </div>
+                    <p class="text-[11px] text-zinc-500 leading-relaxed mb-2">今あるタスクをもとに、新しいジャンル候補を提示します。クリックで採用できます。</p>
+                    <div id="genre-suggestions" class="flex flex-wrap gap-2"></div>
+                </div>
+            </div>
+
+            <div class="flex justify-end gap-3 mt-4 shrink-0 pt-4 border-t border-zinc-100">
+                <button onclick="closeGenreModal()" class="px-6 py-3 text-sm font-bold bg-zinc-900 text-white hover:bg-zinc-800 rounded-2xl transition-all shadow-md hover:shadow-lg active:scale-95">閉じる</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ジャンル選び直しピッカー -->
+    <div id="genre-picker-modal" class="hidden fixed inset-0 bg-zinc-900/40 backdrop-blur-md flex items-center justify-center z-50 p-4">
+        <div class="bg-white rounded-[2rem] shadow-2xl w-full max-w-sm p-6 overflow-hidden transform transition-all flex flex-col max-h-[80vh]">
+            <div class="flex items-center gap-3 mb-1">
+                <div class="w-9 h-9 rounded-xl bg-violet-50 flex items-center justify-center text-violet-600">
+                    <i data-lucide="tag" class="w-4 h-4"></i>
+                </div>
+                <h3 class="font-bold text-zinc-900 text-base">ジャンルを選ぶ</h3>
+            </div>
+            <p id="genre-picker-task" class="text-xs text-zinc-500 font-medium truncate mb-4 ml-1"></p>
+            <div id="genre-picker-list" class="flex flex-wrap gap-2 overflow-y-auto pr-1 -mr-1"></div>
+            <div class="flex justify-between items-center gap-3 mt-5 pt-4 border-t border-zinc-100">
+                <button onclick="closeGenrePicker(); openGenreModal();" class="text-xs font-bold text-violet-600 hover:bg-violet-50 px-3 py-2 rounded-lg transition-colors flex items-center gap-1"><i data-lucide="settings-2" class="w-3.5 h-3.5"></i> ジャンルを編集</button>
+                <button onclick="closeGenrePicker()" class="px-5 py-2.5 text-sm font-bold text-zinc-500 hover:bg-zinc-100 rounded-xl transition-colors">閉じる</button>
+            </div>
         </div>
     </div>
 
@@ -254,27 +317,51 @@
             webhookUrl: '',
             aiEndpointUrl: 'http://localhost:1234/v1/chat/completions',
             aiModelName: 'local-model',
-            aiApiKey: ''
+            aiApiKey: '',
+            categories: null // ジャンル一覧（人間が管理）。初期化時に既定値を入れる
         };
         let currentTaskIdForMemo = null;
         let syncTimeout = null;
         let db = null;
 
-        // ---- Categories Data ----
-        const categoryStyles = {
-            "Work": "bg-blue-100 text-blue-700 border-blue-200",
-            "Personal": "bg-emerald-100 text-emerald-700 border-emerald-200",
-            "Study": "bg-amber-100 text-amber-700 border-amber-200",
-            "Idea": "bg-purple-100 text-purple-700 border-purple-200",
-            "Other": "bg-zinc-100 text-zinc-600 border-zinc-200"
+        // ---- Genres (Categories) Data ----
+        // ジャンルは「人間が管理する」データ。settings.categories に配列で保持し、
+        // タスクは category にジャンルの id を保存する。バッジ色は purge されない
+        // よう Tailwind クラスではなくインラインスタイル（下記パレット）で描画する。
+        const GENRE_PALETTE = {
+            blue:   { bg: '#dbeafe', text: '#1d4ed8', border: '#bfdbfe' },
+            emerald:{ bg: '#d1fae5', text: '#047857', border: '#a7f3d0' },
+            amber:  { bg: '#fef3c7', text: '#b45309', border: '#fde68a' },
+            purple: { bg: '#ede9fe', text: '#6d28d9', border: '#ddd6fe' },
+            rose:   { bg: '#ffe4e6', text: '#be123c', border: '#fecdd3' },
+            cyan:   { bg: '#cffafe', text: '#0e7490', border: '#a5f3fc' },
+            lime:   { bg: '#ecfccb', text: '#4d7c0f', border: '#d9f99d' },
+            zinc:   { bg: '#f4f4f5', text: '#52525b', border: '#e4e4e7' }
         };
-        const categoryLabels = {
-            "Work": "💼 仕事",
-            "Personal": "🏠 プライベート",
-            "Study": "📚 学習",
-            "Idea": "💡 アイデア",
-            "Other": "📦 その他"
-        };
+        const GENRE_COLOR_KEYS = Object.keys(GENRE_PALETTE);
+
+        // 既定ジャンル（従来の5個を引き継ぐ。id は旧 category 値と一致させ、既存タスクを保持）
+        const DEFAULT_GENRES = [
+            { id: 'Work',     name: '💼 仕事',         color: 'blue' },
+            { id: 'Personal', name: '🏠 プライベート', color: 'emerald' },
+            { id: 'Study',    name: '📚 学習',         color: 'amber' },
+            { id: 'Idea',     name: '💡 アイデア',     color: 'purple' },
+            { id: 'Other',    name: '📦 その他',       color: 'zinc' }
+        ];
+        const OTHER_GENRE_ID = 'Other';
+
+        function getGenres() {
+            // 配列なら（空でも）それを使う。null(未初期化)のときだけ既定値にフォールバック
+            return Array.isArray(settings.categories) ? settings.categories : DEFAULT_GENRES;
+        }
+        function getGenre(id) {
+            if (!id) return null;
+            return getGenres().find(g => g.id === id) || null;
+        }
+        function genreStyleAttr(color) {
+            const p = GENRE_PALETTE[color] || GENRE_PALETTE.zinc;
+            return `background:${p.bg};color:${p.text};border-color:${p.border}`;
+        }
 
         // ---- IndexedDB ----
         const DB_NAME = 'taskjournal';
@@ -417,7 +504,7 @@
                         : (t.status === 'doing' ? '🚀 進行中' : '⏳ 未着手');
                     s += `### ${t.text}\n\n`;
                     s += `- 状態: ${statusLabel}\n`;
-                    if (t.category) s += `- カテゴリ: ${categoryLabels[t.category] || t.category}\n`;
+                    if (t.category) s += `- カテゴリ: ${(getGenre(t.category) || {}).name || t.category}\n`;
                     if (t.dueDate) s += `- 予定日時: ${t.dueDate}\n`;
                     if (t.logs && t.logs.length) {
                         s += `- ログ:\n`;
@@ -520,8 +607,27 @@
             return { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + key };
         }
 
+        // ジャンル名(絵文字を除いた素の名前)を返す。マッチ用。
+        function genrePlainName(name) {
+            return String(name || '').replace(/[\p{Emoji_Presentation}\p{Extended_Pictographic}]/gu, '').trim();
+        }
+        // AIの返答テキストから、既存ジャンルの id を解決する。該当なしは '__NONE__'。
+        function resolveGenreId(answer) {
+            const a = String(answer || '').trim();
+            if (!a || /^none$/i.test(a)) return '__NONE__';
+            const genres = getGenres();
+            // 完全一致(名前/素名/id) → 部分一致 の順
+            let g = genres.find(x => x.name === a || genrePlainName(x.name) === a || x.id === a);
+            if (!g) g = genres.find(x => a.includes(genrePlainName(x.name)) || genrePlainName(x.name).includes(a));
+            return g ? g.id : '__NONE__';
+        }
+
+        // タスクを既存ジャンルのいずれかに振り分ける。返り値: ジャンルid / '__NONE__' / null(通信失敗)
         async function aiCategorize(text) {
             try {
+                const genres = getGenres();
+                const list = genres.map(g => `- ${genrePlainName(g.name)}`).join('\n');
+                const names = genres.map(g => `"${genrePlainName(g.name)}"`).join(', ');
                 const res = await fetch(settings.aiEndpointUrl, {
                     method: 'POST',
                     headers: aiAuthHeaders(),
@@ -529,22 +635,56 @@
                         model: settings.aiModelName || 'local-model',
                         temperature: 0.1,
                         messages: [
-                            { role: 'system', content: 'You are an assistant that categorizes tasks. Read the task and respond ONLY with a valid JSON object in this format: {"category": "<Category>"}. The <Category> must be exactly one of the following: Work, Personal, Study, Idea, Other. Do not include any other text.' },
-                            { role: 'user', content: `Categorize this task: "${text}"` }
+                            { role: 'system', content: `You assign a task to exactly one existing genre. Choose the best fit from this list:\n${list}\n\nRespond ONLY with a valid JSON object: {"genre": "<name>"}. The <name> must be exactly one of: ${names}. If none of them fit the task well, respond with {"genre": "NONE"}. Do not invent new genres. Do not include any other text.` },
+                            { role: 'user', content: `Task: "${text}"` }
                         ]
                     })
                 });
                 if (!res.ok) throw new Error('API Connection Error');
                 const result = await res.json();
-                let cat = 'Other';
                 const content = result.choices[0].message.content;
                 const m = content.match(/\{[\s\S]*\}/);
-                if (m) { try { cat = JSON.parse(m[0]).category; } catch (e) {} }
-                else { ['Work', 'Personal', 'Study', 'Idea'].forEach(c => { if (content.includes(c)) cat = c; }); }
-                if (!['Work', 'Personal', 'Study', 'Idea'].includes(cat)) cat = 'Other';
-                return cat;
+                let answer = '';
+                if (m) { try { answer = JSON.parse(m[0]).genre; } catch (e) {} }
+                if (!answer) answer = content;
+                return resolveGenreId(answer);
             } catch (e) {
                 console.error('AI classify error', e);
+                return null;
+            }
+        }
+
+        // 既存ジャンルに該当しないタスク群に対して、新しいジャンル候補を提案させる。
+        // 返り値: 候補名の配列（絵文字付きの短い日本語名）。失敗時は null。
+        async function aiSuggestGenres(taskTexts) {
+            try {
+                const existing = getGenres().map(g => genrePlainName(g.name)).join(', ');
+                const sample = taskTexts.slice(0, 30).map(t => `- ${t}`).join('\n');
+                const res = await fetch(settings.aiEndpointUrl, {
+                    method: 'POST',
+                    headers: aiAuthHeaders(),
+                    body: JSON.stringify({
+                        model: settings.aiModelName || 'local-model',
+                        temperature: 0.4,
+                        messages: [
+                            { role: 'system', content: `You propose new task genres in Japanese. Look at the tasks and suggest up to 5 concise new genre names that would group them well. Each name must be short (within ~6 Japanese chars) and start with one fitting emoji, e.g. "🏃 運動". Do NOT duplicate these existing genres: ${existing}. Respond ONLY with a valid JSON array of strings, e.g. ["🏃 運動","🛒 買い物"]. No other text.` },
+                            { role: 'user', content: `Tasks:\n${sample}` }
+                        ]
+                    })
+                });
+                if (!res.ok) throw new Error('API Connection Error');
+                const result = await res.json();
+                const content = result.choices[0].message.content;
+                const m = content.match(/\[[\s\S]*\]/);
+                let arr = [];
+                if (m) { try { arr = JSON.parse(m[0]); } catch (e) {} }
+                if (!Array.isArray(arr)) return [];
+                const existingPlain = getGenres().map(g => genrePlainName(g.name));
+                return arr.map(s => String(s).trim()).filter(Boolean)
+                    .filter(s => !existingPlain.includes(genrePlainName(s)))
+                    .slice(0, 5);
+            } catch (e) {
+                console.error('AI suggest genres error', e);
                 return null;
             }
         }
@@ -567,9 +707,11 @@
             lucide.createIcons();
 
             let hasError = false;
+            const unmatched = []; // 既存ジャンルに該当しなかったタスク
             for (const t of targets) {
                 const cat = await aiCategorize(t.text);
                 if (cat === null) { hasError = true; break; }
+                if (cat === '__NONE__') { unmatched.push(t); continue; }
                 t.category = cat;
                 t.updatedAt = now();
                 await dbPutTask(t);
@@ -588,12 +730,19 @@
                 triggerDriveSync();
             }
             lucide.createIcons();
+
+            // 該当ジャンルが無かったタスクがあれば、AIに新ジャンルを提案させる
+            if (!hasError && unmatched.length > 0) {
+                window.showToast(`<strong class='block mb-1'>${unmatched.length}件は既存ジャンルに該当しませんでした</strong>AIが新しいジャンルを提案します。`, 'success');
+                openGenreModal();
+                await runGenreSuggestion(unmatched.map(t => t.text));
+            }
         };
 
         window.classifySingleTask = async (id, text) => {
             if (!settings.aiEndpointUrl) return;
             const cat = await aiCategorize(text);
-            if (cat === null) return;
+            if (cat === null || cat === '__NONE__') return; // 該当なしは未分類のまま（手動 or 一括分類で対応）
             const t = tasks.find(x => x.id === id);
             if (!t) return;
             t.category = cat;
@@ -784,13 +933,197 @@
             settings.aiEndpointUrl = document.getElementById('ai-endpoint-input').value.trim() || 'http://localhost:1234/v1/chat/completions';
             settings.aiModelName = document.getElementById('ai-model-input').value.trim() || 'local-model';
             settings.aiApiKey = document.getElementById('ai-apikey-input').value.trim();
-            await dbPutMeta({ key: 'config', ...settings });
+            await persistConfig();
             closeSettingsModal();
             updateSyncStatus(settings.webhookUrl ? 'idle' : 'off');
             if (settings.webhookUrl) {
                 await pullFromCloud(true);
                 triggerDriveSync();
             }
+        };
+
+        // 設定（ジャンル含む）をローカルDBへ保存
+        async function persistConfig() {
+            await dbPutMeta({ key: 'config', ...settings });
+        }
+
+        // ---- Genre management ----
+        window.openGenreModal = () => {
+            renderGenreList();
+            document.getElementById('genre-suggestions').innerHTML = '';
+            document.getElementById('genre-modal').classList.remove('hidden');
+            lucide.createIcons();
+        };
+        window.closeGenreModal = () => document.getElementById('genre-modal').classList.add('hidden');
+
+        function renderGenreList() {
+            const wrap = document.getElementById('genre-list');
+            const genres = getGenres();
+            if (genres.length === 0) {
+                wrap.innerHTML = `<p class="text-xs text-zinc-400 italic py-2">ジャンルがありません。下から追加してください。</p>`;
+                return;
+            }
+            wrap.innerHTML = genres.map(g => {
+                const swatches = GENRE_COLOR_KEYS.map(c => {
+                    const sel = c === g.color ? 'outline outline-2 outline-offset-1 outline-zinc-400' : '';
+                    return `<button type="button" onclick="setGenreColor('${g.id}','${c}')" style="background:${GENRE_PALETTE[c].bg};border-color:${GENRE_PALETTE[c].border}" class="w-4 h-4 rounded-full border ${sel}" title="${c}"></button>`;
+                }).join('');
+                return `
+                <div class="flex items-center gap-2 bg-zinc-50 border border-zinc-100 rounded-xl p-2">
+                    <span style="${genreStyleAttr(g.color)}" class="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold border shrink-0">${escapeHtml(g.name)}</span>
+                    <input type="text" value="${escapeHtml(g.name)}" maxlength="20" onchange="updateGenreName('${g.id}', this.value)" class="flex-1 min-w-0 bg-white border border-zinc-200 rounded-lg px-2 py-1 text-xs focus:outline-none focus:border-violet-300">
+                    <div class="flex items-center gap-1 shrink-0">${swatches}</div>
+                    <button type="button" onclick="deleteGenre('${g.id}')" class="shrink-0 p-1.5 text-zinc-300 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-colors" title="削除"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>
+                </div>`;
+            }).join('');
+            lucide.createIcons();
+        }
+
+        // 未初期化(null)のときだけ既定ジャンルで配列を確定させる（空配列は意図的な空として尊重）
+        function ensureCategoriesArray() {
+            if (!Array.isArray(settings.categories)) {
+                settings.categories = DEFAULT_GENRES.map(g => ({ ...g }));
+            }
+        }
+
+        window.addGenreFromInput = async () => {
+            const input = document.getElementById('genre-new-input');
+            const name = input.value.trim();
+            if (!name) return;
+            await addGenre(name);
+            input.value = '';
+            input.focus();
+        };
+
+        async function addGenre(name, color) {
+            ensureCategoriesArray();
+            if (settings.categories.some(g => genrePlainName(g.name) === genrePlainName(name))) {
+                window.showToast('同じ名前のジャンルが既にあります。', 'error');
+                return;
+            }
+            const used = settings.categories.map(g => g.color);
+            const nextColor = color || GENRE_COLOR_KEYS.find(c => !used.includes(c)) || GENRE_COLOR_KEYS[settings.categories.length % GENRE_COLOR_KEYS.length];
+            settings.categories.push({ id: uid(), name, color: nextColor });
+            await persistConfig();
+            renderGenreList();
+            render();
+            triggerDriveSync();
+        }
+
+        window.updateGenreName = async (id, value) => {
+            ensureCategoriesArray();
+            const g = settings.categories.find(x => x.id === id);
+            const name = String(value || '').trim();
+            if (!g || !name) { renderGenreList(); return; }
+            g.name = name;
+            await persistConfig();
+            renderGenreList();
+            render();
+            triggerDriveSync();
+        };
+
+        window.setGenreColor = async (id, color) => {
+            ensureCategoriesArray();
+            const g = settings.categories.find(x => x.id === id);
+            if (!g) return;
+            g.color = color;
+            await persistConfig();
+            renderGenreList();
+            render();
+            triggerDriveSync();
+        };
+
+        window.deleteGenre = async (id) => {
+            ensureCategoriesArray();
+            const g = settings.categories.find(x => x.id === id);
+            if (!g) return;
+            const used = tasks.filter(t => t.category === id).length;
+            const msg = used > 0
+                ? `ジャンル「${g.name}」を削除しますか？\nこのジャンルが付いた${used}件のタスクは未分類に戻ります。`
+                : `ジャンル「${g.name}」を削除しますか？`;
+            if (!confirm(msg)) return;
+            settings.categories = settings.categories.filter(x => x.id !== id);
+            if (used > 0) {
+                for (const t of tasks.filter(t => t.category === id)) {
+                    t.category = null; t.updatedAt = now(); await dbPutTask(t);
+                }
+            }
+            await persistConfig();
+            renderGenreList();
+            render();
+            triggerDriveSync();
+        };
+
+        // AIにジャンルを提案させる。taskTexts省略時は未分類の進行中タスクを対象にする。
+        window.runGenreSuggestion = async (taskTexts) => {
+            const btn = document.getElementById('genre-suggest-btn');
+            const area = document.getElementById('genre-suggestions');
+            if (!settings.aiEndpointUrl) { area.innerHTML = `<span class="text-[11px] text-rose-500">先に設定でAIエンドポイントを登録してください。</span>`; return; }
+            try { aiAuthHeaders(); } catch (e) {
+                if (e.message === 'API_KEY_NON_ASCII') { area.innerHTML = `<span class="text-[11px] text-rose-500">APIキーに使えない文字が含まれています。設定で入力し直してください。</span>`; return; }
+            }
+            let texts = taskTexts;
+            if (!Array.isArray(texts)) {
+                texts = tasks.filter(t => t.status !== 'done' && !getGenre(t.category)).map(t => t.text);
+                if (texts.length === 0) texts = tasks.filter(t => t.status !== 'done').map(t => t.text);
+            }
+            if (texts.length === 0) { area.innerHTML = `<span class="text-[11px] text-zinc-400">提案の元になるタスクがありません。</span>`; return; }
+
+            const orig = btn.innerHTML;
+            btn.innerHTML = '提案中...'; btn.classList.add('pointer-events-none', 'opacity-70');
+            area.innerHTML = `<span class="text-[11px] text-zinc-400">AIが考えています...</span>`;
+            const suggestions = await aiSuggestGenres(texts);
+            btn.innerHTML = orig; btn.classList.remove('pointer-events-none', 'opacity-70');
+
+            if (suggestions === null) { area.innerHTML = `<span class="text-[11px] text-rose-500">AIへの接続に失敗しました。</span>`; return; }
+            if (suggestions.length === 0) { area.innerHTML = `<span class="text-[11px] text-zinc-400">新しい提案はありませんでした。</span>`; return; }
+            // 名前は配列に保持し、ボタンには index だけ渡す（onclick へ生文字列を埋めない）
+            lastGenreSuggestions = suggestions;
+            area.innerHTML = suggestions.map((s, i) =>
+                `<button type="button" onclick="acceptSuggestion(this, ${i})" class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold bg-white border border-violet-200 text-violet-700 hover:bg-violet-100 transition-colors active:scale-95"><i data-lucide="plus" class="w-3 h-3"></i>${escapeHtml(s)}</button>`
+            ).join('');
+            lucide.createIcons();
+        };
+
+        let lastGenreSuggestions = [];
+        window.acceptSuggestion = async (el, index) => {
+            const name = lastGenreSuggestions[index];
+            if (!name) return;
+            el.disabled = true; el.classList.add('opacity-40', 'pointer-events-none');
+            await addGenre(name);
+            window.showToast(`ジャンル「${escapeHtml(name)}」を追加しました。`, 'success');
+        };
+
+        // ---- Genre picker (manual re-select) ----
+        let currentTaskIdForGenre = null;
+        window.openGenrePicker = (id) => {
+            const task = tasks.find(t => t.id === id);
+            if (!task) return;
+            currentTaskIdForGenre = id;
+            document.getElementById('genre-picker-task').textContent = task.text;
+            const list = document.getElementById('genre-picker-list');
+            const genres = getGenres();
+            const cur = task.category;
+            let html = genres.map(g => {
+                const active = g.id === cur ? 'ring-2 ring-offset-1 ring-zinc-400' : '';
+                return `<button type="button" onclick="pickGenre('${g.id}')" style="${genreStyleAttr(g.color)}" class="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-bold border ${active} hover:opacity-75 transition">${escapeHtml(g.name)}</button>`;
+            }).join('');
+            html += `<button type="button" onclick="pickGenre(null)" class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold border border-dashed border-zinc-300 text-zinc-500 hover:bg-zinc-50 transition ${!cur ? 'ring-2 ring-offset-1 ring-zinc-300' : ''}"><i data-lucide="x" class="w-3.5 h-3.5"></i>未分類</button>`;
+            list.innerHTML = html;
+            document.getElementById('genre-picker-modal').classList.remove('hidden');
+            lucide.createIcons();
+        };
+        window.closeGenrePicker = () => document.getElementById('genre-picker-modal').classList.add('hidden');
+
+        window.pickGenre = async (genreId) => {
+            const t = tasks.find(x => x.id === currentTaskIdForGenre);
+            if (!t) { closeGenrePicker(); return; }
+            t.category = genreId || null;
+            t.updatedAt = now();
+            await dbPutTask(t);
+            closeGenrePicker();
+            render();
+            triggerDriveSync();
         };
 
         // ---- Render ----
@@ -811,10 +1144,12 @@
             }
 
             let categoryBadge = '';
-            if (task.category) {
-                const styleCls = categoryStyles[task.category] || categoryStyles["Other"];
-                const label = categoryLabels[task.category] || categoryLabels["Other"];
-                categoryBadge = `<span class="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold border ${styleCls} shadow-sm">${label}</span>`;
+            const genre = getGenre(task.category);
+            if (genre) {
+                categoryBadge = `<button type="button" onclick="openGenrePicker('${task.id}')" style="${genreStyleAttr(genre.color)}" class="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold border shadow-sm cursor-pointer hover:opacity-75 transition-opacity" title="クリックでジャンルを選び直す">${escapeHtml(genre.name)}</button>`;
+            } else {
+                // 未分類（または不明なジャンルid）。クリックで選べるようにする
+                categoryBadge = `<button type="button" onclick="openGenrePicker('${task.id}')" class="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-md text-[10px] font-bold border border-dashed border-zinc-300 text-zinc-400 hover:text-violet-600 hover:border-violet-300 transition-colors" title="ジャンルを選ぶ"><i data-lucide="plus" class="w-3 h-3"></i>ジャンル</button>`;
             }
 
             const lastLog = (task.logs && task.logs.length > 0)
@@ -904,6 +1239,8 @@
             document.getElementById('memo-modal').addEventListener('click', (e) => { if (e.target.id === 'memo-modal') closeMemoModal(); });
             document.getElementById('settings-modal').addEventListener('click', (e) => { if (e.target.id === 'settings-modal') closeSettingsModal(); });
             document.getElementById('trivia-modal').addEventListener('click', (e) => { if (e.target.id === 'trivia-modal') closeTriviaModal(); });
+            document.getElementById('genre-modal').addEventListener('click', (e) => { if (e.target.id === 'genre-modal') closeGenreModal(); });
+            document.getElementById('genre-picker-modal').addEventListener('click', (e) => { if (e.target.id === 'genre-picker-modal') closeGenrePicker(); });
             document.getElementById('sync-status').addEventListener('click', () => { if (settings.webhookUrl) pullFromCloud(true); });
 
             lucide.createIcons();
@@ -917,6 +1254,12 @@
                     settings.aiEndpointUrl = cfg.aiEndpointUrl || settings.aiEndpointUrl;
                     settings.aiModelName = cfg.aiModelName || settings.aiModelName;
                     settings.aiApiKey = cfg.aiApiKey || '';
+                    if (Array.isArray(cfg.categories) && cfg.categories.length) settings.categories = cfg.categories;
+                }
+                // ジャンル未設定なら既定5個を採用して保存（以後はユーザー管理データになる）
+                if (!Array.isArray(settings.categories) || settings.categories.length === 0) {
+                    settings.categories = DEFAULT_GENRES.map(g => ({ ...g }));
+                    await persistConfig();
                 }
                 document.getElementById('webhook-input').value = settings.webhookUrl;
                 document.getElementById('ai-endpoint-input').value = settings.aiEndpointUrl;
