@@ -3,6 +3,10 @@
 TaskJournal の **Pages版（HTTPS）** から、Cloudflare 経由でローカル LM Studio (Gemma) を
 呼べるようにするための Worker です。`worker-openai-proxy.js` を使います。
 
+> 📘 **初学者向けの図解ガイド**：[`ai-gateway-guide.html`](./ai-gateway-guide.html) を
+> ブラウザで開くと、仕組み・複数キー対応・パス制限・ストリーミング・LM Studio常時稼働・
+> トラブルシューティングを図解で確認できます。
+
 ## なぜ必要か
 
 - Pages版は HTTPS。`http://localhost:1234` は **Mixed Content** でブラウザが遮断する。

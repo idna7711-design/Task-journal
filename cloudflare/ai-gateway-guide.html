@@ -1,0 +1,509 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cloudflare AI ゲートウェイ 完全ガイド</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    font-family: 'Helvetica Neue', Arial, 'Hiragino Kaku Gothic ProN', sans-serif;
+    max-width: 860px; margin: 0 auto; padding: 24px 20px;
+    background: #f0f0f5; color: #1a1a2e; line-height: 1.7;
+  }
+  h1 { color: #6b21a8; font-size: 1.6em; border-bottom: 3px solid #6b21a8; padding-bottom: 10px; }
+  h2 { color: #4c1d95; font-size: 1.2em; margin-top: 40px; padding: 8px 14px;
+       background: #ede9fe; border-radius: 8px; }
+  h3 { color: #5b21b6; margin-top: 24px; }
+  .card {
+    background: white; border-radius: 16px; padding: 20px 24px;
+    margin: 16px 0; box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+  }
+  .card.purple { border-left: 5px solid #7c3aed; }
+  .card.green  { border-left: 5px solid #10b981; }
+  .card.yellow { border-left: 5px solid #f59e0b; }
+  .card.red    { border-left: 5px solid #ef4444; }
+  .card.blue   { border-left: 5px solid #3b82f6; }
+  .analogy {
+    background: #fef9c3; border: 1px solid #fde047;
+    border-radius: 12px; padding: 14px 18px; margin: 12px 0;
+  }
+  .analogy::before { content: "💡 たとえ話: "; font-weight: bold; color: #854d0e; }
+  .point {
+    background: #ede9fe; border-radius: 10px;
+    padding: 10px 16px; margin: 8px 0; font-size: 0.95em;
+  }
+  .point::before { content: "✅ "; }
+  .warn {
+    background: #fef3c7; border: 1px solid #fcd34d;
+    border-radius: 10px; padding: 12px 16px; margin: 10px 0;
+  }
+  .warn::before { content: "⚠️ "; font-weight: bold; }
+  .danger {
+    background: #fee2e2; border: 1px solid #fca5a5;
+    border-radius: 10px; padding: 12px 16px; margin: 10px 0;
+  }
+  .danger::before { content: "🚫 絶対NG: "; font-weight: bold; color: #991b1b; }
+  code {
+    background: #1e1e2e; color: #cba6f7;
+    padding: 2px 8px; border-radius: 6px;
+    font-family: 'Courier New', monospace; font-size: 0.9em;
+  }
+  pre {
+    background: #1e1e2e; color: #cdd6f4;
+    padding: 18px; border-radius: 12px;
+    overflow-x: auto; font-size: 0.88em; line-height: 1.6;
+  }
+  pre .comment { color: #6c7086; }
+  pre .key { color: #89b4fa; }
+  pre .val { color: #a6e3a1; }
+  pre .str { color: #fab387; }
+  .flow {
+    display: flex; align-items: center; flex-wrap: wrap;
+    gap: 8px; margin: 16px 0; font-size: 0.9em;
+  }
+  .box {
+    background: white; border: 2px solid #7c3aed;
+    border-radius: 10px; padding: 8px 14px; text-align: center;
+    font-weight: bold;
+  }
+  .box.gray { border-color: #a1a1aa; color: #71717a; }
+  .box.green { border-color: #10b981; }
+  .arrow { font-size: 1.3em; color: #7c3aed; }
+  table { width: 100%; border-collapse: collapse; margin: 14px 0; font-size: 0.93em; }
+  th { background: #ede9fe; color: #4c1d95; padding: 10px 12px; text-align: left; }
+  td { padding: 10px 12px; border-bottom: 1px solid #e4e4e7; }
+  tr:last-child td { border-bottom: none; }
+  .toc { background: #f5f3ff; border: 1px solid #c4b5fd; border-radius: 12px; padding: 16px 20px; margin: 20px 0; }
+  .toc li { margin: 6px 0; }
+  .toc a { color: #6b21a8; text-decoration: none; }
+  .toc a:hover { text-decoration: underline; }
+  .step-num {
+    display: inline-flex; align-items: center; justify-content: center;
+    background: #7c3aed; color: white;
+    width: 28px; height: 28px; border-radius: 50%;
+    font-weight: bold; margin-right: 8px; flex-shrink: 0;
+  }
+  .step-row { display: flex; align-items: flex-start; margin: 12px 0; }
+  .step-content { flex: 1; }
+  hr { border: none; border-top: 2px solid #e4e4e7; margin: 36px 0; }
+  .tag {
+    display: inline-block; padding: 2px 10px; border-radius: 999px;
+    font-size: 0.78em; font-weight: bold; margin-right: 4px;
+  }
+  .tag.now { background: #dcfce7; color: #166534; }
+  .tag.later { background: #fef9c3; color: #854d0e; }
+  .tag.optional { background: #f1f5f9; color: #475569; }
+</style>
+</head>
+<body>
+
+<h1>Cloudflare AI ゲートウェイ 完全ガイド<br>
+<small style="font-size:0.6em;color:#71717a;">複数アプリで Gemma を使い回すための設計と整備</small></h1>
+
+<div class="toc">
+  <strong>目次</strong>
+  <ol>
+    <li><a href="#what">今の仕組みをざっくり理解する</a></li>
+    <li><a href="#why">なぜ「整備」が必要なのか</a></li>
+    <li><a href="#multikey">① 複数APIキー対応（最優先）</a></li>
+    <li><a href="#pathguard">② パス制限（セキュリティ強化）</a></li>
+    <li><a href="#streaming">③ ストリーミング（チャットUIのため）</a></li>
+    <li><a href="#refdoc">④ 共通リファレンス（ドキュメント化）</a></li>
+    <li><a href="#lmstudio">⑤ LM Studio 常時稼働化</a></li>
+    <li><a href="#worker-final">最終版 Worker コード</a></li>
+    <li><a href="#checklist">チェックリスト</a></li>
+    <li><a href="#trouble">トラブルシューティング</a></li>
+  </ol>
+</div>
+
+<!-- ================= SECTION 1 ================= -->
+<h2 id="what">1. 今の仕組みをざっくり理解する</h2>
+
+<div class="card purple">
+  <p>あなたの今の構成はこんな感じです：</p>
+  <div class="flow">
+    <div class="box">ブラウザ<br><small>(アプリ)</small></div>
+    <div class="arrow">→</div>
+    <div class="box">Cloudflare<br>Worker</div>
+    <div class="arrow">→</div>
+    <div class="box">Cloudflare<br>Tunnel</div>
+    <div class="arrow">→</div>
+    <div class="box green">あなたの PC<br>LM Studio</div>
+  </div>
+  <p>Worker が <strong>「受付係」</strong>の役割をしています。ブラウザから来たリクエストをチェックして、問題なければあなたのPCにある AI（Gemma）に転送します。</p>
+</div>
+
+<div class="analogy">
+コンビニのバックヤードに高性能な製造機（Gemma）がある。直接お客さんを通したらまずいので、店員（Worker）がカウンターで対応して、必要なものだけを製造機に渡してくれる。
+</div>
+
+<p>この「受付係 Worker」には今こんな機能があります：</p>
+<div class="point">APIキー（パスワード）をチェックして、知らない人は弾く</div>
+<div class="point">CORS対応（ブラウザからのリクエストを許可）</div>
+<div class="point">Cloudflare Tunnel への認証を自動で付与</div>
+
+<hr>
+
+<!-- ================= SECTION 2 ================= -->
+<h2 id="why">2. なぜ「整備」が必要なのか</h2>
+
+<div class="card yellow">
+  <h3 style="margin-top:0">現状の問題点</h3>
+  <p>今は <strong>1つのパスワード（GEMMA_API_KEY）</strong> だけで全管理しています。</p>
+  <p>たとえばアプリが3つになった場合：</p>
+  <table>
+    <tr><th>アプリ</th><th>使っているキー</th></tr>
+    <tr><td>TaskJournal</td><td rowspan="3" style="text-align:center;font-size:1.5em;color:#ef4444">同じ<br>1つのキー</td></tr>
+    <tr><td>新しいアプリB</td></tr>
+    <tr><td>新しいアプリC</td></tr>
+  </table>
+  <div class="danger">アプリCのコードが万が一流出 → 全アプリへのアクセスができてしまう</div>
+  <p>→ アプリごとに別のキーを使えば、1つ漏れても他は安全です。</p>
+</div>
+
+<div class="analogy">
+家の鍵が全員同じだと、1人がなくしたら全員の鍵を交換しなければならない。部屋ごとに別の鍵なら、1つなくしてもその部屋の鍵だけ交換すればいい。
+</div>
+
+<hr>
+
+<!-- ================= SECTION 3 ================= -->
+<h2 id="multikey">① 複数APIキー対応 <span class="tag now">最優先</span></h2>
+
+<div class="card purple">
+  <h3 style="margin-top:0">やること</h3>
+  <p>Cloudflare Worker の環境変数を <code>GEMMA_API_KEY</code>（1本）から <code>GEMMA_API_KEYS</code>（複数、カンマ区切り）に変更します。</p>
+
+  <p><strong>変更前（今）：</strong></p>
+  <pre><code>GEMMA_API_KEY = abc123xyz</code></pre>
+
+  <p><strong>変更後：</strong></p>
+  <pre><code>GEMMA_API_KEYS = abc123xyz,def456uvw,ghi789rst
+                 ↑TaskJournal  ↑アプリB    ↑アプリC</code></pre>
+
+  <div class="warn">既存のキー（<code>abc123xyz</code>）を先頭にそのまま残せば、今の TaskJournal は何も変えなくてOKです。</div>
+</div>
+
+<div class="card blue">
+  <h3 style="margin-top:0">Worker コードの変更箇所（1か所だけ）</h3>
+  <p><strong>変更前（今のコード）：</strong></p>
+  <pre><span class="comment">// 1本のキーと照合</span>
+if (!env.GEMMA_API_KEY || token !== env.GEMMA_API_KEY) {
+  return json({ error: 'Unauthorized' }, 401, cors);
+}</pre>
+
+  <p><strong>変更後：</strong></p>
+  <pre><span class="comment">// カンマ区切りで複数キーを受け付ける</span>
+const validKeys = (env.GEMMA_API_KEYS || env.GEMMA_API_KEY || '')
+  .split(',').map(k => k.trim()).filter(Boolean);
+if (validKeys.length === 0 || !validKeys.includes(token)) {
+  return json({ error: 'Unauthorized' }, 401, cors);
+}</pre>
+
+  <div class="point">古い <code>GEMMA_API_KEY</code> 変数もそのまま読み込むので、移行中でも安全</div>
+  <div class="point">新アプリ用キーはコンマで足すだけ。Worker の再デプロイ不要</div>
+</div>
+
+<div class="card green">
+  <h3 style="margin-top:0">新しいアプリを追加するときの手順</h3>
+  <div class="step-row"><span class="step-num">1</span><div class="step-content">新しいランダム文字列を用意（パスワード生成ツールで OK）</div></div>
+  <div class="step-row"><span class="step-num">2</span><div class="step-content">Cloudflare ダッシュボード → Worker → Settings → <code>GEMMA_API_KEYS</code> の値の末尾に <code>,新キー</code> を追加して保存</div></div>
+  <div class="step-row"><span class="step-num">3</span><div class="step-content">新しいアプリの設定画面でその新キーを入力</div></div>
+  <div class="step-row"><span class="step-num">4</span><div class="step-content">以上！Worker のコードは変更不要</div></div>
+</div>
+
+<hr>
+
+<!-- ================= SECTION 4 ================= -->
+<h2 id="pathguard">② パス制限（セキュリティ強化） <span class="tag now">推奨</span></h2>
+
+<div class="card purple">
+  <h3 style="margin-top:0">なぜ必要か</h3>
+  <p>今の Worker は <code>/v1/</code> 以外のパス（例：<code>/admin</code>、<code>/etc/passwd</code>）へのリクエストも転送してしまいます。</p>
+  <p>LM Studio 側にそういったエンドポイントはないので実害はありませんが、<strong>「使っていい道は /v1/ だけ」</strong> と明示しておくのがベストプラクティスです。</p>
+</div>
+
+<div class="card blue">
+  <h3 style="margin-top:0">Worker に追加するコード（3行）</h3>
+  <pre><span class="comment">// 上流URLを組み立てる部分の直前に追加</span>
+const inUrl = new URL(request.url);
+<span class="key">if (!inUrl.pathname.startsWith('/v1/')) {</span>
+  <span class="key">return json({ error: 'Not Found' }, 404, cors);</span>
+<span class="key">}</span>
+const base = (env.UPSTREAM_BASE_URL || '').replace(/\/+$/, '');</pre>
+</div>
+
+<hr>
+
+<!-- ================= SECTION 5 ================= -->
+<h2 id="streaming">③ ストリーミング対応 <span class="tag later">将来のため</span></h2>
+
+<div class="card purple">
+  <h3 style="margin-top:0">ストリーミングとは</h3>
+  <p>ChatGPT のように <strong>文字が1つずつリアルタイムに出てくる</strong> 表示のこと。</p>
+  <p>技術的には「SSE（Server-Sent Events）」という仕組みを使います。AI側が <code>stream: true</code> で応答するとき、データが少しずつ届きます。</p>
+</div>
+
+<div class="analogy">
+普通の返答 = レストランで料理が完成してから全部テーブルに運ぶ<br>
+ストリーミング = 前菜→スープ→メインと順番に運んでくれる
+</div>
+
+<div class="card green">
+  <h3 style="margin-top:0">今の実装で既に対応できています</h3>
+  <p>今の Worker コードは <code>upstreamRes.body</code>（ストリーム）をそのまま返しているため、<strong>特に変更なし</strong> でストリーミングは動きます。</p>
+  <div class="point">ただし、タイムアウト設定に注意。Cloudflare Worker の無料プランは CPU時間30ms制限があるが、<strong>レスポンス待ちはカウントされない</strong>のでストリーミングも問題なし</div>
+</div>
+
+<hr>
+
+<!-- ================= SECTION 6 ================= -->
+<h2 id="refdoc">④ 共通リファレンス（ドキュメント化） <span class="tag now">推奨</span></h2>
+
+<div class="card purple">
+  <h3 style="margin-top:0">なぜドキュメントが必要か</h3>
+  <p>新しいアプリを作るたびに「エンドポイントURL何だっけ？」「モデル名は？」と迷うのを防ぎます。</p>
+  <p><strong>シークレット（キー）は書かずに</strong>、接続に必要な公開情報だけをまとめます。</p>
+</div>
+
+<div class="card blue">
+  <h3 style="margin-top:0">repo に追加するファイル: <code>cloudflare/AI_GATEWAY.md</code></h3>
+  <pre><span class="comment"># AI Gateway 共通設定リファレンス</span>
+
+<span class="key">## エンドポイント</span>
+<span class="val">https://api.edaaiapps.com/v1/chat/completions</span>
+
+<span class="key">## モデル名</span>
+<span class="val">google/gemma-4-e4b</span>
+
+<span class="key">## 認証方式</span>
+<span class="str">Authorization: Bearer &lt;あなたのアプリ用キー&gt;</span>
+
+<span class="comment"># ※キー自体はここに書かない。Cloudflare Worker の
+#   GEMMA_API_KEYS (Secret) にカンマ区切りで管理。</span>
+
+<span class="key">## 新しいアプリを追加するとき</span>
+<span class="comment"># 1. 新キーを生成（パスワードマネージャなど）
+# 2. Cloudflare: GEMMA_API_KEYS の末尾に ,新キー を追加
+# 3. アプリの設定画面に上のEndpoint/Model/キーを入力</span></pre>
+</div>
+
+<hr>
+
+<!-- ================= SECTION 7 ================= -->
+<h2 id="lmstudio">⑤ LM Studio 常時稼働化 <span class="tag optional">任意</span></h2>
+
+<div class="card yellow">
+  <h3 style="margin-top:0">今の問題</h3>
+  <p>LM Studio は PC 起動のたびに手動で開いてモデルをロードする必要があります。複数アプリから使う場合、「なんか AI 動かない」→「あ、LM Studio 起動してなかった」が頻発します。</p>
+</div>
+
+<div class="card green">
+  <h3 style="margin-top:0">解決方法（LM Studio 0.3.5 以降 / 0.4系）</h3>
+  <p>最近の LM Studio には <strong>「ローカル LLM サービス（ヘッドレス）」</strong> 機能が組み込まれています。バッチファイルは不要で、<strong>設定をONにするだけ</strong>で PC 起動時にGUIなしでサーバが自動稼働します。</p>
+
+  <div class="step-row"><span class="step-num">1</span><div class="step-content">
+    LM Studio 起動 → <code>Ctrl + ,</code> で設定を開き、左メニューの <strong>Developer</strong> を選択（Developer mode は ON に）
+  </div></div>
+
+  <div class="step-row"><span class="step-num">2</span><div class="step-content">
+    <p><strong>「ローカル LLM サービスを有効にする」</strong>（Enable Local LLM Service）を <strong>ON</strong></p>
+    <p style="color:#71717a;font-size:0.9em;">→ LM Studio アプリを開いていなくてもサーバが動く＝常時稼働の本命</p>
+  </div></div>
+
+  <div class="step-row"><span class="step-num">3</span><div class="step-content">
+    <p><strong>「JIT models auto-evict」</strong>（オンデマンドのモデル自動ロード）も ON にしておく</p>
+    <p style="color:#71717a;font-size:0.9em;">→ リクエストが来た瞬間に自動でモデルをロード。手動ロード不要に</p>
+    <p style="color:#71717a;font-size:0.9em;">→ 「最大アイドルTTL」は未使用時にモデルを解放する分数。すぐ応答させたいなら長め（例 1440分）に</p>
+  </div></div>
+
+  <div class="step-row"><span class="step-num">4</span><div class="step-content">
+    一度 Developer タブでサーバを <strong>Start</strong> してON状態にしておく（次回以降は自動起動）
+  </div></div>
+
+  <div class="point">cloudflared(Tunnel) も常時稼働が前提。Windowsサービス化で確実に：管理者PowerShellで <code>cloudflared service install</code>。確認は <code>Get-Service cloudflared</code> が <code>Running</code> ならOK</div>
+
+  <div class="point">確認：LM Studio を完全終了した状態で <code>curl http://localhost:1234/v1/models</code> がモデル一覧を返せば常時稼働成功</div>
+
+  <div class="warn">設定項目名・配置はバージョンで多少異なります（0.3.5で初導入、0.4系で名称変更あり）。見当たらなければ「Developer」タブと「App Settings」内を確認してください。</div>
+</div>
+
+<hr>
+
+<!-- ================= SECTION 8 ================= -->
+<h2 id="worker-final">最終版 Worker コード</h2>
+
+<div class="card purple">
+  <p>①②の変更を反映した完成版です。今の <code>worker-openai-proxy.js</code> を丸ごとこれに差し替えます。</p>
+</div>
+
+<pre><span class="comment">/**
+ * Cloudflare Worker - OpenAI互換プロキシ（複数キー対応版）
+ *
+ * 環境変数:
+ *   GEMMA_API_KEYS   (Secret) カンマ区切りで複数キー可
+ *                    例: key1,key2,key3
+ *   GEMMA_API_KEY    (Secret) 旧変数。GEMMA_API_KEYS がなければこちらを使用（後方互換）
+ *   CF_ACCESS_CLIENT_ID     (Secret)
+ *   CF_ACCESS_CLIENT_SECRET (Secret)
+ *   UPSTREAM_BASE_URL       (Text)  例: https://lmstudio.edaaiapps.com
+ *   ALLOWED_ORIGINS         (Text)  例: https://idna7711-design.github.io
+ */</span>
+
+export default {
+  async fetch(request, env) {
+    const origin = request.headers.get('Origin') || '';
+    const cors = corsHeaders(origin, env);
+
+    <span class="comment">// 1. CORSプリフライト（認証より前に応答）</span>
+    if (request.method === 'OPTIONS') {
+      return new Response(null, { status: 204, headers: cors });
+    }
+
+    <span class="comment">// 2. /v1/ 以外のパスは拒否</span>
+    const inUrl = new URL(request.url);
+    if (!inUrl.pathname.startsWith('/v1/')) {
+      return json({ error: { message: 'Not Found' } }, 404, cors);
+    }
+
+    <span class="comment">// 3. Bearer認証（複数キー対応）</span>
+    const auth = request.headers.get('Authorization') || '';
+    const token = auth.startsWith('Bearer ') ? auth.slice(7).trim() : '';
+    const validKeys = (env.GEMMA_API_KEYS || env.GEMMA_API_KEY || '')
+      .split(',').map(k => k.trim()).filter(Boolean);
+    if (validKeys.length === 0 || !validKeys.includes(token)) {
+      return json({ error: { message: 'Unauthorized', type: 'invalid_api_key' } }, 401, cors);
+    }
+
+    <span class="comment">// 4. 上流URLを組み立て</span>
+    const base = (env.UPSTREAM_BASE_URL || '').replace(/\/+$/, '');
+    if (!base) {
+      return json({ error: { message: 'UPSTREAM_BASE_URL not configured' } }, 500, cors);
+    }
+    const upstreamUrl = base + inUrl.pathname + inUrl.search;
+
+    <span class="comment">// 5. 上流ヘッダー設定</span>
+    const headers = new Headers();
+    headers.set('Content-Type', request.headers.get('Content-Type') || 'application/json');
+    headers.set('CF-Access-Client-Id', env.CF_ACCESS_CLIENT_ID || '');
+    headers.set('CF-Access-Client-Secret', env.CF_ACCESS_CLIENT_SECRET || '');
+
+    const init = {
+      method: request.method,
+      headers,
+      body: (request.method === 'GET' || request.method === 'HEAD') ? undefined : request.body,
+    };
+
+    <span class="comment">// 6. 転送してCORSヘッダーを付与して返す</span>
+    let upstreamRes;
+    try {
+      upstreamRes = await fetch(upstreamUrl, init);
+    } catch (e) {
+      return json({ error: { message: 'Upstream fetch failed: ' + e.message } }, 502, cors);
+    }
+
+    const outHeaders = new Headers(upstreamRes.headers);
+    for (const [k, v] of Object.entries(cors)) outHeaders.set(k, v);
+
+    return new Response(upstreamRes.body, {
+      status: upstreamRes.status,
+      statusText: upstreamRes.statusText,
+      headers: outHeaders,
+    });
+  },
+};
+
+function corsHeaders(origin, env) {
+  const allow = (env.ALLOWED_ORIGINS || '').split(',').map(s => s.trim()).filter(Boolean);
+  let allowOrigin = '*';
+  if (allow.length > 0) {
+    allowOrigin = allow.includes(origin) ? origin : allow[0];
+  }
+  return {
+    'Access-Control-Allow-Origin': allowOrigin,
+    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Authorization, Content-Type',
+    'Access-Control-Max-Age': '86400',
+    'Vary': 'Origin',
+  };
+}
+
+function json(obj, status, cors) {
+  return new Response(JSON.stringify(obj), {
+    status,
+    headers: { 'Content-Type': 'application/json', ...cors },
+  });
+}</pre>
+
+<hr>
+
+<!-- ================= SECTION 9 ================= -->
+<h2 id="checklist">チェックリスト</h2>
+
+<div class="card green">
+  <table>
+    <tr><th>作業</th><th>優先度</th><th>場所</th></tr>
+    <tr>
+      <td>Cloudflare Worker を最終版に更新</td>
+      <td><span class="tag now">今すぐ</span></td>
+      <td>Cloudflare ダッシュボード</td>
+    </tr>
+    <tr>
+      <td><code>GEMMA_API_KEYS</code>（複数形）に変更<br>
+        <small>値は今の <code>GEMMA_API_KEY</code> の値をそのまま使う</small></td>
+      <td><span class="tag now">今すぐ</span></td>
+      <td>Worker → Settings → Variables</td>
+    </tr>
+    <tr>
+      <td><code>ALLOWED_ORIGINS</code> に GitHub Pages URL を追加</td>
+      <td><span class="tag now">今すぐ</span></td>
+      <td>Worker → Settings → Variables</td>
+    </tr>
+    <tr>
+      <td><code>cloudflare/AI_GATEWAY.md</code> を repo に追加</td>
+      <td><span class="tag now">推奨</span></td>
+      <td>GitHub リポジトリ</td>
+    </tr>
+    <tr>
+      <td>LM Studio 常時稼働（ローカルLLMサービスON）</td>
+      <td><span class="tag optional">推奨</span></td>
+      <td>LM Studio → Developer設定</td>
+    </tr>
+  </table>
+
+  <div class="warn">
+    <strong>旧変数の扱い：</strong> <code>GEMMA_API_KEY</code>（単数形）は残しておいても構いません。新しい Worker コードは両方読み込むので、移行期間中は安全です。慣れたら削除してOK。
+  </div>
+</div>
+
+<hr>
+
+<!-- ================= SECTION 10 ================= -->
+<h2 id="trouble">トラブルシューティング</h2>
+
+<div class="card red">
+  <h3 style="margin-top:0">「String contains non ISO-8859-1 code point」エラー</h3>
+  <p>AI分類などで <code>Failed to read the 'headers' property ... non ISO-8859-1 code point</code> が出る場合、設定画面に入れた <strong>APIキーに半角でない文字（全角英数・スマートクォート・ダッシュ）が混入</strong> しています。HTTPヘッダーは Latin-1 の文字しか使えないため、リクエストを作る前に弾かれます。</p>
+
+  <p><strong>原因の特定（F12 → Console）：</strong></p>
+  <pre><span class="comment">// 256以上のコードポイント＝混入した文字を表示</span>
+[...settings.aiApiKey].filter(c =&gt; c.charCodeAt(0) &gt; 255)</pre>
+
+  <p><strong>対処：</strong>設定画面でAPIキーを<strong>半角で入力し直す</strong>（パスワードマネージャ等プレーンな場所から貼る）。チャットやWord等の装飾付きテキストからのコピーは避ける（ハイフン <code>-</code> が <code>–</code> に化ける等）。</p>
+  <div class="point">アプリ側にも <code>aiAuthHeaders()</code> でキーのtrim＋非ASCII検知を実装済み。混入時は分かりやすい警告が出る</div>
+</div>
+
+<div class="card yellow">
+  <h3 style="margin-top:0">その他のよくある症状</h3>
+  <table>
+    <tr><th>症状</th><th>原因</th><th>対処</th></tr>
+    <tr><td><code>CORS policy</code> エラー</td><td>Worker未更新 / Origin不一致</td><td>Worker再デプロイ・<code>ALLOWED_ORIGINS</code>確認</td></tr>
+    <tr><td><code>401</code></td><td>キー不一致</td><td><code>GEMMA_API_KEYS</code>に含まれるか確認</td></tr>
+    <tr><td><code>404</code>（/v1/以外）</td><td>パス制限（正常動作）</td><td>正しいエンドポイントは <code>/v1/...</code></td></tr>
+    <tr><td><code>502</code>/タイムアウト</td><td>LM Studio / cloudflared 停止</td><td>常時稼働設定（⑤）を確認</td></tr>
+  </table>
+</div>
+
+</body>
+</html>
