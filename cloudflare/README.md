@@ -27,11 +27,17 @@ TaskJournal の **Pages版（HTTPS）** から、Cloudflare 経由でローカ�
 
 | 変数 | 種類 | 値 |
 |---|---|---|
-| `GEMMA_API_KEY` | Secret | 既存のキー |
+| `GEMMA_API_KEYS` | Secret | カンマ区切りで複数キー可。例 `key1,key2,key3`（アプリごとに別キー推奨） |
+| `GEMMA_API_KEY` | Secret | 旧変数。`GEMMA_API_KEYS` があれば不要（後方互換のため残してもOK） |
 | `CF_ACCESS_CLIENT_ID` | Secret | 既存 |
 | `CF_ACCESS_CLIENT_SECRET` | Secret | 既存 |
 | `UPSTREAM_BASE_URL` | Text | `https://lmstudio.edaaiapps.com` |
-| `ALLOWED_ORIGINS` | Text(任意) | `https://idna7711-design.github.io` |
+| `ALLOWED_ORIGINS` | Text(任意) | `https://idna7711-design.github.io`（カンマ区切りで複数可） |
+
+> **複数アプリで使う場合**：アプリごとに別キーを発行し、`GEMMA_API_KEYS` にカンマ区切りで
+> 並べます。1つ漏れても他アプリは無事です。接続情報の共通リファレンスは
+> [`AI_GATEWAY.md`](./AI_GATEWAY.md)、LM Studio の常時稼働は
+> [`LM_STUDIO_ALWAYS_ON.md`](./LM_STUDIO_ALWAYS_ON.md) を参照。
 
 > `ALLOWED_ORIGINS` を設定すると、その Origin からのブラウザ呼び出しだけ CORS 許可します（推奨）。
 > 未設定なら `*`（誰のサイトからでも、ただしキーが要る）になります。
@@ -43,7 +49,7 @@ TaskJournal の **Pages版（HTTPS）** から、Cloudflare 経由でローカ�
 
 - **Endpoint URL**: `https://api.edaaiapps.com/v1/chat/completions`
 - **Model Name**: `google/gemma-4-e4b`
-- **API Key**: あなたの `GEMMA_API_KEY`
+- **API Key**: `GEMMA_API_KEYS` に登録したキーのいずれか（アプリ専用キー推奨）
 
 保存後、AI自動分類・豆知識が Pages版からも動きます。
 
@@ -60,10 +66,19 @@ fetch('https://api.edaaiapps.com/v1/models', {
 `google/gemma-4-e4b` を含む一覧が返れば CORS/認証ともOK。
 `CORS policy` 系のエラーが出る場合は Worker の CORS 設定（特に OPTIONS 応答）を見直す。
 
+## ストリーミング（逐次表示）について
+
+リクエスト本文に `"stream": true` を付けると、LM Studio は SSE で応答を少しずつ返します。
+この Worker は `upstreamRes.body`（ストリーム）を**そのまま素通し**するため、
+**追加実装なしでストリーミングに対応**しています（ChatGPT風の逐次表示が可能）。
+
+> Cloudflare Worker の CPU時間制限は計算時間に対するもので、上流からのレスポンス待ち時間は
+> 含まれないため、長いストリーミング応答でも問題ありません。
+
 ## セキュリティ注意
 
 - ブラウザに入力した `GEMMA_API_KEY` は、その**端末のローカルDB(IndexedDB)に保存**されます。
   共有端末では入力しないでください。
 - キーは公開リポジトリ・チャット・HTML手順書などに**書かない**（ナレッジの運用方針どおり）。
-- 心配なら、ブラウザ用に**別のAPIキー**を発行し、Worker側で複数キーを許容する運用も可能です
-  （その場合は Worker の検証ロジックを「許可キーの集合に含まれるか」に変更）。
+- ブラウザ用・アプリ用に**別のAPIキー**を発行できます。本 Worker は既に
+  `GEMMA_API_KEYS`（カンマ区切り）で複数キーを許容します（「許可キーの集合に含まれるか」で検証）。

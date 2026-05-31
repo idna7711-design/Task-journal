@@ -504,11 +504,27 @@
         };
 
         // ---- Local AI ----
+        // APIキーを整形してHTTPヘッダーを組み立てる。
+        // HTTPヘッダーはLatin-1(ISO-8859-1)の範囲しか使えないため、
+        // 全角文字やスマートクォート等(コードポイント256以上)が混入していると
+        // fetchが "non ISO-8859-1 code point" で失敗する。前後空白を除去し、
+        // 不正な文字を検知したら分かりやすいエラーを投げる。
+        function aiAuthHeaders() {
+            const key = (settings.aiApiKey || 'dummy').trim();
+            const bad = [...key].filter(c => c.charCodeAt(0) > 255);
+            if (bad.length) {
+                const e = new Error('API_KEY_NON_ASCII');
+                e.badChars = bad;
+                throw e;
+            }
+            return { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + key };
+        }
+
         async function aiCategorize(text) {
             try {
                 const res = await fetch(settings.aiEndpointUrl, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + (settings.aiApiKey || 'dummy') },
+                    headers: aiAuthHeaders(),
                     body: JSON.stringify({
                         model: settings.aiModelName || 'local-model',
                         temperature: 0.1,
@@ -535,6 +551,12 @@
 
         window.classifyTasks = async () => {
             if (!settings.aiEndpointUrl) { alert('設定からローカルAIのエンドポイントを登録してください。'); return; }
+            try { aiAuthHeaders(); } catch (e) {
+                if (e.message === 'API_KEY_NON_ASCII') {
+                    alert('APIキーに使えない文字が含まれています。\n（全角文字やスマートクォート等が混入している可能性があります）\n設定画面でAPIキーを半角で入力し直してください。');
+                    return;
+                }
+            }
             const targets = tasks.filter(t => t.status !== 'done' && !t.category);
             if (targets.length === 0) return;
 
@@ -601,7 +623,7 @@
             try {
                 const response = await fetch(settings.aiEndpointUrl, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + (settings.aiApiKey || 'dummy') },
+                    headers: aiAuthHeaders(),
                     body: JSON.stringify({
                         model: settings.aiModelName || 'local-model',
                         temperature: 0.8,
@@ -617,7 +639,10 @@
                 content.innerHTML = `<span class="text-zinc-700 font-medium">${escapeHtml(text)}</span>`;
             } catch (e) {
                 console.error('Trivia Error:', e);
-                content.innerHTML = `<div class="text-rose-500 text-xs text-center"><i data-lucide="alert-triangle" class="w-4 h-4 mx-auto mb-1 text-rose-400"></i>AIへの接続に失敗しました。<br>ローカル環境で実行しているか確認してください。</div>`;
+                const msg = e.message === 'API_KEY_NON_ASCII'
+                    ? 'APIキーに使えない文字が含まれています。<br>設定画面で半角で入力し直してください。'
+                    : 'AIへの接続に失敗しました。<br>ローカル環境で実行しているか確認してください。';
+                content.innerHTML = `<div class="text-rose-500 text-xs text-center"><i data-lucide="alert-triangle" class="w-4 h-4 mx-auto mb-1 text-rose-400"></i>${msg}</div>`;
                 lucide.createIcons();
             }
         };

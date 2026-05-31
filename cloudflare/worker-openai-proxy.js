@@ -1,21 +1,21 @@
 /**
- * Cloudflare Worker - OpenAI互換プロキシ (CORS対応版)
+ * Cloudflare Worker - OpenAI互換プロキシ（複数APIキー対応版）
  *
  * 役割:
  *   1. api.edaaiapps.com/v1/* を受ける
- *   2. Authorization: Bearer <GEMMA_API_KEY> を検証 (不一致なら 401)
+ *   2. Authorization: Bearer <キー> を検証（複数キー可）
  *   3. 上流 lmstudio.edaaiapps.com/v1/* へ転送
  *   4. 転送時に Cloudflare Access Service Token を自動付与
  *   5. LM Studio の OpenAI互換レスポンスをそのまま返す
  *
- * ★この版での追加点 = ブラウザ(Pages版TaskJournal等)から直接呼べるCORS対応:
+ * CORS対応:
  *   - プリフライト(OPTIONS)に認証不要で応答する
- *     ※ブラウザはpreflightにAuthorizationを載せないため、認証より前に処理する
  *   - すべての応答に Access-Control-Allow-Origin を付与する
  *   - 許可Originは ALLOWED_ORIGINS(カンマ区切り) で制御。未設定時は "*"
  *
  * 必要な環境変数(Secret/Text):
- *   GEMMA_API_KEY            (Secret) … Bearer認証の検証用
+ *   GEMMA_API_KEYS           (Secret) … カンマ区切りで複数キー可 例: key1,key2,key3
+ *   GEMMA_API_KEY            (Secret) … 旧変数。GEMMA_API_KEYSがなければこちらを使用（後方互換）
  *   CF_ACCESS_CLIENT_ID      (Secret) … Cloudflare Access Service Token ID
  *   CF_ACCESS_CLIENT_SECRET  (Secret) … 同 Secret
  *   UPSTREAM_BASE_URL        (Text)   … 例: https://lmstudio.edaaiapps.com
@@ -33,22 +33,29 @@ export default {
       return new Response(null, { status: 204, headers: cors });
     }
 
-    // 2. Bearer認証
+    // 2. /v1/ 以外のパスは拒否
+    const inUrl = new URL(request.url);
+    if (!inUrl.pathname.startsWith('/v1/')) {
+      return json({ error: { message: 'Not Found' } }, 404, cors);
+    }
+
+    // 3. Bearer認証（複数キー対応 + 旧変数との後方互換）
     const auth = request.headers.get('Authorization') || '';
     const token = auth.startsWith('Bearer ') ? auth.slice(7).trim() : '';
-    if (!env.GEMMA_API_KEY || token !== env.GEMMA_API_KEY) {
+    const validKeys = (env.GEMMA_API_KEYS || env.GEMMA_API_KEY || '')
+      .split(',').map(k => k.trim()).filter(Boolean);
+    if (validKeys.length === 0 || !validKeys.includes(token)) {
       return json({ error: { message: 'Unauthorized', type: 'invalid_api_key' } }, 401, cors);
     }
 
-    // 3. 上流URLを組み立て (/v1/... のパスとクエリをそのまま引き継ぐ)
-    const inUrl = new URL(request.url);
+    // 4. 上流URLを組み立て (/v1/... のパスとクエリをそのまま引き継ぐ)
     const base = (env.UPSTREAM_BASE_URL || '').replace(/\/+$/, '');
     if (!base) {
       return json({ error: { message: 'UPSTREAM_BASE_URL not configured' } }, 500, cors);
     }
     const upstreamUrl = base + inUrl.pathname + inUrl.search;
 
-    // 4. 上流ヘッダー: Access Service Token を付与、ブラウザ由来の不要ヘッダーは除く
+    // 5. 上流ヘッダー: Access Service Token を付与、ブラウザ由来の不要ヘッダーは除く
     const headers = new Headers();
     headers.set('Content-Type', request.headers.get('Content-Type') || 'application/json');
     headers.set('CF-Access-Client-Id', env.CF_ACCESS_CLIENT_ID || '');
@@ -60,7 +67,7 @@ export default {
       body: (request.method === 'GET' || request.method === 'HEAD') ? undefined : request.body,
     };
 
-    // 5. 転送して、本文はそのまま・CORSヘッダーを足して返す
+    // 6. 転送して、本文はそのまま・CORSヘッダーを足して返す
     let upstreamRes;
     try {
       upstreamRes = await fetch(upstreamUrl, init);
@@ -70,7 +77,6 @@ export default {
 
     const outHeaders = new Headers(upstreamRes.headers);
     for (const [k, v] of Object.entries(cors)) outHeaders.set(k, v);
-    // 上流が付けてくる可能性のある制限的CORSは上書き済み
 
     return new Response(upstreamRes.body, {
       status: upstreamRes.status,
