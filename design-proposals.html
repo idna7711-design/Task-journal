@@ -1,0 +1,982 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TaskJournal — カラーデザイン案</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: 'Hiragino Kaku Gothic ProN', 'Hiragino Sans', Meiryo, 'Inter', sans-serif;
+  background: #1a1a2e;
+  color: #e0e0e0;
+  min-height: 100vh;
+}
+
+/* ======== セレクター ======== */
+.selector-bar {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background: #12122a;
+  border-bottom: 1px solid #2a2a4a;
+  padding: 12px 24px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.selector-bar h1 {
+  font-size: 13px;
+  font-weight: 700;
+  color: #888;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin-right: 8px;
+  white-space: nowrap;
+}
+.theme-btn {
+  padding: 7px 18px;
+  border-radius: 999px;
+  border: 2px solid transparent;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+.theme-btn:hover { opacity: 0.85; transform: translateY(-1px); }
+.theme-btn.active { border-color: white; }
+
+/* ======== プレビュー共通 ======== */
+.preview-area {
+  display: none;
+  padding: 32px 20px;
+  min-height: calc(100vh - 56px);
+}
+.preview-area.visible { display: block; }
+
+.preview-label {
+  text-align: center;
+  margin-bottom: 24px;
+}
+.preview-label h2 {
+  font-size: 22px;
+  font-weight: 800;
+  margin-bottom: 6px;
+}
+.preview-label p {
+  font-size: 13px;
+  color: #999;
+  max-width: 480px;
+  margin: 0 auto;
+  line-height: 1.6;
+}
+
+/* ======== モック共通 ======== */
+.mock {
+  max-width: 740px;
+  margin: 0 auto;
+  border-radius: 24px;
+  overflow: hidden;
+  box-shadow: 0 32px 80px rgba(0,0,0,0.5);
+}
+
+/* ---- コンポーネント ---- */
+.mock-header {
+  padding: 16px 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.mock-logo {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.mock-logo-icon {
+  width: 40px; height: 40px;
+  border-radius: 12px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 18px;
+}
+.mock-logo-title { font-size: 15px; font-weight: 800; line-height: 1.2; }
+.mock-logo-sub { font-size: 9px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; opacity: 0.5; margin-top: 2px; }
+.mock-header-btns { display: flex; gap: 8px; align-items: center; }
+.mock-btn-sm {
+  padding: 6px 14px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 700;
+  border: 1px solid transparent;
+  cursor: default;
+}
+.mock-btn-icon {
+  width: 34px; height: 34px;
+  border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px;
+  border: 1px solid transparent;
+}
+
+.mock-body { padding: 20px; display: flex; flex-direction: column; gap: 16px; }
+
+.mock-input-area {
+  border-radius: 16px;
+  padding: 16px;
+}
+.mock-input-row { display: flex; gap: 10px; align-items: center; }
+.mock-input {
+  flex: 1;
+  border-radius: 12px;
+  padding: 12px 16px;
+  font-size: 13px;
+  border: 2px solid transparent;
+}
+.mock-add-btn {
+  padding: 12px 22px;
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: default;
+}
+.mock-date-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  padding-left: 4px;
+  font-size: 11px;
+  opacity: 0.6;
+}
+
+.mock-tasklist-area {
+  border-radius: 16px;
+  padding: 20px;
+}
+.mock-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+  padding: 0 4px;
+}
+.mock-section-left { display: flex; align-items: center; gap: 8px; }
+.mock-dot { width: 7px; height: 7px; border-radius: 50%; }
+.mock-section-title { font-size: 12px; font-weight: 800; letter-spacing: 0.05em; }
+.mock-section-btns { display: flex; gap: 6px; }
+.mock-tag-btn {
+  padding: 5px 12px;
+  border-radius: 8px;
+  font-size: 10px;
+  font-weight: 700;
+  border: 1px solid transparent;
+}
+
+.mock-tasks { display: flex; flex-direction: column; gap: 10px; }
+
+.mock-task {
+  border-radius: 14px;
+  padding: 14px 16px;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  border: 1px solid transparent;
+  border-left: 4px solid transparent;
+  position: relative;
+}
+.mock-task-check {
+  width: 20px; height: 20px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  flex-shrink: 0;
+  margin-top: 1px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px;
+}
+.mock-task-content { flex: 1; min-width: 0; }
+.mock-task-title { font-size: 13px; font-weight: 600; margin-bottom: 5px; }
+.mock-task-meta { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.mock-genre-badge {
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: 9px;
+  font-weight: 700;
+}
+.mock-status-badge {
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: 9px;
+  font-weight: 700;
+}
+.mock-date-badge {
+  font-size: 9px;
+  opacity: 0.5;
+  font-weight: 500;
+}
+.mock-pin-chip {
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.mock-completed-section { opacity: 0.6; margin-top: 8px; }
+.mock-divider { border: none; border-top: 1px solid transparent; margin: 16px 0; }
+
+/* ====== 凡例 ====== */
+.legend {
+  margin-top: 20px;
+  max-width: 740px;
+  margin-left: auto;
+  margin-right: auto;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 10px;
+}
+.legend-item {
+  border-radius: 12px;
+  padding: 12px 14px;
+  font-size: 11px;
+  font-weight: 600;
+  border: 1px solid rgba(255,255,255,0.08);
+}
+.legend-item span { display: block; font-size: 10px; font-weight: 400; opacity: 0.7; margin-top: 3px; }
+
+
+/* =========================================================
+   THEME A : Sage & Cream  穏やかな緑×クリーム
+   ========================================================= */
+#theme-a { background: #f7f5ef; }
+
+#theme-a .mock { background: #f0ede4; }
+#theme-a .mock-header { background: linear-gradient(135deg, #4a7c59 0%, #3d6b4f 60%, #2d5040 100%); }
+#theme-a .mock-logo-title { color: #fff; }
+#theme-a .mock-logo-sub { color: #a8d4b2; }
+#theme-a .mock-logo-icon { background: rgba(255,255,255,0.15); color: #d4f0de; }
+#theme-a .mock-btn-sm { background: rgba(255,255,255,0.12); color: #d4f0de; border-color: rgba(255,255,255,0.2); }
+#theme-a .mock-btn-sm.primary { background: rgba(255,255,255,0.2); color: #fff; }
+#theme-a .mock-btn-icon { background: rgba(255,255,255,0.1); color: #c5e8cc; border-color: rgba(255,255,255,0.15); }
+
+#theme-a .mock-body { background: #f0ede4; }
+#theme-a .mock-input-area { background: #faf9f4; border: 1px solid #e0dbd0; }
+#theme-a .mock-input { background: #f0ede4; border-color: #d8d2c4; color: #3d3830; }
+#theme-a .mock-input::placeholder { color: #a09880; }
+#theme-a .mock-add-btn { background: #3d3830; color: #fff; }
+
+#theme-a .mock-tasklist-area { background: #faf9f4; border: 1px solid #e0dbd0; }
+#theme-a .mock-section-title { color: #3d3830; }
+#theme-a .mock-dot.active { background: #4a7c59; }
+#theme-a .mock-dot.done { background: #7ab88a; }
+
+#theme-a .mock-tag-btn.genre { background: #edf5ee; color: #3d6b4f; border-color: #c8e0ca; }
+#theme-a .mock-tag-btn.ai { background: #4a7c59; color: #fff; }
+
+#theme-a .mock-task { background: #fff; border-color: #e8e3d8; }
+#theme-a .mock-task.doing { border-left-color: #4a7c59; background: #f5fbf6; border-color: #c8e0ca; }
+#theme-a .mock-task.pinned { border-left-color: #c9902a; background: #fff; }
+#theme-a .mock-task-title { color: #2d2820; }
+#theme-a .mock-task-check { border-color: #c8c0b0; }
+#theme-a .mock-task-check.doing { border-color: #4a7c59; background: #edf5ee; color: #4a7c59; }
+
+#theme-a .mock-genre-badge { background: #edf5ee; color: #3d6b4f; }
+#theme-a .mock-genre-badge.rose { background: #fce8ee; color: #a0405a; }
+#theme-a .mock-genre-badge.blue { background: #e6f0fc; color: #2d5a9e; }
+#theme-a .mock-status-badge { background: #e8f4ea; color: #2e6a3d; }
+#theme-a .mock-pin-chip { background: #fef3db; color: #8a6000; border: 1px solid #f0d895; }
+#theme-a .mock-date-badge { color: #7a7060; }
+#theme-a .mock-divider { border-top-color: #e0dbd0; }
+
+#theme-a legend-item { background: #faf9f4; }
+
+
+/* =========================================================
+   THEME B : Warm Dust  暖かいくすみラベンダー
+   ========================================================= */
+#theme-b { background: #f3f0f8; }
+
+#theme-b .mock { background: #ede9f5; }
+#theme-b .mock-header { background: #f9f7ff; border-bottom: 1px solid #d8d0ec; }
+#theme-b .mock-logo-title { color: #3d2d68; }
+#theme-b .mock-logo-sub { color: #9080b8; }
+#theme-b .mock-logo-icon { background: #ece6ff; color: #6b50b8; }
+#theme-b .mock-btn-sm { background: #f0eafa; color: #6b50b8; border-color: #d0c4f0; }
+#theme-b .mock-btn-sm.primary { background: #d8cef5; color: #3d2d68; border-color: #b8a8e8; }
+#theme-b .mock-btn-icon { background: #f0eafa; color: #9080c0; border-color: #d8d0ec; }
+
+#theme-b .mock-body { background: #ede9f5; }
+#theme-b .mock-input-area { background: #f9f7ff; border: 1px solid #d8d0ec; }
+#theme-b .mock-input { background: #f0eafa; border-color: #d0c4f0; color: #2d2048; }
+#theme-b .mock-add-btn { background: #4a3480; color: #fff; }
+
+#theme-b .mock-tasklist-area { background: #f9f7ff; border: 1px solid #d8d0ec; }
+#theme-b .mock-section-title { color: #2d2048; }
+#theme-b .mock-dot.active { background: #7060b8; }
+#theme-b .mock-dot.done { background: #90b890; }
+
+#theme-b .mock-tag-btn.genre { background: #ede8fc; color: #5040a0; border-color: #c8b8f0; }
+#theme-b .mock-tag-btn.ai { background: #6050a0; color: #f0eaff; }
+
+#theme-b .mock-task { background: #fff; border-color: #ddd8f0; }
+#theme-b .mock-task.doing { border-left-color: #7060b8; background: #f5f2ff; border-color: #c8b8f0; }
+#theme-b .mock-task.pinned { border-left-color: #d4900a; background: #fff; }
+#theme-b .mock-task-title { color: #1e1438; }
+#theme-b .mock-task-check { border-color: #c0b8d8; }
+#theme-b .mock-task-check.doing { border-color: #7060b8; background: #ede8fc; color: #6050a0; }
+
+#theme-b .mock-genre-badge { background: #ede8fc; color: #5040a0; }
+#theme-b .mock-genre-badge.rose { background: #fce8f0; color: #a03060; }
+#theme-b .mock-genre-badge.blue { background: #e6eeff; color: #2d50a0; }
+#theme-b .mock-status-badge { background: #e0f0e4; color: #207040; }
+#theme-b .mock-pin-chip { background: #fef3db; color: #8a5800; border: 1px solid #f0d070; }
+#theme-b .mock-date-badge { color: #8070a8; }
+#theme-b .mock-divider { border-top-color: #ddd8f0; }
+
+/* =========================================================
+   THEME C : Sky Slate  空と霧のブルーグレー
+   ========================================================= */
+#theme-c { background: #eef3f8; }
+
+#theme-c .mock { background: #e4ecf4; }
+#theme-c .mock-header { background: linear-gradient(135deg, #3c6080 0%, #2d5070 60%, #1e3d5c 100%); }
+#theme-c .mock-logo-title { color: #fff; }
+#theme-c .mock-logo-sub { color: #90c0d8; }
+#theme-c .mock-logo-icon { background: rgba(255,255,255,0.15); color: #b8dce8; }
+#theme-c .mock-btn-sm { background: rgba(255,255,255,0.12); color: #c4dce8; border-color: rgba(255,255,255,0.2); }
+#theme-c .mock-btn-sm.primary { background: rgba(255,255,255,0.22); color: #fff; }
+#theme-c .mock-btn-icon { background: rgba(255,255,255,0.1); color: #a8ccd8; border-color: rgba(255,255,255,0.15); }
+
+#theme-c .mock-body { background: #e4ecf4; }
+#theme-c .mock-input-area { background: #f0f5fa; border: 1px solid #ccd8e4; }
+#theme-c .mock-input { background: #e4ecf4; border-color: #b8c8d8; color: #1e3048; }
+#theme-c .mock-add-btn { background: #1e3d5c; color: #fff; }
+
+#theme-c .mock-tasklist-area { background: #f0f5fa; border: 1px solid #ccd8e4; }
+#theme-c .mock-section-title { color: #1e3048; }
+#theme-c .mock-dot.active { background: #3c6080; }
+#theme-c .mock-dot.done { background: #5ca880; }
+
+#theme-c .mock-tag-btn.genre { background: #e0ecf8; color: #2d5070; border-color: #b0c8dc; }
+#theme-c .mock-tag-btn.ai { background: #3c6080; color: #e0f0fc; }
+
+#theme-c .mock-task { background: #fff; border-color: #ccd8e8; }
+#theme-c .mock-task.doing { border-left-color: #3c6080; background: #f0f7fc; border-color: #b0c8dc; }
+#theme-c .mock-task.pinned { border-left-color: #c08020; background: #fff; }
+#theme-c .mock-task-title { color: #1a2a3c; }
+#theme-c .mock-task-check { border-color: #b8c8d8; }
+#theme-c .mock-task-check.doing { border-color: #3c6080; background: #e0f0fc; color: #3c6080; }
+
+#theme-c .mock-genre-badge { background: #ddeef8; color: #2d5070; }
+#theme-c .mock-genre-badge.rose { background: #fce8ee; color: #903050; }
+#theme-c .mock-genre-badge.blue { background: #e0eeff; color: #2040a0; }
+#theme-c .mock-status-badge { background: #d8f0e0; color: #185a30; }
+#theme-c .mock-pin-chip { background: #fef3d8; color: #805800; border: 1px solid #e8cc80; }
+#theme-c .mock-date-badge { color: #507090; }
+#theme-c .mock-divider { border-top-color: #ccd8e4; }
+
+/* =========================================================
+   THEME D : Warm Terra  温かみのある砂×テラコッタ
+   ========================================================= */
+#theme-d { background: #f8f2ea; }
+
+#theme-d .mock { background: #f0e8da; }
+#theme-d .mock-header { background: #fdf8f1; border-bottom: 1px solid #e4d4bc; }
+#theme-d .mock-logo-title { color: #4a2c10; }
+#theme-d .mock-logo-sub { color: #b0906a; }
+#theme-d .mock-logo-icon { background: #fce8d8; color: #b85a30; }
+#theme-d .mock-btn-sm { background: #fdf0e4; color: #8c4820; border-color: #e4c8a8; }
+#theme-d .mock-btn-sm.primary { background: #f0d8c0; color: #5a2c08; border-color: #d0a878; }
+#theme-d .mock-btn-icon { background: #fdf0e4; color: #c08050; border-color: #e4d0b8; }
+
+#theme-d .mock-body { background: #f0e8da; }
+#theme-d .mock-input-area { background: #fdf8f2; border: 1px solid #e4d4bc; }
+#theme-d .mock-input { background: #f4ece0; border-color: #d8c4a8; color: #3a2010; }
+#theme-d .mock-add-btn { background: #4a2c10; color: #fdf0e4; }
+
+#theme-d .mock-tasklist-area { background: #fdf8f2; border: 1px solid #e4d4bc; }
+#theme-d .mock-section-title { color: #3a2010; }
+#theme-d .mock-dot.active { background: #c05828; }
+#theme-d .mock-dot.done { background: #6aaa78; }
+
+#theme-d .mock-tag-btn.genre { background: #fce8d8; color: #8c4820; border-color: #e8c8a8; }
+#theme-d .mock-tag-btn.ai { background: #c05828; color: #fdf0e4; }
+
+#theme-d .mock-task { background: #fff; border-color: #e0d0b8; }
+#theme-d .mock-task.doing { border-left-color: #c05828; background: #fff8f2; border-color: #e8c8a8; }
+#theme-d .mock-task.pinned { border-left-color: #c8960a; background: #fff; }
+#theme-d .mock-task-title { color: #2a180a; }
+#theme-d .mock-task-check { border-color: #c8b090; }
+#theme-d .mock-task-check.doing { border-color: #c05828; background: #fce8d8; color: #b04818; }
+
+#theme-d .mock-genre-badge { background: #fce8d8; color: #8c4820; }
+#theme-d .mock-genre-badge.rose { background: #fce0e4; color: #9a2030; }
+#theme-d .mock-genre-badge.blue { background: #e0e8fc; color: #2040a0; }
+#theme-d .mock-status-badge { background: #daf0e0; color: #185830; }
+#theme-d .mock-pin-chip { background: #fef8d8; color: #806000; border: 1px solid #e8d070; }
+#theme-d .mock-date-badge { color: #907060; }
+#theme-d .mock-divider { border-top-color: #e0d0b8; }
+
+
+/* ====== 比較表 ====== */
+.compare-table {
+  max-width: 740px;
+  margin: 0 auto 32px;
+  border-radius: 16px;
+  overflow: hidden;
+  border: 1px solid rgba(255,255,255,0.08);
+}
+.compare-table table { width: 100%; border-collapse: collapse; }
+.compare-table th, .compare-table td {
+  padding: 10px 14px;
+  font-size: 11px;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  text-align: left;
+}
+.compare-table th { background: rgba(255,255,255,0.05); font-weight: 700; color: #aaa; letter-spacing: 0.06em; text-transform: uppercase; }
+.compare-table td { color: #ccc; }
+.compare-table tr:last-child td { border-bottom: none; }
+.swatch { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 5px; vertical-align: middle; }
+</style>
+</head>
+<body>
+
+<!-- ======== テーマ選択バー ======== -->
+<div class="selector-bar">
+  <h1>デザイン案</h1>
+  <button class="theme-btn active" id="btn-a" onclick="show('a')"
+    style="background:#4a7c59; color:#fff;">A. セージ＆クリーム</button>
+  <button class="theme-btn" id="btn-b" onclick="show('b')"
+    style="background:#6050a0; color:#f0eaff;">B. ウォームラベンダー</button>
+  <button class="theme-btn" id="btn-c" onclick="show('c')"
+    style="background:#3c6080; color:#fff;">C. スカイスレート</button>
+  <button class="theme-btn" id="btn-d" onclick="show('d')"
+    style="background:#c05828; color:#fdf0e4;">D. テラコッタサンド</button>
+</div>
+
+
+<!-- ======================================================
+     THEME A — セージ＆クリーム
+     ====================================================== -->
+<div id="theme-a" class="preview-area visible">
+  <div class="preview-label">
+    <h2 style="color:#4a7c59;">A. セージ＆クリーム</h2>
+    <p>くすみグリーンのヘッダー、温かみのあるクリーム背景。<br>自然・落ち着きを感じるアーストーン系。疲れにくく長時間の作業向け。</p>
+  </div>
+
+  <div class="mock">
+    <!-- ヘッダー -->
+    <div class="mock-header">
+      <div class="mock-logo">
+        <div class="mock-logo-icon">✦</div>
+        <div>
+          <div class="mock-logo-title">ToDo管理＋N.B.LM記録</div>
+          <div class="mock-logo-sub">NotebookLM &amp; Googleカレンダー共有</div>
+        </div>
+      </div>
+      <div class="mock-header-btns">
+        <div class="mock-btn-sm">💡 6月1日 (日)</div>
+        <div class="mock-btn-icon">☁</div>
+        <div class="mock-btn-sm primary">⚙ 同期・AI設定</div>
+      </div>
+    </div>
+    <!-- ボディ -->
+    <div class="mock-body">
+      <!-- 入力エリア -->
+      <div class="mock-input-area">
+        <div class="mock-input-row">
+          <div class="mock-input">⊕ 今日やるべきことは何ですか？</div>
+          <div class="mock-add-btn">追加</div>
+        </div>
+        <div class="mock-date-row">🕐 予定日時(任意): 日時を選択</div>
+      </div>
+      <!-- タスクリスト -->
+      <div class="mock-tasklist-area">
+        <div class="mock-section-header">
+          <div class="mock-section-left">
+            <div class="mock-dot active"></div>
+            <div class="mock-section-title">進行中・未完了</div>
+          </div>
+          <div class="mock-section-btns">
+            <div class="mock-tag-btn genre">🏷 ジャンル管理</div>
+            <div class="mock-tag-btn ai">🤖 AI自動分類</div>
+          </div>
+        </div>
+        <div class="mock-tasks">
+          <!-- ピン止め中タスク -->
+          <div class="mock-task pinned">
+            <div class="mock-task-check">○</div>
+            <div class="mock-task-content">
+              <div class="mock-task-title">📌 Cloudflare Worker のCORS設定を確認する</div>
+              <div class="mock-task-meta">
+                <div class="mock-genre-badge">💻 仕事</div>
+                <div class="mock-pin-chip">📌 ピン</div>
+                <div class="mock-date-badge">2026/06/02 14:00</div>
+              </div>
+            </div>
+          </div>
+          <!-- 進行中タスク -->
+          <div class="mock-task doing">
+            <div class="mock-task-check doing">▶</div>
+            <div class="mock-task-content">
+              <div class="mock-task-title">TaskJournal のデザイン改善を実施する</div>
+              <div class="mock-task-meta">
+                <div class="mock-genre-badge rose">🎨 個人</div>
+                <div class="mock-status-badge">▶ 進行中</div>
+              </div>
+            </div>
+          </div>
+          <!-- 通常タスク -->
+          <div class="mock-task">
+            <div class="mock-task-check">○</div>
+            <div class="mock-task-content">
+              <div class="mock-task-title">LM Studio の常時稼働スクリプトをテストする</div>
+              <div class="mock-task-meta">
+                <div class="mock-genre-badge blue">📚 学習</div>
+                <div class="mock-date-badge">期限なし</div>
+              </div>
+            </div>
+          </div>
+          <!-- 未分類タスク -->
+          <div class="mock-task">
+            <div class="mock-task-check">○</div>
+            <div class="mock-task-content">
+              <div class="mock-task-title">週次レビューのメモをまとめる</div>
+              <div class="mock-task-meta">
+                <div class="mock-date-badge">未分類</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <hr class="mock-divider">
+        <div class="mock-completed-section">
+          <div class="mock-section-header">
+            <div class="mock-section-left">
+              <div class="mock-dot done"></div>
+              <div class="mock-section-title">完了済み</div>
+            </div>
+          </div>
+          <div class="mock-tasks">
+            <div class="mock-task" style="opacity:0.55;">
+              <div class="mock-task-check" style="background:#e8f4ea; border-color:#7ab88a; color:#4a8a5a;">✓</div>
+              <div class="mock-task-content">
+                <div class="mock-task-title" style="text-decoration:line-through; opacity:0.6;">GASウェブフックのテストを完了した</div>
+                <div class="mock-task-meta">
+                  <div class="mock-genre-badge">💻 仕事</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="legend">
+    <div class="legend-item" style="background:#faf9f4; border-color:#e0dbd0; color:#3d3830;">
+      背景・コンテナ <span style="color:#7a7060;">#f0ede4 / #faf9f4 — アイボリークリーム</span>
+    </div>
+    <div class="legend-item" style="background:#4a7c59; color:#fff;">
+      ヘッダー <span style="color:#a8d4b2;">#4a7c59 — ディープセージグリーン</span>
+    </div>
+    <div class="legend-item" style="background:#edf5ee; border-color:#c8e0ca; color:#3d6b4f;">
+      ジャンルバッジ / ボタン <span style="color:#80a888;">#edf5ee — ライトセージ</span>
+    </div>
+    <div class="legend-item" style="background:#fff; border-left: 4px solid #4a7c59; border-right: 1px solid #c8e0ca; border-top: 1px solid #c8e0ca; border-bottom: 1px solid #c8e0ca; color:#2d2820;">
+      進行中カード <span style="color:#4a7c59;">左ボーダー: セージ / 背景: #f5fbf6</span>
+    </div>
+    <div class="legend-item" style="background:#fff; border-left: 4px solid #c9902a; border-right: 1px solid #e0dbd0; border-top: 1px solid #e0dbd0; border-bottom: 1px solid #e0dbd0; color:#2d2820;">
+      ピン止めカード <span style="color:#c9902a;">左ボーダー: アンバー</span>
+    </div>
+  </div>
+</div>
+
+
+<!-- ======================================================
+     THEME B — ウォームラベンダー
+     ====================================================== -->
+<div id="theme-b" class="preview-area">
+  <div class="preview-label">
+    <h2 style="color:#7060b8;">B. ウォームラベンダー</h2>
+    <p>くすみパープルを基調に白ヘッダーで柔らかく。<br>現行の紫系を保ちつつ「のっぺり感」を解消するバリアント。明るく清潔感がある。</p>
+  </div>
+
+  <div class="mock">
+    <div class="mock-header">
+      <div class="mock-logo">
+        <div class="mock-logo-icon">✦</div>
+        <div>
+          <div class="mock-logo-title">ToDo管理＋N.B.LM記録</div>
+          <div class="mock-logo-sub">NotebookLM &amp; Googleカレンダー共有</div>
+        </div>
+      </div>
+      <div class="mock-header-btns">
+        <div class="mock-btn-sm">💡 6月1日 (日)</div>
+        <div class="mock-btn-icon">☁</div>
+        <div class="mock-btn-sm primary">⚙ 同期・AI設定</div>
+      </div>
+    </div>
+    <div class="mock-body">
+      <div class="mock-input-area">
+        <div class="mock-input-row">
+          <div class="mock-input">⊕ 今日やるべきことは何ですか？</div>
+          <div class="mock-add-btn">追加</div>
+        </div>
+        <div class="mock-date-row" style="color:#8070a8;">🕐 予定日時(任意): 日時を選択</div>
+      </div>
+      <div class="mock-tasklist-area">
+        <div class="mock-section-header">
+          <div class="mock-section-left">
+            <div class="mock-dot active"></div>
+            <div class="mock-section-title">進行中・未完了</div>
+          </div>
+          <div class="mock-section-btns">
+            <div class="mock-tag-btn genre">🏷 ジャンル管理</div>
+            <div class="mock-tag-btn ai">🤖 AI自動分類</div>
+          </div>
+        </div>
+        <div class="mock-tasks">
+          <div class="mock-task pinned">
+            <div class="mock-task-check">○</div>
+            <div class="mock-task-content">
+              <div class="mock-task-title">📌 Cloudflare Worker のCORS設定を確認する</div>
+              <div class="mock-task-meta">
+                <div class="mock-genre-badge">💻 仕事</div>
+                <div class="mock-pin-chip">📌 ピン</div>
+                <div class="mock-date-badge">2026/06/02 14:00</div>
+              </div>
+            </div>
+          </div>
+          <div class="mock-task doing">
+            <div class="mock-task-check doing">▶</div>
+            <div class="mock-task-content">
+              <div class="mock-task-title">TaskJournal のデザイン改善を実施する</div>
+              <div class="mock-task-meta">
+                <div class="mock-genre-badge rose">🎨 個人</div>
+                <div class="mock-status-badge">▶ 進行中</div>
+              </div>
+            </div>
+          </div>
+          <div class="mock-task">
+            <div class="mock-task-check">○</div>
+            <div class="mock-task-content">
+              <div class="mock-task-title">LM Studio の常時稼働スクリプトをテストする</div>
+              <div class="mock-task-meta">
+                <div class="mock-genre-badge blue">📚 学習</div>
+              </div>
+            </div>
+          </div>
+          <div class="mock-task">
+            <div class="mock-task-check">○</div>
+            <div class="mock-task-content">
+              <div class="mock-task-title">週次レビューのメモをまとめる</div>
+              <div class="mock-task-meta">
+                <div class="mock-date-badge">未分類</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <hr class="mock-divider">
+        <div class="mock-completed-section">
+          <div class="mock-section-header">
+            <div class="mock-section-left">
+              <div class="mock-dot done"></div>
+              <div class="mock-section-title">完了済み</div>
+            </div>
+          </div>
+          <div class="mock-tasks">
+            <div class="mock-task" style="opacity:0.55;">
+              <div class="mock-task-check" style="background:#e0f0e4; border-color:#90b890; color:#407848;">✓</div>
+              <div class="mock-task-content">
+                <div class="mock-task-title" style="text-decoration:line-through; opacity:0.6;">GASウェブフックのテストを完了した</div>
+                <div class="mock-task-meta"><div class="mock-genre-badge">💻 仕事</div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="legend">
+    <div class="legend-item" style="background:#f9f7ff; border-color:#d8d0ec; color:#3d2d68;">
+      ヘッダー <span style="color:#9080b8;">#f9f7ff — クリーム白 / ボーダー: #d8d0ec</span>
+    </div>
+    <div class="legend-item" style="background:#ede9f5; border-color:#ccc4e8; color:#2d2048;">
+      背景 <span style="color:#7060a0;">#ede9f5 — ダスティラベンダー</span>
+    </div>
+    <div class="legend-item" style="background:#ede8fc; border-color:#c8b8f0; color:#5040a0;">
+      ジャンルバッジ <span style="color:#8070c0;">#ede8fc — ライトパープル</span>
+    </div>
+    <div class="legend-item" style="background:#f5f2ff; border-left: 4px solid #7060b8; border-right: 1px solid #c8b8f0; border-top: 1px solid #c8b8f0; border-bottom: 1px solid #c8b8f0; color:#1e1438;">
+      進行中カード <span style="color:#7060b8;">左: ミディアムパープル / 背景: #f5f2ff</span>
+    </div>
+    <div class="legend-item" style="background:#4a3480; color:#f0eaff;">
+      追加ボタン <span style="color:#b8a8f8;">#4a3480 — ディープパープル</span>
+    </div>
+  </div>
+</div>
+
+
+<!-- ======================================================
+     THEME C — スカイスレート
+     ====================================================== -->
+<div id="theme-c" class="preview-area">
+  <div class="preview-label">
+    <h2 style="color:#3c6080;">C. スカイスレート</h2>
+    <p>落ち着いたスレートブルーのヘッダー、霞がかった水色背景。<br>知的・整理整頓のイメージ。集中作業・ビジネス用途に向く。</p>
+  </div>
+
+  <div class="mock">
+    <div class="mock-header">
+      <div class="mock-logo">
+        <div class="mock-logo-icon">✦</div>
+        <div>
+          <div class="mock-logo-title">ToDo管理＋N.B.LM記録</div>
+          <div class="mock-logo-sub">NotebookLM &amp; Googleカレンダー共有</div>
+        </div>
+      </div>
+      <div class="mock-header-btns">
+        <div class="mock-btn-sm">💡 6月1日 (日)</div>
+        <div class="mock-btn-icon">☁</div>
+        <div class="mock-btn-sm primary">⚙ 同期・AI設定</div>
+      </div>
+    </div>
+    <div class="mock-body">
+      <div class="mock-input-area">
+        <div class="mock-input-row">
+          <div class="mock-input">⊕ 今日やるべきことは何ですか？</div>
+          <div class="mock-add-btn">追加</div>
+        </div>
+        <div class="mock-date-row" style="color:#507090;">🕐 予定日時(任意): 日時を選択</div>
+      </div>
+      <div class="mock-tasklist-area">
+        <div class="mock-section-header">
+          <div class="mock-section-left">
+            <div class="mock-dot active"></div>
+            <div class="mock-section-title">進行中・未完了</div>
+          </div>
+          <div class="mock-section-btns">
+            <div class="mock-tag-btn genre">🏷 ジャンル管理</div>
+            <div class="mock-tag-btn ai">🤖 AI自動分類</div>
+          </div>
+        </div>
+        <div class="mock-tasks">
+          <div class="mock-task pinned">
+            <div class="mock-task-check">○</div>
+            <div class="mock-task-content">
+              <div class="mock-task-title">📌 Cloudflare Worker のCORS設定を確認する</div>
+              <div class="mock-task-meta">
+                <div class="mock-genre-badge">💻 仕事</div>
+                <div class="mock-pin-chip">📌 ピン</div>
+                <div class="mock-date-badge">2026/06/02 14:00</div>
+              </div>
+            </div>
+          </div>
+          <div class="mock-task doing">
+            <div class="mock-task-check doing">▶</div>
+            <div class="mock-task-content">
+              <div class="mock-task-title">TaskJournal のデザイン改善を実施する</div>
+              <div class="mock-task-meta">
+                <div class="mock-genre-badge rose">🎨 個人</div>
+                <div class="mock-status-badge">▶ 進行中</div>
+              </div>
+            </div>
+          </div>
+          <div class="mock-task">
+            <div class="mock-task-check">○</div>
+            <div class="mock-task-content">
+              <div class="mock-task-title">LM Studio の常時稼働スクリプトをテストする</div>
+              <div class="mock-task-meta">
+                <div class="mock-genre-badge blue">📚 学習</div>
+              </div>
+            </div>
+          </div>
+          <div class="mock-task">
+            <div class="mock-task-check">○</div>
+            <div class="mock-task-content">
+              <div class="mock-task-title">週次レビューのメモをまとめる</div>
+              <div class="mock-task-meta">
+                <div class="mock-date-badge">未分類</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <hr class="mock-divider">
+        <div class="mock-completed-section">
+          <div class="mock-section-header">
+            <div class="mock-section-left">
+              <div class="mock-dot done"></div>
+              <div class="mock-section-title">完了済み</div>
+            </div>
+          </div>
+          <div class="mock-tasks">
+            <div class="mock-task" style="opacity:0.55;">
+              <div class="mock-task-check" style="background:#d8f0e0; border-color:#5ca880; color:#286040;">✓</div>
+              <div class="mock-task-content">
+                <div class="mock-task-title" style="text-decoration:line-through; opacity:0.6;">GASウェブフックのテストを完了した</div>
+                <div class="mock-task-meta"><div class="mock-genre-badge">💻 仕事</div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="legend">
+    <div class="legend-item" style="background:#1e3d5c; color:#b8dce8;">
+      ヘッダー <span style="color:#6090b0;">#1e3d5c→#3c6080 — ネイビー→スレート</span>
+    </div>
+    <div class="legend-item" style="background:#e4ecf4; border-color:#ccd8e4; color:#1e3048;">
+      背景 <span style="color:#506880;">#e4ecf4 — フォグブルー</span>
+    </div>
+    <div class="legend-item" style="background:#ddeef8; border-color:#b0c8dc; color:#2d5070;">
+      ジャンルバッジ <span style="color:#608090;">#ddeef8 — ライトスカイ</span>
+    </div>
+    <div class="legend-item" style="background:#f0f7fc; border-left: 4px solid #3c6080; border-right: 1px solid #b0c8dc; border-top: 1px solid #b0c8dc; border-bottom: 1px solid #b0c8dc; color:#1a2a3c;">
+      進行中カード <span style="color:#3c6080;">左: スレートブルー / 背景: #f0f7fc</span>
+    </div>
+    <div class="legend-item" style="background:#1e3d5c; color:#e0f0fc;">
+      追加ボタン <span style="color:#80b8d0;">#1e3d5c — ディープネイビー</span>
+    </div>
+  </div>
+</div>
+
+
+<!-- ======================================================
+     THEME D — テラコッタサンド
+     ====================================================== -->
+<div id="theme-d" class="preview-area">
+  <div class="preview-label">
+    <h2 style="color:#c05828;">D. テラコッタサンド</h2>
+    <p>温かみのある砂色とテラコッタのアクセント。白ヘッダーで清潔感を確保。<br>手書きノートやジャーナルのような、親しみやすいデザイン。</p>
+  </div>
+
+  <div class="mock">
+    <div class="mock-header">
+      <div class="mock-logo">
+        <div class="mock-logo-icon">✦</div>
+        <div>
+          <div class="mock-logo-title">ToDo管理＋N.B.LM記録</div>
+          <div class="mock-logo-sub">NotebookLM &amp; Googleカレンダー共有</div>
+        </div>
+      </div>
+      <div class="mock-header-btns">
+        <div class="mock-btn-sm">💡 6月1日 (日)</div>
+        <div class="mock-btn-icon">☁</div>
+        <div class="mock-btn-sm primary">⚙ 同期・AI設定</div>
+      </div>
+    </div>
+    <div class="mock-body">
+      <div class="mock-input-area">
+        <div class="mock-input-row">
+          <div class="mock-input">⊕ 今日やるべきことは何ですか？</div>
+          <div class="mock-add-btn">追加</div>
+        </div>
+        <div class="mock-date-row" style="color:#907060;">🕐 予定日時(任意): 日時を選択</div>
+      </div>
+      <div class="mock-tasklist-area">
+        <div class="mock-section-header">
+          <div class="mock-section-left">
+            <div class="mock-dot active"></div>
+            <div class="mock-section-title">進行中・未完了</div>
+          </div>
+          <div class="mock-section-btns">
+            <div class="mock-tag-btn genre">🏷 ジャンル管理</div>
+            <div class="mock-tag-btn ai">🤖 AI自動分類</div>
+          </div>
+        </div>
+        <div class="mock-tasks">
+          <div class="mock-task pinned">
+            <div class="mock-task-check">○</div>
+            <div class="mock-task-content">
+              <div class="mock-task-title">📌 Cloudflare Worker のCORS設定を確認する</div>
+              <div class="mock-task-meta">
+                <div class="mock-genre-badge">💻 仕事</div>
+                <div class="mock-pin-chip">📌 ピン</div>
+                <div class="mock-date-badge">2026/06/02 14:00</div>
+              </div>
+            </div>
+          </div>
+          <div class="mock-task doing">
+            <div class="mock-task-check doing">▶</div>
+            <div class="mock-task-content">
+              <div class="mock-task-title">TaskJournal のデザイン改善を実施する</div>
+              <div class="mock-task-meta">
+                <div class="mock-genre-badge rose">🎨 個人</div>
+                <div class="mock-status-badge">▶ 進行中</div>
+              </div>
+            </div>
+          </div>
+          <div class="mock-task">
+            <div class="mock-task-check">○</div>
+            <div class="mock-task-content">
+              <div class="mock-task-title">LM Studio の常時稼働スクリプトをテストする</div>
+              <div class="mock-task-meta">
+                <div class="mock-genre-badge blue">📚 学習</div>
+              </div>
+            </div>
+          </div>
+          <div class="mock-task">
+            <div class="mock-task-check">○</div>
+            <div class="mock-task-content">
+              <div class="mock-task-title">週次レビューのメモをまとめる</div>
+              <div class="mock-task-meta">
+                <div class="mock-date-badge">未分類</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <hr class="mock-divider">
+        <div class="mock-completed-section">
+          <div class="mock-section-header">
+            <div class="mock-section-left">
+              <div class="mock-dot done"></div>
+              <div class="mock-section-title">完了済み</div>
+            </div>
+          </div>
+          <div class="mock-tasks">
+            <div class="mock-task" style="opacity:0.55;">
+              <div class="mock-task-check" style="background:#daf0e0; border-color:#6aaa78; color:#285830;">✓</div>
+              <div class="mock-task-content">
+                <div class="mock-task-title" style="text-decoration:line-through; opacity:0.6;">GASウェブフックのテストを完了した</div>
+                <div class="mock-task-meta"><div class="mock-genre-badge">💻 仕事</div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="legend">
+    <div class="legend-item" style="background:#fdf8f1; border-color:#e4d4bc; color:#4a2c10;">
+      ヘッダー <span style="color:#b0906a;">#fdf8f1 — ウォームホワイト / ボーダー砂色</span>
+    </div>
+    <div class="legend-item" style="background:#f0e8da; border-color:#e0d0b8; color:#3a2010;">
+      背景 <span style="color:#907060;">#f0e8da — サンドベージュ</span>
+    </div>
+    <div class="legend-item" style="background:#fce8d8; border-color:#e8c8a8; color:#8c4820;">
+      ジャンルバッジ <span style="color:#c09060;">#fce8d8 — ライトテラコッタ</span>
+    </div>
+    <div class="legend-item" style="background:#fff8f2; border-left: 4px solid #c05828; border-right: 1px solid #e8c8a8; border-top: 1px solid #e8c8a8; border-bottom: 1px solid #e8c8a8; color:#2a180a;">
+      進行中カード <span style="color:#c05828;">左: テラコッタ / 背景: #fff8f2</span>
+    </div>
+    <div class="legend-item" style="background:#4a2c10; color:#fdf0e4;">
+      追加ボタン <span style="color:#c09070;">#4a2c10 — ダークブラウン</span>
+    </div>
+  </div>
+</div>
+
+
+<script>
+function show(id) {
+  document.querySelectorAll('.preview-area').forEach(el => el.classList.remove('visible'));
+  document.querySelectorAll('.theme-btn').forEach(el => el.classList.remove('active'));
+  document.getElementById('theme-' + id).classList.add('visible');
+  document.getElementById('btn-' + id).classList.add('active');
+}
+</script>
+</body>
+</html>
