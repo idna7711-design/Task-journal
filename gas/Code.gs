@@ -5,7 +5,7 @@
  *   doPost … アプリから { tasks, markdown } を受け取り
  *            - TaskData.json   … 同期用DB（tasks配列）を Drive に保存
  *            - TaskJournal.md  … NotebookLM用Markdownを Drive に保存
- *            - Googleカレンダー … dueDate付き・未完了タスクを作成/更新
+ *            （カレンダー登録はアプリの「カレンダーに追加」ボタンからのみ。GAS自動同期は廃止）
  *   doGet  … TaskData.json の中身（tasks配列）をJSONで返す（他デバイスからのpull用）
  *
  * 修正点（オリジナルからの差分）:
@@ -46,38 +46,9 @@ function doPost(e) {
     upsertFile(folder, MD_FILE_NAME, data.markdown);
   }
 
-  // 3. Googleカレンダー自動同期
-  if (data.tasks && data.tasks.length > 0) {
-    try {
-      const calendar = CalendarApp.getDefaultCalendar();
-      data.tasks.forEach(task => {
-        if (task.status === 'done' || !task.dueDate) return;
-
-        const startTime = new Date(task.dueDate);
-        const endTime = new Date(startTime.getTime() + 60 * 60 * 1000);
-        const title = '[Task] ' + task.text;
-        let desc = 'TaskJournalからの自動同期\n(ID:' + task.id + ')\n\n';
-        if (task.logs && task.logs.length > 0) desc += task.logs.join('\n');
-
-        // task.id を説明文に含めているので、それで既存予定を検索して重複を防ぐ
-        const events = calendar.getEvents(
-          new Date(startTime.getTime() - 30 * 24 * 60 * 60 * 1000),
-          new Date(endTime.getTime() + 30 * 24 * 60 * 60 * 1000),
-          { search: task.id }
-        );
-        if (events.length > 0) {
-          const ev = events[0];
-          ev.setTitle(title);
-          ev.setTime(startTime, endTime);
-          ev.setDescription(desc);
-        } else {
-          calendar.createEvent(title, startTime, endTime, { description: desc });
-        }
-      });
-    } catch (err) {
-      // カレンダー権限未許可などは握りつぶす（保存処理は成功させる）
-    }
-  }
+  // ※ カレンダー登録はアプリの「カレンダーに追加」ボタン押下時のみ行う。
+  //    日時設定のたびに自動登録すると、ボタン押下分と合わせて二重に予定が入るため、
+  //    GAS側での自動同期は廃止した。
 
   return ContentService.createTextOutput('Success');
 }
