@@ -441,9 +441,12 @@
                 ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
         }
         function sortTasks() {
-            // ピン留めを最優先、その後は作成日時の新しい順
+            // ピン留め最優先 → 進行中(doing)を上に → 作成日時の新しい順
+            const rank = (s) => (s === 'doing' ? 0 : s === 'done' ? 2 : 1);
             tasks.sort((a, b) =>
-                ((b.pinned ? 1 : 0) - (a.pinned ? 1 : 0)) || ((b.createdAt || 0) - (a.createdAt || 0)));
+                ((b.pinned ? 1 : 0) - (a.pinned ? 1 : 0))
+                || (rank(a.status) - rank(b.status))
+                || ((b.createdAt || 0) - (a.createdAt || 0)));
         }
         function normalizeTask(t) {
             return {
@@ -877,6 +880,7 @@
             t.logs = [...(t.logs || []), `${getTimeString()} ${logMsg}`];
             t.updatedAt = now();
             await dbPutTask(t);
+            sortTasks();
             render();
             triggerDriveSync();
         };
@@ -888,6 +892,7 @@
             t.logs = [...(t.logs || []), `${getTimeString()} 🚀 開始しました`];
             t.updatedAt = now();
             await dbPutTask(t);
+            sortTasks();
             render();
             triggerDriveSync();
         };
@@ -952,6 +957,7 @@
             t.updatedAt = now();
             await dbPutTask(t);
             closeMemoModal();
+            sortTasks();
             render();
             triggerDriveSync();
         };
