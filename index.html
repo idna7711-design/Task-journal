@@ -66,25 +66,29 @@
         input[type="datetime-local"]::-webkit-calendar-picker-indicator:hover {
             opacity: 1;
         }
+        /* タッチ端末（ホバー不可）では各タスクの操作ボタンを常時表示し、誤タップ・発見性を改善 */
+        @media (hover: none) {
+            .task-actions { opacity: 1 !important; }
+        }
     </style>
 <style>*, ::before, ::after{--tw-border-spacing-x:0;--tw-border-spacing-y:0;--tw-translate-x:0;--tw-translate-y:0;--tw-rotate:0;--tw-skew-x:0;--tw-skew-y:0;--tw-scale-x:1;--tw-scale-y:1;--tw-pan-x: ;--tw-pan-y: ;--tw-pinch-zoom: ;--tw-scroll-snap-strictness:proximity;--tw-gradient-from-position: ;--tw-gradient-via-position: ;--tw-gradient-to-position: ;--tw-ordinal: ;--tw-slashed-zero: ;--tw-numeric-figure: ;--tw-numeric-spacing: ;--tw-numeric-fraction: ;--tw-ring-inset: ;--tw-ring-offset-width:0px;--tw-ring-offset-color:#fff;--tw-ring-color:rgb(59 130 246 / 0.5);--tw-ring-offset-shadow:0 0 #0000;--tw-ring-shadow:0 0 #0000;--tw-shadow:0 0 #0000;--tw-shadow-colored:0 0 #0000;--tw-blur: ;--tw-brightness: ;--tw-contrast: ;--tw-grayscale: ;--tw-hue-rotate: ;--tw-invert: ;--tw-saturate: ;--tw-sepia: ;--tw-drop-shadow: ;--tw-backdrop-blur: ;--tw-backdrop-brightness: ;--tw-backdrop-contrast: ;--tw-backdrop-grayscale: ;--tw-backdrop-hue-rotate: ;--tw-backdrop-invert: ;--tw-backdrop-opacity: ;--tw-backdrop-saturate: ;--tw-backdrop-sepia: ;--tw-contain-size: ;--tw-contain-layout: ;--tw-contain-paint: ;--tw-contain-style: }::backdrop{--tw-border-spacing-x:0;--tw-border-spacing-y:0;--tw-translate-x:0;--tw-translate-y:0;--tw-rotate:0;--tw-skew-x:0;--tw-skew-y:0;--tw-scale-x:1;--tw-scale-y:1;--tw-pan-x: ;--tw-pan-y: ;--tw-pinch-zoom: ;--tw-scroll-snap-strictness:proximity;--tw-gradient-from-position: ;--tw-gradient-via-position: ;--tw-gradient-to-position: ;--tw-ordinal: ;--tw-slashed-zero: ;--tw-numeric-figure: ;--tw-numeric-spacing: ;--tw-numeric-fraction: ;--tw-ring-inset: ;--tw-ring-offset-width:0px;--tw-ring-offset-color:#fff;--tw-ring-color:rgb(59 130 246 / 0.5);--tw-ring-offset-shadow:0 0 #0000;--tw-ring-shadow:0 0 #0000;--tw-shadow:0 0 #0000;--tw-shadow-colored:0 0 #0000;--tw-blur: ;--tw-brightness: ;--tw-contrast: ;--tw-grayscale: ;--tw-hue-rotate: ;--tw-invert: ;--tw-saturate: ;--tw-sepia: ;--tw-drop-shadow: ;--tw-backdrop-blur: ;--tw-backdrop-brightness: ;--tw-backdrop-contrast: ;--tw-backdrop-grayscale: ;--tw-backdrop-hue-rotate: ;--tw-backdrop-invert: ;--tw-backdrop-opacity: ;--tw-backdrop-saturate: ;--tw-backdrop-sepia: ;--tw-contain-size: ;--tw-contain-layout: ;--tw-contain-paint: ;--tw-contain-style: }/* ! tailwindcss v3.4.17 | MIT License | https://tailwindcss.com */*,::after,::before{box-sizing:border-box;border-width:0;border-style:solid;border-color:#e5e7eb}::after,::before{--tw-content:''}:host,html{line-height:1.5;-webkit-text-size-adjust:100%;-moz-tab-size:4;tab-size:4;font-family:ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";font-feature-settings:normal;font-variation-settings:normal;-webkit-tap-highlight-color:transparent}body{margin:0;line-height:inherit}hr{height:0;color:inherit;border-top-width:1px}abbr:where([title]){-webkit-text-decoration:underline dotted;text-decoration:underline dotted}h1,h2,h3,h4,h5,h6{font-size:inherit;font-weight:inherit}a{color:inherit;text-decoration:inherit}b,strong{font-weight:bolder}code,kbd,pre,samp{font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;font-feature-settings:normal;font-variation-settings:normal;font-size:1em}small{font-size:80%}sub,sup{font-size:75%;line-height:0;position:relative;vertical-align:baseline}sub{bottom:-.25em}sup{top:-.5em}table{text-indent:0;border-color:inherit;border-collapse:collapse}button,input,optgroup,select,textarea{font-family:inherit;font-feature-settings:inherit;font-variation-settings:inherit;font-size:100%;font-weight:inherit;line-height:inherit;letter-spacing:inherit;color:inherit;margin:0;padding:0}button,select{text-transform:none}button,input:where([type=button]),input:where([type=reset]),input:where([type=submit]){-webkit-appearance:button;background-color:transparent;background-image:none}:-moz-focusring{outline:auto}:-moz-ui-invalid{box-shadow:none}progress{vertical-align:baseline}::-webkit-inner-spin-button,::-webkit-outer-spin-button{height:auto}[type=search]{-webkit-appearance:textfield;outline-offset:-2px}::-webkit-search-decoration{-webkit-appearance:none}::-webkit-file-upload-button{-webkit-appearance:button;font:inherit}summary{display:list-item}blockquote,dd,dl,figure,h1,h2,h3,h4,h5,h6,hr,p,pre{margin:0}fieldset{margin:0;padding:0}legend{padding:0}menu,ol,ul{list-style:none;margin:0;padding:0}dialog{padding:0}textarea{resize:vertical}input::placeholder,textarea::placeholder{opacity:1;color:#9ca3af}[role=button],button{cursor:pointer}:disabled{cursor:default}audio,canvas,embed,iframe,img,object,svg,video{display:block;vertical-align:middle}img,video{max-width:100%;height:auto}[hidden]:where(:not([hidden=until-found])){display:none}.pointer-events-none{pointer-events:none}.fixed{position:fixed}.absolute{position:absolute}.relative{position:relative}.inset-0{inset:0px}.inset-y-0{top:0px;bottom:0px}.left-4{left:1rem}.right-4{right:1rem}.top-4{top:1rem}.z-40{z-index:40}.z-50{z-index:50}.mx-1{margin-left:0.25rem;margin-right:0.25rem}.mx-auto{margin-left:auto;margin-right:auto}.-mr-2{margin-right:-0.5rem}.mb-1{margin-bottom:0.25rem}.mb-2{margin-bottom:0.5rem}.mb-4{margin-bottom:1rem}.mb-5{margin-bottom:1.25rem}.mb-6{margin-bottom:1.5rem}.mb-8{margin-bottom:2rem}.ml-1{margin-left:0.25rem}.mt-2{margin-top:0.5rem}.mt-4{margin-top:1rem}.mt-5{margin-top:1.25rem}.mt-6{margin-top:1.5rem}.mt-auto{margin-top:auto}.mb-3{margin-bottom:0.75rem}.mt-1{margin-top:0.25rem}.block{display:block}.flex{display:flex}.hidden{display:none}.h-10{height:2.5rem}.h-12{height:3rem}.h-14{height:3.5rem}.h-2{height:0.5rem}.h-3\.5{height:0.875rem}.h-4{height:1rem}.h-5{height:1.25rem}.h-7{height:1.75rem}.h-8{height:2rem}.h-full{height:100%}.h-screen{height:100vh}.h-6{height:1.5rem}.max-h-\[90vh\]{max-height:90vh}.min-h-0{min-height:0px}.min-h-\[100px\]{min-height:100px}.w-10{width:2.5rem}.w-12{width:3rem}.w-14{width:3.5rem}.w-2{width:0.5rem}.w-3\.5{width:0.875rem}.w-4{width:1rem}.w-5{width:1.25rem}.w-7{width:1.75rem}.w-full{width:100%}.w-px{width:1px}.w-6{width:1.5rem}.max-w-4xl{max-width:56rem}.max-w-\[300px\]{max-width:300px}.max-w-lg{max-width:32rem}.max-w-sm{max-width:24rem}.max-w-xl{max-width:36rem}.flex-1{flex:1 1 0%}.shrink-0{flex-shrink:0}.transform{transform:translate(var(--tw-translate-x), var(--tw-translate-y)) rotate(var(--tw-rotate)) skewX(var(--tw-skew-x)) skewY(var(--tw-skew-y)) scaleX(var(--tw-scale-x)) scaleY(var(--tw-scale-y))}@keyframes spin{to{transform:rotate(360deg)}}.animate-spin{animation:spin 1s linear infinite}.cursor-help{cursor:help}.cursor-pointer{cursor:pointer}.resize-none{resize:none}.flex-col{flex-direction:column}.items-center{align-items:center}.justify-end{justify-content:flex-end}.justify-center{justify-content:center}.justify-between{justify-content:space-between}.gap-1\.5{gap:0.375rem}.gap-2{gap:0.5rem}.gap-3{gap:0.75rem}.gap-4{gap:1rem}.gap-8{gap:2rem}.space-y-3 > :not([hidden]) ~ :not([hidden]){--tw-space-y-reverse:0;margin-top:calc(0.75rem * calc(1 - var(--tw-space-y-reverse)));margin-bottom:calc(0.75rem * var(--tw-space-y-reverse))}.overflow-hidden{overflow:hidden}.overflow-y-auto{overflow-y:auto}.truncate{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.rounded-2xl{border-radius:1rem}.rounded-\[2rem\]{border-radius:2rem}.rounded-full{border-radius:9999px}.rounded-lg{border-radius:0.5rem}.rounded-xl{border-radius:0.75rem}.rounded-\[1\.5rem\]{border-radius:1.5rem}.border{border-width:1px}.border-2{border-width:2px}.border-4{border-width:4px}.border-t{border-top-width:1px}.border-dashed{border-style:dashed}.border-transparent{border-color:transparent}.border-violet-200{--tw-border-opacity:1;border-color:rgb(240 208 184 / var(--tw-border-opacity, 1))}.border-white\/20{border-color:rgb(255 255 255 / 0.2)}.border-zinc-100{--tw-border-opacity:1;border-color:rgb(244 244 245 / var(--tw-border-opacity, 1))}.border-zinc-200{--tw-border-opacity:1;border-color:rgb(228 228 231 / var(--tw-border-opacity, 1))}.border-zinc-200\/60{border-color:rgb(228 228 231 / 0.6)}.border-t-violet-600{--tw-border-opacity:1;border-top-color:rgb(192 88 40 / var(--tw-border-opacity, 1))}.bg-amber-50{--tw-bg-opacity:1;background-color:rgb(255 251 235 / var(--tw-bg-opacity, 1))}.bg-emerald-500{--tw-bg-opacity:1;background-color:rgb(16 185 129 / var(--tw-bg-opacity, 1))}.bg-indigo-50{--tw-bg-opacity:1;background-color:rgb(253 240 228 / var(--tw-bg-opacity, 1))}.bg-violet-100{--tw-bg-opacity:1;background-color:rgb(252 232 216 / var(--tw-bg-opacity, 1))}.bg-violet-50{--tw-bg-opacity:1;background-color:rgb(255 248 242 / var(--tw-bg-opacity, 1))}.bg-violet-500{--tw-bg-opacity:1;background-color:rgb(208 106 56 / var(--tw-bg-opacity, 1))}.bg-white{--tw-bg-opacity:1;background-color:rgb(255 255 255 / var(--tw-bg-opacity, 1))}.bg-zinc-100{--tw-bg-opacity:1;background-color:rgb(244 244 245 / var(--tw-bg-opacity, 1))}.bg-zinc-100\/80{background-color:rgb(244 244 245 / 0.8)}.bg-zinc-200{--tw-bg-opacity:1;background-color:rgb(228 228 231 / var(--tw-bg-opacity, 1))}.bg-zinc-50{--tw-bg-opacity:1;background-color:rgb(250 250 250 / var(--tw-bg-opacity, 1))}.bg-zinc-50\/80{background-color:rgb(250 250 250 / 0.8)}.bg-zinc-900{--tw-bg-opacity:1;background-color:rgb(24 24 27 / var(--tw-bg-opacity, 1))}.bg-zinc-900\/40{background-color:rgb(24 24 27 / 0.4)}.bg-zinc-50\/50{background-color:rgb(250 250 250 / 0.5)}.p-2{padding:0.5rem}.p-4{padding:1rem}.p-5{padding:1.25rem}.p-8{padding:2rem}.px-1{padding-left:0.25rem;padding-right:0.25rem}.px-2{padding-left:0.5rem;padding-right:0.5rem}.px-3{padding-left:0.75rem;padding-right:0.75rem}.px-4{padding-left:1rem;padding-right:1rem}.px-5{padding-left:1.25rem;padding-right:1.25rem}.px-6{padding-left:1.5rem;padding-right:1.5rem}.py-1\.5{padding-top:0.375rem;padding-bottom:0.375rem}.py-2{padding-top:0.5rem;padding-bottom:0.5rem}.py-2\.5{padding-top:0.625rem;padding-bottom:0.625rem}.py-3{padding-top:0.75rem;padding-bottom:0.75rem}.py-3\.5{padding-top:0.875rem;padding-bottom:0.875rem}.py-4{padding-top:1rem;padding-bottom:1rem}.py-10{padding-top:2.5rem;padding-bottom:2.5rem}.py-6{padding-top:1.5rem;padding-bottom:1.5rem}.pb-4{padding-bottom:1rem}.pl-12{padding-left:3rem}.pl-3{padding-left:0.75rem}.pr-2{padding-right:0.5rem}.pr-4{padding-right:1rem}.pt-4{padding-top:1rem}.pt-8{padding-top:2rem}.text-center{text-align:center}.text-\[10px\]{font-size:10px}.text-\[11px\]{font-size:11px}.text-\[13px\]{font-size:13px}.text-lg{font-size:1.125rem;line-height:1.75rem}.text-sm{font-size:0.875rem;line-height:1.25rem}.text-xs{font-size:0.75rem;line-height:1rem}.font-bold{font-weight:700}.font-medium{font-weight:500}.uppercase{text-transform:uppercase}.leading-none{line-height:1}.leading-relaxed{line-height:1.625}.tracking-tight{letter-spacing:-0.025em}.tracking-wide{letter-spacing:0.025em}.tracking-wider{letter-spacing:0.05em}.tracking-widest{letter-spacing:0.1em}.text-amber-500{--tw-text-opacity:1;color:rgb(245 158 11 / var(--tw-text-opacity, 1))}.text-amber-600{--tw-text-opacity:1;color:rgb(217 119 6 / var(--tw-text-opacity, 1))}.text-indigo-500{--tw-text-opacity:1;color:rgb(184 90 48 / var(--tw-text-opacity, 1))}.text-violet-600{--tw-text-opacity:1;color:rgb(192 88 40 / var(--tw-text-opacity, 1))}.text-violet-700{--tw-text-opacity:1;color:rgb(168 72 30 / var(--tw-text-opacity, 1))}.text-white{--tw-text-opacity:1;color:rgb(255 255 255 / var(--tw-text-opacity, 1))}.text-zinc-300{--tw-text-opacity:1;color:rgb(212 212 216 / var(--tw-text-opacity, 1))}.text-zinc-400{--tw-text-opacity:1;color:rgb(161 161 170 / var(--tw-text-opacity, 1))}.text-zinc-500{--tw-text-opacity:1;color:rgb(113 113 122 / var(--tw-text-opacity, 1))}.text-zinc-600{--tw-text-opacity:1;color:rgb(82 82 91 / var(--tw-text-opacity, 1))}.text-zinc-700{--tw-text-opacity:1;color:rgb(63 63 70 / var(--tw-text-opacity, 1))}.text-zinc-800{--tw-text-opacity:1;color:rgb(39 39 42 / var(--tw-text-opacity, 1))}.text-zinc-900{--tw-text-opacity:1;color:rgb(24 24 27 / var(--tw-text-opacity, 1))}.text-rose-400{--tw-text-opacity:1;color:rgb(251 113 133 / var(--tw-text-opacity, 1))}.text-rose-500{--tw-text-opacity:1;color:rgb(244 63 94 / var(--tw-text-opacity, 1))}.placeholder-zinc-400::placeholder{--tw-placeholder-opacity:1;color:rgb(161 161 170 / var(--tw-placeholder-opacity, 1))}.opacity-60{opacity:0.6}.opacity-70{opacity:0.7}.shadow-2xl{--tw-shadow:0 25px 50px -12px rgb(0 0 0 / 0.25);--tw-shadow-colored:0 25px 50px -12px var(--tw-shadow-color);box-shadow:var(--tw-ring-offset-shadow, 0 0 #0000), var(--tw-ring-shadow, 0 0 #0000), var(--tw-shadow)}.shadow-inner{--tw-shadow:inset 0 2px 4px 0 rgb(0 0 0 / 0.05);--tw-shadow-colored:inset 0 2px 4px 0 var(--tw-shadow-color);box-shadow:var(--tw-ring-offset-shadow, 0 0 #0000), var(--tw-ring-shadow, 0 0 #0000), var(--tw-shadow)}.shadow-md{--tw-shadow:0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);--tw-shadow-colored:0 4px 6px -1px var(--tw-shadow-color), 0 2px 4px -2px var(--tw-shadow-color);box-shadow:var(--tw-ring-offset-shadow, 0 0 #0000), var(--tw-ring-shadow, 0 0 #0000), var(--tw-shadow)}.shadow-sm{--tw-shadow:0 1px 2px 0 rgb(0 0 0 / 0.05);--tw-shadow-colored:0 1px 2px 0 var(--tw-shadow-color);box-shadow:var(--tw-ring-offset-shadow, 0 0 #0000), var(--tw-ring-shadow, 0 0 #0000), var(--tw-shadow)}.backdrop-blur-md{--tw-backdrop-blur:blur(12px);-webkit-backdrop-filter:var(--tw-backdrop-blur) var(--tw-backdrop-brightness) var(--tw-backdrop-contrast) var(--tw-backdrop-grayscale) var(--tw-backdrop-hue-rotate) var(--tw-backdrop-invert) var(--tw-backdrop-opacity) var(--tw-backdrop-saturate) var(--tw-backdrop-sepia);backdrop-filter:var(--tw-backdrop-blur) var(--tw-backdrop-brightness) var(--tw-backdrop-contrast) var(--tw-backdrop-grayscale) var(--tw-backdrop-hue-rotate) var(--tw-backdrop-invert) var(--tw-backdrop-opacity) var(--tw-backdrop-saturate) var(--tw-backdrop-sepia)}.transition-all{transition-property:all;transition-timing-function:cubic-bezier(0.4, 0, 0.2, 1);transition-duration:150ms}.transition-colors{transition-property:color, background-color, border-color, fill, stroke, -webkit-text-decoration-color;transition-property:color, background-color, border-color, text-decoration-color, fill, stroke;transition-property:color, background-color, border-color, text-decoration-color, fill, stroke, -webkit-text-decoration-color;transition-timing-function:cubic-bezier(0.4, 0, 0.2, 1);transition-duration:150ms}.selection\:bg-violet-200 *::selection{--tw-bg-opacity:1;background-color:rgb(240 208 184 / var(--tw-bg-opacity, 1))}.selection\:text-violet-900 *::selection{--tw-text-opacity:1;color:rgb(90 44 8 / var(--tw-text-opacity, 1))}.selection\:bg-violet-200::selection{--tw-bg-opacity:1;background-color:rgb(240 208 184 / var(--tw-bg-opacity, 1))}.selection\:text-violet-900::selection{--tw-text-opacity:1;color:rgb(90 44 8 / var(--tw-text-opacity, 1))}.hover\:border-amber-200:hover{--tw-border-opacity:1;border-color:rgb(253 230 138 / var(--tw-border-opacity, 1))}.hover\:border-zinc-200:hover{--tw-border-opacity:1;border-color:rgb(228 228 231 / var(--tw-border-opacity, 1))}.hover\:bg-amber-100:hover{--tw-bg-opacity:1;background-color:rgb(254 243 199 / var(--tw-bg-opacity, 1))}.hover\:bg-amber-50:hover{--tw-bg-opacity:1;background-color:rgb(255 251 235 / var(--tw-bg-opacity, 1))}.hover\:bg-indigo-600:hover{--tw-bg-opacity:1;background-color:rgb(168 72 30 / var(--tw-bg-opacity, 1))}.hover\:bg-violet-200:hover{--tw-bg-opacity:1;background-color:rgb(240 208 184 / var(--tw-bg-opacity, 1))}.hover\:bg-violet-50:hover{--tw-bg-opacity:1;background-color:rgb(255 248 242 / var(--tw-bg-opacity, 1))}.hover\:bg-violet-600:hover{--tw-bg-opacity:1;background-color:rgb(192 88 40 / var(--tw-bg-opacity, 1))}.hover\:bg-zinc-100:hover{--tw-bg-opacity:1;background-color:rgb(244 244 245 / var(--tw-bg-opacity, 1))}.hover\:bg-zinc-50:hover{--tw-bg-opacity:1;background-color:rgb(250 250 250 / var(--tw-bg-opacity, 1))}.hover\:bg-zinc-800:hover{--tw-bg-opacity:1;background-color:rgb(39 39 42 / var(--tw-bg-opacity, 1))}.hover\:text-amber-600:hover{--tw-text-opacity:1;color:rgb(217 119 6 / var(--tw-text-opacity, 1))}.hover\:text-violet-600:hover{--tw-text-opacity:1;color:rgb(192 88 40 / var(--tw-text-opacity, 1))}.hover\:text-zinc-600:hover{--tw-text-opacity:1;color:rgb(82 82 91 / var(--tw-text-opacity, 1))}.hover\:shadow:hover{--tw-shadow:0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);--tw-shadow-colored:0 1px 3px 0 var(--tw-shadow-color), 0 1px 2px -1px var(--tw-shadow-color);box-shadow:var(--tw-ring-offset-shadow, 0 0 #0000), var(--tw-ring-shadow, 0 0 #0000), var(--tw-shadow)}.hover\:shadow-lg:hover{--tw-shadow:0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);--tw-shadow-colored:0 10px 15px -3px var(--tw-shadow-color), 0 4px 6px -4px var(--tw-shadow-color);box-shadow:var(--tw-ring-offset-shadow, 0 0 #0000), var(--tw-ring-shadow, 0 0 #0000), var(--tw-shadow)}.hover\:shadow-md:hover{--tw-shadow:0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);--tw-shadow-colored:0 4px 6px -1px var(--tw-shadow-color), 0 2px 4px -2px var(--tw-shadow-color);box-shadow:var(--tw-ring-offset-shadow, 0 0 #0000), var(--tw-ring-shadow, 0 0 #0000), var(--tw-shadow)}.focus\:border-indigo-300:focus{--tw-border-opacity:1;border-color:rgb(224 192 144 / var(--tw-border-opacity, 1))}.focus\:border-violet-300:focus{--tw-border-opacity:1;border-color:rgb(232 184 148 / var(--tw-border-opacity, 1))}.focus\:border-zinc-300:focus{--tw-border-opacity:1;border-color:rgb(212 212 216 / var(--tw-border-opacity, 1))}.focus\:bg-white:focus{--tw-bg-opacity:1;background-color:rgb(255 255 255 / var(--tw-bg-opacity, 1))}.focus\:outline-none:focus{outline:2px solid transparent;outline-offset:2px}.active\:scale-95:active{--tw-scale-x:.95;--tw-scale-y:.95;transform:translate(var(--tw-translate-x), var(--tw-translate-y)) rotate(var(--tw-rotate)) skewX(var(--tw-skew-x)) skewY(var(--tw-skew-y)) scaleX(var(--tw-scale-x)) scaleY(var(--tw-scale-y))}.group:focus-within .group-focus-within\:text-violet-500{--tw-text-opacity:1;color:rgb(208 106 56 / var(--tw-text-opacity, 1))}.group:hover .group-hover\:text-amber-500{--tw-text-opacity:1;color:rgb(245 158 11 / var(--tw-text-opacity, 1))}@media (min-width: 640px){.sm\:block{display:block}.sm\:inline{display:inline}.sm\:flex{display:flex}.sm\:flex-row{flex-direction:row}}@media (min-width: 768px){.md\:gap-4{gap:1rem}.md\:gap-6{gap:1.5rem}.md\:p-4{padding:1rem}.md\:p-6{padding:1.5rem}.md\:p-8{padding:2rem}.md\:text-xl{font-size:1.25rem;line-height:1.75rem}.md\:text-xs{font-size:0.75rem;line-height:1rem}}@media (min-width: 1024px){.lg\:p-6{padding:1.5rem}}</style></head>
 <body class="text-zinc-800 h-screen flex flex-col overflow-hidden selection:bg-violet-200 selection:text-violet-900 p-2 md:p-4 lg:p-6">
 
-    <div class="max-w-4xl w-full mx-auto h-full flex flex-col gap-4 md:gap-6 relative">
+    <div class="max-w-4xl w-full mx-auto h-full flex flex-col gap-3 md:gap-6 relative">
         
         <div id="loading-overlay" class="absolute inset-0 bg-zinc-100/80 backdrop-blur-md z-40 flex flex-col items-center justify-center gap-4 rounded-[2rem] hidden">
             <div class="w-12 h-12 border-4 border-violet-200 border-t-violet-600 rounded-full animate-spin"></div>
             <span class="text-sm font-bold text-zinc-600 tracking-wide">データを同期中...</span>
         </div>
 
-        <header class="bg-white rounded-[2rem] px-6 py-4 flex justify-between items-center shadow-sm border border-zinc-200/60 shrink-0">
+        <header class="bg-white rounded-2xl md:rounded-[2rem] px-4 py-3 md:px-6 md:py-4 flex justify-between items-center shadow-sm border border-zinc-200/60 shrink-0">
             <div class="flex items-center gap-3">
                 <div class="w-10 h-10 rounded-2xl bg-violet-100 flex items-center justify-center text-violet-600">
                     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="sparkles" aria-hidden="true" class="lucide lucide-sparkles w-5 h-5"><path d="M11.017 2.814a1 1 0 0 1 1.966 0l1.051 5.558a2 2 0 0 0 1.594 1.594l5.558 1.051a1 1 0 0 1 0 1.966l-5.558 1.051a2 2 0 0 0-1.594 1.594l-1.051 5.558a1 1 0 0 1-1.966 0l-1.051-5.558a2 2 0 0 0-1.594-1.594l-5.558-1.051a1 1 0 0 1 0-1.966l5.558-1.051a2 2 0 0 0 1.594-1.594z"></path><path d="M20 2v4"></path><path d="M22 4h-4"></path><circle cx="4" cy="20" r="2"></circle></svg>
                 </div>
                 <div>
                     <h1 class="text-lg md:text-xl font-bold text-zinc-900 tracking-tight leading-none mb-1">タスクジャーナル</h1>
-                    <p class="text-[10px] md:text-xs font-medium text-zinc-400 uppercase tracking-widest">NotebookLM＆Googleカレンダー共有</p>
+                    <p class="hidden sm:block text-[10px] md:text-xs font-medium text-zinc-400 uppercase tracking-widest">NotebookLM＆Googleカレンダー共有</p>
                 </div>
             </div>
             
@@ -105,9 +109,9 @@
             </div>
         </header>
 
-        <main class="flex-1 flex flex-col gap-4 md:gap-6 min-h-0 shrink-0">
-            
-            <div class="bg-white rounded-[2rem] p-4 md:p-6 shadow-sm border border-zinc-200/60 shrink-0">
+        <main class="flex-1 flex flex-col gap-3 md:gap-6 min-h-0 shrink-0">
+
+            <div class="bg-white rounded-2xl md:rounded-[2rem] p-3 md:p-6 shadow-sm border border-zinc-200/60 shrink-0">
                 <form id="task-form" class="flex flex-col gap-3">
                     <div class="flex gap-3">
                         <div class="relative flex-1 group">
@@ -128,20 +132,20 @@
                 </form>
             </div>
 
-            <div class="flex-1 bg-white rounded-[2rem] p-5 md:p-8 shadow-sm border border-zinc-200/60 overflow-y-auto flex flex-col gap-8">
+            <div class="flex-1 bg-white rounded-2xl md:rounded-[2rem] p-4 md:p-8 shadow-sm border border-zinc-200/60 overflow-y-auto flex flex-col gap-5 md:gap-8">
                 
                 <div>
-                    <div class="flex items-center justify-between mb-5 px-1">
-                        <div class="flex items-center gap-3">
-                            <div class="w-2 h-2 rounded-full bg-violet-500"></div>
-                            <h3 class="text-sm font-bold text-zinc-800 tracking-wide">進行中・未完了</h3>
+                    <div class="flex items-center justify-between mb-4 md:mb-5 px-1 gap-2">
+                        <div class="flex items-center gap-3 min-w-0">
+                            <div class="w-2 h-2 rounded-full bg-violet-500 shrink-0"></div>
+                            <h3 class="text-sm font-bold text-zinc-800 tracking-wide whitespace-nowrap">進行中・未完了</h3>
                         </div>
-                        <div class="flex items-center gap-2">
-                            <button id="genre-manage-btn" onclick="openGenreModal()" class="text-xs font-bold bg-white text-zinc-600 border border-zinc-200 hover:bg-zinc-50 hover:text-violet-600 px-3 py-1.5 rounded-xl transition-all shadow-sm active:scale-95 flex items-center gap-1.5" title="ジャンルの作成・編集・AI提案">
-                                <i data-lucide="tags" class="w-4 h-4"></i> ジャンル管理
+                        <div class="flex items-center gap-2 shrink-0">
+                            <button id="genre-manage-btn" onclick="openGenreModal()" class="text-xs font-bold bg-white text-zinc-600 border border-zinc-200 hover:bg-zinc-50 hover:text-violet-600 px-2.5 py-1.5 rounded-xl transition-all shadow-sm active:scale-95 flex items-center gap-1.5" title="ジャンルの作成・編集・AI提案">
+                                <i data-lucide="tags" class="w-4 h-4"></i><span class="hidden sm:inline">ジャンル管理</span>
                             </button>
-                            <button id="ai-classify-btn" onclick="classifyTasks()" class="text-xs font-bold bg-violet-100 text-violet-700 hover:bg-violet-200 px-3 py-1.5 rounded-xl transition-all shadow-sm active:scale-95 flex items-center gap-1.5">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="bot" aria-hidden="true" class="lucide lucide-bot w-4 h-4"><path d="M12 8V4H8"></path><rect width="16" height="12" x="4" y="8" rx="2"></rect><path d="M2 14h2"></path><path d="M20 14h2"></path><path d="M15 13v2"></path><path d="M9 13v2"></path></svg> AI自動分類
+                            <button id="ai-classify-btn" onclick="classifyTasks()" class="text-xs font-bold bg-violet-100 text-violet-700 hover:bg-violet-200 px-2.5 py-1.5 rounded-xl transition-all shadow-sm active:scale-95 flex items-center gap-1.5" title="AIでタスクをジャンル自動分類">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="bot" aria-hidden="true" class="lucide lucide-bot w-4 h-4"><path d="M12 8V4H8"></path><rect width="16" height="12" x="4" y="8" rx="2"></rect><path d="M2 14h2"></path><path d="M20 14h2"></path><path d="M15 13v2"></path><path d="M9 13v2"></path></svg><span class="hidden sm:inline">AI自動分類</span>
                             </button>
                         </div>
                     </div>
@@ -441,11 +445,12 @@
                 ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
         }
         function sortTasks() {
-            // ピン留め最優先 → 進行中(doing)を上に → 作成日時の新しい順
+            // 状態グループ(進行中→未着手→完了) を最優先に、各グループ内でピン留めを上に、
+            // 同条件なら作成日時の新しい順。
             const rank = (s) => (s === 'doing' ? 0 : s === 'done' ? 2 : 1);
             tasks.sort((a, b) =>
-                ((b.pinned ? 1 : 0) - (a.pinned ? 1 : 0))
-                || (rank(a.status) - rank(b.status))
+                (rank(a.status) - rank(b.status))
+                || ((b.pinned ? 1 : 0) - (a.pinned ? 1 : 0))
                 || ((b.createdAt || 0) - (a.createdAt || 0)));
         }
         function normalizeTask(t) {
@@ -897,6 +902,31 @@
             triggerDriveSync();
         };
 
+        // 間違って開始したタスクを「開始前(未着手)」に戻す
+        window.unstartTask = async (id) => {
+            const t = tasks.find(x => x.id === id);
+            if (!t || t.status !== 'doing') return;
+            t.status = 'todo';
+            t.logs = [...(t.logs || []), `${getTimeString()} ↩ 開始前に戻しました`];
+            t.updatedAt = now();
+            await dbPutTask(t);
+            sortTasks();
+            render();
+            triggerDriveSync();
+        };
+
+        // ピン留めのトグル（グループ内で上部に固定表示される）
+        window.togglePin = async (id) => {
+            const t = tasks.find(x => x.id === id);
+            if (!t) return;
+            t.pinned = !t.pinned;
+            t.updatedAt = now();
+            await dbPutTask(t);
+            sortTasks();
+            render();
+            triggerDriveSync();
+        };
+
         window.deleteTask = async (id) => {
             if (!confirm('タスクを削除しますか？')) return;
             tasks = tasks.filter(x => x.id !== id);
@@ -931,7 +961,10 @@
                 const endStr = `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}T${pad(d.getHours())}${pad(d.getMinutes())}00`;
                 url += `&dates=${startStr}/${endStr}`;
             }
-            window.open(url, '_blank');
+            // 同一タブで遷移する。新規タブ(window.open '_blank')はスマホ(特にiOS)で
+            // 空白タブが残り、戻ると白紙ページになる問題があったため。
+            // 戻る操作でこのアプリにそのまま復帰でき、pageshow で再描画される。
+            window.location.href = url;
         };
 
         // ---- Modal controls ----
@@ -1171,11 +1204,11 @@
 
             const baseClass = "task-card p-4 rounded-2xl border transition-all flex flex-col gap-3 task-enter relative overflow-hidden group bg-white z-0";
             let stateClass = "border-zinc-200 hover:border-violet-300";
-            let checkIcon = `<div class="custom-checkbox w-6 h-6 rounded-[8px] border-2 border-zinc-300 group-hover:border-violet-400 bg-zinc-50 cursor-pointer shrink-0" onclick="toggleStatus('${task.id}')"></div>`;
+            let checkIcon = `<div class="custom-checkbox w-6 h-6 rounded-full border-2 border-zinc-300 group-hover:border-emerald-400 bg-zinc-50 flex items-center justify-center text-emerald-500 cursor-pointer shrink-0" onclick="toggleStatus('${task.id}')" title="クリックで完了にする"><i data-lucide="check" class="w-4 h-4 opacity-0 group-hover:opacity-50 transition-opacity"></i></div>`;
 
             if (isCompleted) {
                 stateClass = "border-transparent bg-zinc-50/80 grayscale-[0.3]";
-                checkIcon = `<div class="custom-checkbox w-6 h-6 rounded-[8px] border-2 border-emerald-500 bg-emerald-500 text-white flex items-center justify-center cursor-pointer shrink-0" onclick="toggleStatus('${task.id}')"><i data-lucide="check" class="w-4 h-4"></i></div>`;
+                checkIcon = `<div class="custom-checkbox w-6 h-6 rounded-full border-2 border-emerald-500 bg-emerald-500 text-white flex items-center justify-center cursor-pointer shrink-0 shadow-sm" onclick="toggleStatus('${task.id}')" title="完了済み（クリックで未完了に戻す）"><i data-lucide="check" class="w-4 h-4"></i></div>`;
             } else if (isDoing) {
                 stateClass = "border-violet-200 ring-1 ring-violet-100 bg-violet-50/30";
             }
@@ -1213,13 +1246,17 @@
                                 <span class="truncate">${lastLog}</span>
                             </div>
                         </div>
-                        <div class="opacity-0 group-hover:opacity-100 transition-opacity flex gap-1 shrink-0 bg-white/80 backdrop-blur-sm rounded-xl p-1 shadow-sm border border-zinc-100">
+                        <div class="task-actions opacity-0 group-hover:opacity-100 transition-opacity flex gap-1 shrink-0 bg-white/80 backdrop-blur-sm rounded-xl p-1 shadow-sm border border-zinc-100">
                             <button onclick="togglePin('${task.id}')" class="p-1.5 ${task.pinned ? 'text-amber-500' : 'text-zinc-400'} hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors" title="${task.pinned ? 'ピン留めを解除' : '上にピン留め'}">
                                 <i data-lucide="pin" class="w-4 h-4 ${task.pinned ? 'fill-current' : ''}"></i>
                             </button>
                              ${!isCompleted && !isDoing ? `
                                 <button onclick="startTask('${task.id}')" class="p-1.5 text-zinc-400 hover:text-violet-600 hover:bg-violet-50 rounded-lg transition-colors" title="開始する">
                                     <i data-lucide="play" class="w-4 h-4 fill-current"></i>
+                                </button>` : ''}
+                             ${isDoing ? `
+                                <button onclick="unstartTask('${task.id}')" class="p-1.5 text-zinc-400 hover:text-violet-600 hover:bg-violet-50 rounded-lg transition-colors" title="開始前に戻す">
+                                    <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
                                 </button>` : ''}
                             <button onclick="addToCalendar('${task.id}')" class="p-1.5 text-zinc-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title="カレンダーに追加 (日時を引き継ぎます)">
                                 <i data-lucide="calendar-plus" class="w-4 h-4"></i>
@@ -1283,6 +1320,9 @@
             document.getElementById('genre-modal').addEventListener('click', (e) => { if (e.target.id === 'genre-modal') closeGenreModal(); });
             document.getElementById('genre-picker-modal').addEventListener('click', (e) => { if (e.target.id === 'genre-picker-modal') closeGenrePicker(); });
             document.getElementById('sync-status').addEventListener('click', () => { if (settings.webhookUrl) pullFromCloud(true); });
+
+            // カレンダー遷移などから「戻る」で復帰した際(bfcache復帰)に再描画し、白紙化を防ぐ
+            window.addEventListener('pageshow', (e) => { if (e.persisted && db) render(); });
 
             lucide.createIcons();
 
