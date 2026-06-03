@@ -192,6 +192,33 @@
         </div>
     </div>
 
+    <!-- 予定（カレンダー）追加モーダル -->
+    <div id="schedule-modal" class="hidden fixed inset-0 bg-zinc-900/40 backdrop-blur-md flex items-center justify-center z-50 p-4">
+        <div class="bg-white rounded-[2rem] shadow-2xl w-full max-w-lg p-6 md:p-8 overflow-hidden transform transition-all border border-white/20">
+            <div class="flex items-center gap-3 mb-6">
+                <div class="w-10 h-10 rounded-2xl bg-blue-50 flex items-center justify-center text-blue-500">
+                    <i data-lucide="calendar-plus" class="w-5 h-5"></i>
+                </div>
+                <div>
+                    <h3 class="font-bold text-zinc-900 text-lg">予定を追加</h3>
+                    <p id="schedule-task-name" class="text-xs text-zinc-500 font-medium truncate max-w-[300px]"></p>
+                </div>
+            </div>
+
+            <label class="block text-xs font-bold text-zinc-400 uppercase tracking-wider mb-2 ml-1">予定のタイトル</label>
+            <input type="text" id="schedule-title-input" autocomplete="off" class="w-full bg-zinc-50 border-2 border-zinc-100 rounded-2xl p-3 text-sm focus:outline-none focus:border-violet-300 focus:bg-white mb-4 shadow-inner transition-colors text-zinc-800" placeholder="予定のタイトル">
+
+            <label class="block text-xs font-bold text-zinc-400 uppercase tracking-wider mb-2 ml-1">予定日時</label>
+            <input type="datetime-local" id="schedule-datetime-input" class="w-full bg-zinc-50 border-2 border-zinc-100 rounded-2xl p-3 text-sm focus:outline-none focus:border-violet-300 focus:bg-white mb-6 shadow-inner transition-colors text-zinc-700">
+
+            <div class="flex flex-col sm:flex-row sm:justify-end gap-2 sm:gap-3">
+                <button onclick="closeScheduleModal()" class="px-5 py-3 text-sm font-bold text-zinc-500 hover:bg-zinc-100 rounded-2xl transition-colors">キャンセル</button>
+                <button onclick="saveSchedule(false)" class="px-5 py-3 text-sm font-bold text-zinc-700 bg-zinc-100 hover:bg-zinc-200 rounded-2xl transition-colors">日時だけ保存</button>
+                <button onclick="saveSchedule(true)" class="px-6 py-3 text-sm font-bold bg-zinc-900 text-white hover:bg-blue-600 rounded-2xl transition-all shadow-md hover:shadow-lg active:scale-95 flex items-center justify-center gap-2"><i data-lucide="calendar-plus" class="w-4 h-4"></i>カレンダーに追加</button>
+            </div>
+        </div>
+    </div>
+
     <div id="trivia-modal" class="fixed inset-0 bg-zinc-900/40 backdrop-blur-md flex items-center justify-center z-50 p-4 hidden">
         <div class="bg-white rounded-[2rem] shadow-2xl w-full max-w-sm p-8 overflow-hidden transform transition-all border border-white/20 relative">
             <button onclick="closeTriviaModal()" class="absolute top-4 right-4 p-2 text-zinc-400 hover:text-zinc-600 hover:bg-zinc-100 rounded-full transition-colors">
@@ -350,6 +377,7 @@
             categories: null // ジャンル一覧（人間が管理）。初期化時に既定値を入れる
         };
         let currentTaskIdForMemo = null;
+        let currentTaskIdForSchedule = null;
         let syncTimeout = null;
         let db = null;
 
@@ -942,10 +970,8 @@
             return `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}T${pad(d.getHours())}${pad(d.getMinutes())}00`;
         }
 
-        window.addToCalendar = (id) => {
-            const task = tasks.find(t => t.id === id);
-            if (!task) return;
-            const title = encodeURIComponent(`[タスク] ${task.text}`);
+        function buildCalendarUrl(eventTitle, task, dueDate) {
+            const title = encodeURIComponent(eventTitle || task.text);
             let detailsStr = `文脈ログ:\n`;
             if (task.logs && task.logs.length > 0) task.logs.forEach(l => detailsStr += `- ${l}\n`);
             else detailsStr += `(まだログはありません)\n`;
@@ -953,18 +979,50 @@
             const details = encodeURIComponent(detailsStr);
 
             let url = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&details=${details}`;
-            if (task.dueDate) {
-                const startStr = formatToGoogleCalendarDate(task.dueDate);
-                const d = new Date(task.dueDate);
+            if (dueDate) {
+                const startStr = formatToGoogleCalendarDate(dueDate);
+                const d = new Date(dueDate);
                 d.setHours(d.getHours() + 1);
                 const pad = n => String(n).padStart(2, '0');
                 const endStr = `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}T${pad(d.getHours())}${pad(d.getMinutes())}00`;
                 url += `&dates=${startStr}/${endStr}`;
             }
-            // 同一タブで遷移する。新規タブ(window.open '_blank')はスマホ(特にiOS)で
-            // 空白タブが残り、戻ると白紙ページになる問題があったため。
-            // 戻る操作でこのアプリにそのまま復帰でき、pageshow で再描画される。
-            window.location.href = url;
+            return url;
+        }
+
+        // 「予定を追加」モーダル：予定のタイトルと日時を設定する
+        window.openScheduleModal = (id) => {
+            const task = tasks.find(t => t.id === id);
+            if (!task) return;
+            currentTaskIdForSchedule = id;
+            document.getElementById('schedule-task-name').textContent = task.text;
+            document.getElementById('schedule-title-input').value = task.text;
+            document.getElementById('schedule-datetime-input').value = task.dueDate || '';
+            document.getElementById('schedule-modal').classList.remove('hidden');
+            lucide.createIcons();
+            setTimeout(() => document.getElementById('schedule-datetime-input').focus(), 50);
+        };
+        window.closeScheduleModal = () => document.getElementById('schedule-modal').classList.add('hidden');
+
+        // addToCal=true ならGoogleカレンダーへ遷移、false なら日時の保存のみ
+        window.saveSchedule = async (addToCal) => {
+            if (!currentTaskIdForSchedule) return;
+            const t = tasks.find(x => x.id === currentTaskIdForSchedule);
+            if (!t) return;
+            const dt = document.getElementById('schedule-datetime-input').value;
+            const evTitle = document.getElementById('schedule-title-input').value.trim() || t.text;
+            t.dueDate = dt || null;
+            t.updatedAt = now();
+            await dbPutTask(t);
+            sortTasks();
+            render();
+            triggerDriveSync();
+            if (addToCal) {
+                // 同一タブで遷移（iOSで空白タブが残る問題を回避。戻る操作でアプリに復帰）
+                window.location.href = buildCalendarUrl(evTitle, t, dt);
+            } else {
+                closeScheduleModal();
+            }
         };
 
         // ---- Modal controls ----
@@ -1202,7 +1260,7 @@
             const isDoing = task.status === 'doing';
             const safeText = escapeHtml(task.text);
 
-            const baseClass = "task-card p-4 rounded-2xl border transition-all flex flex-col gap-3 task-enter relative overflow-hidden group bg-white z-0";
+            const baseClass = "task-card p-3 md:p-4 rounded-2xl border transition-all flex flex-col gap-2 md:gap-3 task-enter relative overflow-hidden group bg-white z-0";
             let stateClass = "border-zinc-200 hover:border-violet-300";
             let checkIcon = `<div class="custom-checkbox w-6 h-6 rounded-full border-2 border-zinc-300 group-hover:border-emerald-400 bg-zinc-50 flex items-center justify-center text-emerald-500 cursor-pointer shrink-0" onclick="toggleStatus('${task.id}')" title="クリックで完了にする"><i data-lucide="check" class="w-4 h-4 opacity-0 group-hover:opacity-50 transition-opacity"></i></div>`;
 
@@ -1226,48 +1284,54 @@
                 ? escapeHtml(task.logs[task.logs.length - 1])
                 : '<span class="opacity-40 italic">メモはありません</span>';
 
+            // 予定日時が設定済みなら読み取り用チップを表示（クリックで編集モーダル）
+            let dueChip = '';
+            if (task.dueDate) {
+                const dd = new Date(task.dueDate);
+                const pad = n => String(n).padStart(2, '0');
+                const dueStr = `${dd.getMonth() + 1}/${dd.getDate()} ${pad(dd.getHours())}:${pad(dd.getMinutes())}`;
+                dueChip = `<button type="button" onclick="openScheduleModal('${task.id}')" class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-blue-50 text-blue-600 border border-blue-100 hover:opacity-75 transition-opacity" title="予定を編集"><i data-lucide="calendar-clock" class="w-3 h-3"></i>${dueStr}</button>`;
+            }
+
             return `
                 <div class="${baseClass} ${stateClass}">
                     ${task.pinned ? '<div class="absolute left-0 top-0 bottom-0 w-1" style="background:#f59e0b"></div>' : (isDoing ? '<div class="absolute left-0 top-0 bottom-0 w-1 bg-violet-500"></div>' : '')}
-                    <div class="flex items-start gap-4 w-full relative z-10">
+                    <div class="flex items-start gap-3 w-full relative z-10">
                         <div class="mt-0.5">${checkIcon}</div>
-                        <div class="flex-1 min-w-0 pt-0.5">
-                            <h3 class="text-[15px] font-semibold leading-snug break-words pr-2 ${isCompleted ? 'text-zinc-400 line-through' : 'text-zinc-800'}">${safeText}</h3>
+                        <div class="flex-1 min-w-0">
+                            <h3 class="text-[15px] font-semibold leading-snug break-words ${isCompleted ? 'text-zinc-400 line-through' : 'text-zinc-800'}">${safeText}</h3>
                             <div class="flex flex-wrap items-center gap-2 mt-2">
                                 ${task.pinned ? `<button type="button" onclick="togglePin('${task.id}')" class="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-md text-[10px] font-bold cursor-pointer hover:opacity-75 transition-opacity" style="background:#fef3c7;color:#b45309" title="クリックでピン留めを解除"><i data-lucide="pin" class="w-3 h-3"></i>ピン</button>` : ''}
                                 ${categoryBadge}
-                                <div class="flex items-center gap-1.5 bg-zinc-50/80 px-2 py-1 rounded-lg border border-zinc-100 w-fit hover:border-zinc-300 transition-colors">
-                                    <i data-lucide="calendar-clock" class="w-3 h-3 text-zinc-400"></i>
-                                    <input type="datetime-local" value="${task.dueDate || ''}" onchange="updateDueDate('${task.id}', this.value)" class="text-[10px] font-medium text-zinc-500 bg-transparent border-none focus:outline-none p-0 cursor-pointer" title="日時を設定・変更">
-                                </div>
+                                ${dueChip}
                             </div>
                             <div class="mt-2.5 text-xs text-zinc-500 flex items-start gap-1.5">
                                 <i data-lucide="align-left" class="w-3.5 h-3.5 mt-0.5 opacity-40 shrink-0"></i>
                                 <span class="truncate">${lastLog}</span>
                             </div>
                         </div>
-                        <div class="task-actions opacity-0 group-hover:opacity-100 transition-opacity flex gap-1 shrink-0 bg-white/80 backdrop-blur-sm rounded-xl p-1 shadow-sm border border-zinc-100">
-                            <button onclick="togglePin('${task.id}')" class="p-1.5 ${task.pinned ? 'text-amber-500' : 'text-zinc-400'} hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors" title="${task.pinned ? 'ピン留めを解除' : '上にピン留め'}">
-                                <i data-lucide="pin" class="w-4 h-4 ${task.pinned ? 'fill-current' : ''}"></i>
-                            </button>
-                             ${!isCompleted && !isDoing ? `
-                                <button onclick="startTask('${task.id}')" class="p-1.5 text-zinc-400 hover:text-violet-600 hover:bg-violet-50 rounded-lg transition-colors" title="開始する">
-                                    <i data-lucide="play" class="w-4 h-4 fill-current"></i>
-                                </button>` : ''}
-                             ${isDoing ? `
-                                <button onclick="unstartTask('${task.id}')" class="p-1.5 text-zinc-400 hover:text-violet-600 hover:bg-violet-50 rounded-lg transition-colors" title="開始前に戻す">
-                                    <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
-                                </button>` : ''}
-                            <button onclick="addToCalendar('${task.id}')" class="p-1.5 text-zinc-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title="カレンダーに追加 (日時を引き継ぎます)">
-                                <i data-lucide="calendar-plus" class="w-4 h-4"></i>
-                            </button>
-                            <button onclick="openMemoModal('${task.id}')" class="p-1.5 text-zinc-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors" title="メモを追加">
-                                <i data-lucide="pen-tool" class="w-4 h-4"></i>
-                            </button>
-                            <button onclick="deleteTask('${task.id}')" class="p-1.5 text-zinc-300 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-colors" title="削除">
-                                <i data-lucide="trash-2" class="w-4 h-4"></i>
-                            </button>
-                        </div>
+                    </div>
+                    <div class="task-actions flex items-center gap-1 relative z-10 mt-1 pt-2.5 border-t border-zinc-100">
+                        <button onclick="togglePin('${task.id}')" class="p-2 ${task.pinned ? 'text-amber-500' : 'text-zinc-400'} hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors" title="${task.pinned ? 'ピン留めを解除' : '上にピン留め'}">
+                            <i data-lucide="pin" class="w-4 h-4 ${task.pinned ? 'fill-current' : ''}"></i>
+                        </button>
+                        ${!isCompleted && !isDoing ? `
+                        <button onclick="startTask('${task.id}')" class="p-2 text-zinc-400 hover:text-violet-600 hover:bg-violet-50 rounded-lg transition-colors" title="開始する">
+                            <i data-lucide="play" class="w-4 h-4 fill-current"></i>
+                        </button>` : ''}
+                        ${isDoing ? `
+                        <button onclick="unstartTask('${task.id}')" class="p-2 text-zinc-400 hover:text-violet-600 hover:bg-violet-50 rounded-lg transition-colors" title="開始前に戻す">
+                            <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
+                        </button>` : ''}
+                        <button onclick="openScheduleModal('${task.id}')" class="p-2 text-zinc-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title="予定を追加・編集">
+                            <i data-lucide="calendar-plus" class="w-4 h-4"></i>
+                        </button>
+                        <button onclick="openMemoModal('${task.id}')" class="p-2 text-zinc-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors" title="メモを追加">
+                            <i data-lucide="pen-tool" class="w-4 h-4"></i>
+                        </button>
+                        <button onclick="deleteTask('${task.id}')" class="p-2 ml-auto text-zinc-300 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-colors" title="削除">
+                            <i data-lucide="trash-2" class="w-4 h-4"></i>
+                        </button>
                     </div>
                 </div>`;
         }
@@ -1315,6 +1379,7 @@
             document.getElementById('task-form').addEventListener('submit', window.addTask);
             document.getElementById('settings-btn').addEventListener('click', window.openSettingsModal);
             document.getElementById('memo-modal').addEventListener('click', (e) => { if (e.target.id === 'memo-modal') closeMemoModal(); });
+            document.getElementById('schedule-modal').addEventListener('click', (e) => { if (e.target.id === 'schedule-modal') closeScheduleModal(); });
             document.getElementById('settings-modal').addEventListener('click', (e) => { if (e.target.id === 'settings-modal') closeSettingsModal(); });
             document.getElementById('trivia-modal').addEventListener('click', (e) => { if (e.target.id === 'trivia-modal') closeTriviaModal(); });
             document.getElementById('genre-modal').addEventListener('click', (e) => { if (e.target.id === 'genre-modal') closeGenreModal(); });
