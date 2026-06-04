@@ -10,7 +10,7 @@
  * 注意: タスクや設定(APIキー等)は IndexedDB に保存されており、このキャッシュとは無関係。
  *       キャッシュを消してもユーザーデータは消えない。
  */
-const CACHE = 'taskjournal-cache-v1';
+const CACHE = 'taskjournal-cache-v2';
 const CORE_ASSETS = ['./', './index.html'];
 
 self.addEventListener('install', (event) => {
@@ -33,8 +33,14 @@ self.addEventListener('fetch', (event) => {
     const req = event.request;
     if (req.method !== 'GET') return;
 
+    // HTML(ナビゲーション)は毎回サーバへ再検証しに行く(no-cache)。
+    // これでGitHub PagesのHTTPキャッシュ(最大10分)に引っ張られず、通常リロードで必ず最新になる。
+    const isNavigation = req.mode === 'navigate' ||
+        (req.headers.get('accept') || '').includes('text/html');
+    const fetchPromise = isNavigation ? fetch(req, { cache: 'no-cache' }) : fetch(req);
+
     event.respondWith(
-        fetch(req)
+        fetchPromise
             .then((res) => {
                 // 取得できたものはキャッシュに保存（オフライン用。CDN等の opaque も含む）
                 const copy = res.clone();
