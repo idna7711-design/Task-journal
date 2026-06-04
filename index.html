@@ -1430,4 +1430,13 @@
         });
     </script>
 
+    <script>
+        // Service Worker 登録（network-first）。通常リロードで最新版が反映され、オフラインでも開ける。
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('sw.js').catch(() => {});
+            });
+        }
+    </script>
+
 </body></html>
