@@ -380,7 +380,7 @@
         };
         let currentTaskIdForMemo = null;
         let currentTaskIdForSchedule = null;
-        let activeGenreFilter = null; // null=すべて, '__none__'=未分類, それ以外はジャンルID
+        let activeGenreFilters = new Set(); // 空=すべて。要素は ジャンルID または '__none__'(未分類)
         let syncTimeout = null;
         let db = null;
 
@@ -1339,16 +1339,22 @@
                 </div>`;
         }
 
-        // 現在のジャンル絞り込みにタスクが一致するか
+        // 現在のジャンル絞り込み（複数選択・OR条件）にタスクが一致するか
         function matchesGenreFilter(t) {
-            if (activeGenreFilter === null) return true;          // すべて
-            if (activeGenreFilter === '__none__') return !getGenre(t.category); // 未分類
-            return t.category === activeGenreFilter;
+            if (activeGenreFilters.size === 0) return true;                       // すべて
+            if (activeGenreFilters.has('__none__') && !getGenre(t.category)) return true; // 未分類
+            return activeGenreFilters.has(t.category);
         }
 
-        // 指定ジャンルだけ表示（null=すべて, '__none__'=未分類）
+        // ジャンル絞り込みの切替（null=すべて解除, それ以外はトグル）。複数選択対応。
         window.setGenreFilter = (val) => {
-            activeGenreFilter = val;
+            if (val === null) {
+                activeGenreFilters.clear();
+            } else if (activeGenreFilters.has(val)) {
+                activeGenreFilters.delete(val);
+            } else {
+                activeGenreFilters.add(val);
+            }
             render();
         };
 
@@ -1356,19 +1362,20 @@
         function renderGenreFilter() {
             const el = document.getElementById('genre-filter');
             if (!el) return;
-            // 選択中ジャンルが削除されていたら「すべて」に戻す
-            if (activeGenreFilter && activeGenreFilter !== '__none__' && !getGenre(activeGenreFilter)) {
-                activeGenreFilter = null;
+            // 削除されたジャンルが選択に残っていたら取り除く
+            for (const v of [...activeGenreFilters]) {
+                if (v !== '__none__' && !getGenre(v)) activeGenreFilters.delete(v);
             }
             const genres = getGenres();
             const chip = (label, val, styleAttr) => {
-                const isActive = activeGenreFilter === val;
+                const isActive = val === null ? activeGenreFilters.size === 0 : activeGenreFilters.has(val);
                 const base = 'inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold border transition-all active:scale-95 cursor-pointer';
                 const onClick = `onclick='setGenreFilter(${JSON.stringify(val)})'`;
+                const check = (val !== null && isActive) ? '<i data-lucide="check" class="w-3 h-3"></i>' : '';
                 if (styleAttr) {
-                    return `<button type="button" ${onClick} style="${styleAttr}" class="${base} ${isActive ? 'ring-2 ring-offset-1 ring-zinc-400' : 'opacity-50 hover:opacity-100'}">${label}</button>`;
+                    return `<button type="button" ${onClick} style="${styleAttr}" class="${base} ${isActive ? 'ring-2 ring-offset-1 ring-zinc-400' : 'opacity-50 hover:opacity-100'}">${check}${label}</button>`;
                 }
-                return `<button type="button" ${onClick} class="${base} ${isActive ? 'bg-zinc-900 text-white border-zinc-900' : 'bg-white text-zinc-600 border-zinc-200 hover:bg-zinc-50'}">${label}</button>`;
+                return `<button type="button" ${onClick} class="${base} ${isActive ? 'bg-zinc-900 text-white border-zinc-900' : 'bg-white text-zinc-600 border-zinc-200 hover:bg-zinc-50'}">${check}${label}</button>`;
             };
             let html = chip('すべて', null);
             genres.forEach(g => { html += chip(escapeHtml(g.name), g.id, genreStyleAttr(g.color)); });
@@ -1384,7 +1391,7 @@
 
             renderGenreFilter();
 
-            const isFiltered = activeGenreFilter !== null;
+            const isFiltered = activeGenreFilters.size > 0;
             const activeTasks = tasks.filter(t => t.status !== 'done' && matchesGenreFilter(t));
             const doneTasks = tasks.filter(t => t.status === 'done' && matchesGenreFilter(t));
 
