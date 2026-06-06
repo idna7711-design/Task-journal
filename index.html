@@ -93,13 +93,6 @@
             </div>
             
             <div class="flex items-center gap-2 md:gap-4">
-                <button onclick="showTrivia()" class="hidden sm:flex items-center gap-2 bg-zinc-50 border border-zinc-100 px-4 py-2 rounded-xl font-medium text-sm text-zinc-500 hover:bg-amber-50 hover:text-amber-600 hover:border-amber-200 transition-all cursor-pointer active:scale-95 shadow-sm group">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="lightbulb" aria-hidden="true" class="lucide lucide-lightbulb w-4 h-4 text-zinc-400 group-hover:text-amber-500 transition-colors"><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5"></path><path d="M9 18h6"></path><path d="M10 22h4"></path></svg>
-                    <span id="current-date">2026年5月27日 (水)</span>
-                </button>
-                
-                <div class="w-px h-8 bg-zinc-200 hidden sm:block mx-1"></div>
-
                 <button id="sync-status" class="flex items-center justify-center w-10 h-10 rounded-xl transition-all cursor-help border text-zinc-400 hover:bg-zinc-50 border-transparent hover:border-zinc-200" title="同期未連携 (同期設定からURLを登録してください)"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="cloud-off" aria-hidden="true" class="lucide lucide-cloud-off w-5 h-5"><path d="M10.94 5.274A7 7 0 0 1 15.71 10h1.79a4.5 4.5 0 0 1 4.222 6.057"></path><path d="M18.796 18.81A4.5 4.5 0 0 1 17.5 19H9A7 7 0 0 1 5.79 5.78"></path><path d="m2 2 20 20"></path></svg></button>
                 
                 <button id="settings-btn" class="text-zinc-600 hover:text-violet-600 hover:bg-violet-50 flex items-center gap-2 bg-white border border-zinc-200 px-4 py-2 rounded-xl font-medium transition-all shadow-sm hover:shadow">
@@ -110,6 +103,13 @@
         </header>
 
         <main class="flex-1 flex flex-col gap-3 md:gap-6 min-h-0 shrink-0">
+
+            <!-- 今日は何の日（クリックで詳細） -->
+            <button id="trivia-bar" onclick="showTrivia()" class="shrink-0 w-full flex items-center gap-2 bg-white/70 hover:bg-amber-50 border border-zinc-200/60 hover:border-amber-200 px-4 py-2.5 rounded-2xl shadow-sm transition-all active:scale-[0.99] group text-left">
+                <i data-lucide="lightbulb" class="w-4 h-4 shrink-0 text-amber-500"></i>
+                <span id="trivia-headline" class="flex-1 min-w-0 truncate text-sm font-medium text-zinc-600">本日の豆知識を読み込み中...</span>
+                <i data-lucide="chevron-right" class="w-4 h-4 shrink-0 text-zinc-300 group-hover:text-amber-500 transition-colors"></i>
+            </button>
 
             <div class="bg-white rounded-2xl md:rounded-[2rem] p-3 md:p-6 shadow-sm border border-zinc-200/60 shrink-0">
                 <form id="task-form" class="flex flex-col gap-3">
@@ -235,7 +235,7 @@
                 <h3 class="font-bold text-zinc-900 text-lg" id="trivia-title">5月27日の豆知識</h3>
             </div>
             <div id="trivia-content" class="text-[13px] text-zinc-700 font-medium leading-relaxed min-h-[100px] flex items-center justify-center bg-zinc-50/80 rounded-2xl p-5 border border-zinc-100 shadow-sm text-center"><div class="text-rose-500 text-xs text-center"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="alert-triangle" aria-hidden="true" class="lucide lucide-alert-triangle w-4 h-4 mx-auto mb-1 text-rose-400"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"></path><path d="M12 9v4"></path><path d="M12 17h.01"></path></svg>AIへの接続に失敗しました。<br>ローカル環境で実行しているか確認してください。</div></div>
-            <button onclick="showTrivia()" class="mt-5 w-full py-2.5 text-xs font-bold text-amber-600 bg-amber-50 hover:bg-amber-100 rounded-xl transition-colors flex items-center justify-center gap-2">
+            <button onclick="showTrivia(true)" class="mt-5 w-full py-2.5 text-xs font-bold text-amber-600 bg-amber-50 hover:bg-amber-100 rounded-xl transition-colors flex items-center justify-center gap-2">
                 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="refresh-cw" aria-hidden="true" class="lucide lucide-refresh-cw w-3.5 h-3.5"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"></path><path d="M21 3v5h-5"></path><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"></path><path d="M8 16H3v5"></path></svg> 別の豆知識を聞く
             </button>
         </div>
@@ -823,40 +823,126 @@
             triggerDriveSync();
         };
 
-        window.showTrivia = async () => {
+        // ===== 今日は何の日（豆知識） =====
+        let todaysTrivia = null; // { title, detail }
+        const TRIVIA_DAYS = ['日', '月', '火', '水', '木', '金', '土'];
+
+        function pad2(n) { return String(n).padStart(2, '0'); }
+        function triviaDateKey(d) { return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`; }
+        function formatDateJP(d) { return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日 (${TRIVIA_DAYS[d.getDay()]})`; }
+
+        async function getCachedTrivia(key) {
+            try { return (await dbGetMeta('trivia:' + key)) || null; } catch { return null; }
+        }
+
+        // Gemma(ローカルAI)に「●●の日」と解説を作らせる。{title, detail} を返す。失敗時は throw。
+        async function generateTrivia(d) {
+            if (!settings.aiEndpointUrl) throw new Error('NO_AI');
+            const month = d.getMonth() + 1, day = d.getDate();
+            const response = await fetch(settings.aiEndpointUrl, {
+                method: 'POST',
+                headers: aiAuthHeaders(),
+                body: JSON.stringify({
+                    model: settings.aiModelName || 'local-model',
+                    temperature: 0.8,
+                    messages: [
+                        { role: 'system', content: 'あなたは日本の「今日は何の日」に詳しい雑学王です。指定された日付の記念日・出来事から親しみやすい話題を1つ選び、JSONのみで返答してください。形式: {"title":"●●の日","detail":"その解説を100〜150文字程度で"}。titleは「〜の日」のような短い見出し(全角10文字程度まで)。JSON以外は出力しないこと。' },
+                        { role: 'user', content: `${month}月${day}日にちなんだ話題をJSONで。` }
+                    ]
+                })
+            });
+            if (!response.ok) throw new Error('API Connection Error');
+            const result = await response.json();
+            const raw = result.choices[0].message.content;
+            let obj;
+            try { const m = raw.match(/\{[\s\S]*\}/); obj = JSON.parse(m ? m[0] : raw); } catch { obj = null; }
+            const title = (obj && obj.title ? String(obj.title) : '今日の豆知識').slice(0, 30);
+            const detail = (obj && obj.detail ? String(obj.detail) : String(raw)).trim();
+            return { title, detail };
+        }
+
+        function refreshTriviaDisplay() {
+            const el = document.getElementById('trivia-headline');
+            if (!el) return;
+            const dateStr = formatDateJP(new Date());
+            el.textContent = todaysTrivia && todaysTrivia.title
+                ? `${dateStr}　${todaysTrivia.title}`
+                : `${dateStr}　今日は何の日？`;
+        }
+
+        // 今日の分をキャッシュ確認→無ければ生成してキャッシュ。表示も更新。
+        async function ensureTodaysTrivia(force) {
+            const d = new Date();
+            const key = triviaDateKey(d);
+            if (!force) {
+                const cached = await getCachedTrivia(key);
+                if (cached) { todaysTrivia = cached; refreshTriviaDisplay(); return cached; }
+            }
+            if (!settings.aiEndpointUrl) { refreshTriviaDisplay(); return null; }
+            try {
+                const t = await generateTrivia(d);
+                await dbPutMeta({ key: 'trivia:' + key, ...t, generatedAt: Date.now() });
+                todaysTrivia = t; refreshTriviaDisplay(); return t;
+            } catch (e) { console.error('Trivia gen error', e); refreshTriviaDisplay(); return null; }
+        }
+
+        // 翌日分を前もって生成しておく（日付が変わる前の先読み）
+        async function pregenerateNextDayTrivia() {
+            const d = new Date(); d.setDate(d.getDate() + 1);
+            const key = triviaDateKey(d);
+            if (await getCachedTrivia(key)) return;
+            if (!settings.aiEndpointUrl) return;
+            try {
+                const t = await generateTrivia(d);
+                await dbPutMeta({ key: 'trivia:' + key, ...t, generatedAt: Date.now() });
+            } catch (e) { /* 失敗しても翌日アクセス時に生成される */ }
+        }
+
+        let triviaPreTimer = null, triviaMidnightTimer = null;
+        // 日付が変わる15分前に翌日分を先読み、変わった瞬間に表示を更新して再スケジュール
+        function scheduleTriviaPrep() {
+            if (triviaPreTimer) clearTimeout(triviaPreTimer);
+            if (triviaMidnightTimer) clearTimeout(triviaMidnightTimer);
+            const now = new Date();
+            const midnight = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 5, 0);
+            const msToMidnight = midnight - now;
+            const preMs = Math.max(0, msToMidnight - 15 * 60 * 1000);
+            triviaPreTimer = setTimeout(() => { pregenerateNextDayTrivia(); }, preMs);
+            triviaMidnightTimer = setTimeout(() => {
+                ensureTodaysTrivia();       // 先読み済みなら即ヒット
+                refreshTriviaDisplay();
+                scheduleTriviaPrep();       // 翌日分を再スケジュール
+            }, msToMidnight);
+        }
+
+        // force=true で再生成（「別の豆知識を聞く」）。通常はキャッシュを表示。
+        window.showTrivia = async (force) => {
             const modal = document.getElementById('trivia-modal');
             const content = document.getElementById('trivia-content');
             const title = document.getElementById('trivia-title');
             const d = new Date();
-            const month = d.getMonth() + 1;
-            const day = d.getDate();
+            const month = d.getMonth() + 1, day = d.getDate();
+            modal.classList.remove('hidden');
+
+            const showResult = (t) => {
+                title.innerText = t && t.title ? `${month}月${day}日 ${t.title}` : `${month}月${day}日の豆知識`;
+                content.innerHTML = `<span class="text-zinc-700 font-medium">${escapeHtml(t.detail)}</span>`;
+            };
+
+            if (!force && todaysTrivia && todaysTrivia.detail) { showResult(todaysTrivia); return; }
 
             title.innerText = `${month}月${day}日の豆知識`;
             content.innerHTML = `<div class="flex flex-col items-center gap-2"><i data-lucide="loader-2" class="w-5 h-5 animate-spin text-amber-500"></i><span class="text-xs text-zinc-400">AIに聞いています...</span></div>`;
             lucide.createIcons();
-            modal.classList.remove('hidden');
 
             if (!settings.aiEndpointUrl) {
                 content.innerHTML = `<div class="text-rose-500 text-xs text-center">設定からローカルAIのエンドポイントを登録してください。</div>`;
                 return;
             }
             try {
-                const response = await fetch(settings.aiEndpointUrl, {
-                    method: 'POST',
-                    headers: aiAuthHeaders(),
-                    body: JSON.stringify({
-                        model: settings.aiModelName || 'local-model',
-                        temperature: 0.8,
-                        messages: [
-                            { role: 'system', content: 'あなたは雑学王です。指定された日付にまつわる、歴史的な出来事や面白い豆知識を1つ、日本語で100文字以内で簡潔に教えてください。' },
-                            { role: 'user', content: `今日（${month}月${day}日）の豆知識を教えて。` }
-                        ]
-                    })
-                });
-                if (!response.ok) throw new Error('API Connection Error');
-                const result = await response.json();
-                const text = result.choices[0].message.content;
-                content.innerHTML = `<span class="text-zinc-700 font-medium">${escapeHtml(text)}</span>`;
+                const t = await generateTrivia(d);
+                await dbPutMeta({ key: 'trivia:' + triviaDateKey(d), ...t, generatedAt: Date.now() });
+                todaysTrivia = t; refreshTriviaDisplay(); showResult(t);
             } catch (e) {
                 console.error('Trivia Error:', e);
                 const msg = e.message === 'API_KEY_NON_ASCII'
@@ -1073,6 +1159,9 @@
                 await pullFromCloud(true);
                 triggerDriveSync();
             }
+            // AIエンドポイント設定後、今日の豆知識を用意して見出しを更新
+            ensureTodaysTrivia();
+            scheduleTriviaPrep();
         };
 
         // 設定（ジャンル含む）をローカルDBへ保存
@@ -1436,9 +1525,8 @@
 
         // ---- Init ----
         document.addEventListener('DOMContentLoaded', async () => {
-            const d = new Date();
-            const days = ['日', '月', '火', '水', '木', '金', '土'];
-            document.getElementById('current-date').innerText = `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日 (${days[d.getDay()]})`;
+            // 日付（＋豆知識見出し）をまず表示
+            refreshTriviaDisplay();
 
             // settings-modal は静的HTMLに hidden が無いため初期状態で閉じる
             document.getElementById('settings-modal').classList.add('hidden');
@@ -1488,6 +1576,10 @@
                 if (settings.webhookUrl) {
                     await pullFromCloud(true);
                 }
+
+                // 今日の豆知識をキャッシュ確認→無ければ生成。日付が変わる前の先読みも開始。
+                ensureTodaysTrivia();
+                scheduleTriviaPrep();
             } catch (err) {
                 console.error('Init error', err);
                 window.showToast('ローカルDB(IndexedDB)の初期化に失敗しました。プライベートブラウズ等では利用できない場合があります。', 'error');
