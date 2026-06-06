@@ -149,6 +149,8 @@
                             </button>
                         </div>
                     </div>
+                    <!-- ジャンル絞り込み（renderで動的生成） -->
+                    <div id="genre-filter" class="flex flex-wrap items-center gap-2 mb-4"></div>
                     <div id="active-task-list" class="space-y-3">
                     <div class="flex flex-col items-center justify-center py-10 px-4 text-center border-2 border-dashed border-zinc-200 rounded-[1.5rem] bg-zinc-50/50">
                         <div class="w-12 h-12 bg-white rounded-2xl shadow-sm border border-zinc-100 flex items-center justify-center mb-3">
@@ -378,6 +380,7 @@
         };
         let currentTaskIdForMemo = null;
         let currentTaskIdForSchedule = null;
+        let activeGenreFilter = null; // null=すべて, '__none__'=未分類, それ以外はジャンルID
         let syncTimeout = null;
         let db = null;
 
@@ -1336,30 +1339,73 @@
                 </div>`;
         }
 
+        // 現在のジャンル絞り込みにタスクが一致するか
+        function matchesGenreFilter(t) {
+            if (activeGenreFilter === null) return true;          // すべて
+            if (activeGenreFilter === '__none__') return !getGenre(t.category); // 未分類
+            return t.category === activeGenreFilter;
+        }
+
+        // 指定ジャンルだけ表示（null=すべて, '__none__'=未分類）
+        window.setGenreFilter = (val) => {
+            activeGenreFilter = val;
+            render();
+        };
+
+        // ジャンル絞り込みチップを描画
+        function renderGenreFilter() {
+            const el = document.getElementById('genre-filter');
+            if (!el) return;
+            // 選択中ジャンルが削除されていたら「すべて」に戻す
+            if (activeGenreFilter && activeGenreFilter !== '__none__' && !getGenre(activeGenreFilter)) {
+                activeGenreFilter = null;
+            }
+            const genres = getGenres();
+            const chip = (label, val, styleAttr) => {
+                const isActive = activeGenreFilter === val;
+                const base = 'inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold border transition-all active:scale-95 cursor-pointer';
+                const onClick = `onclick='setGenreFilter(${JSON.stringify(val)})'`;
+                if (styleAttr) {
+                    return `<button type="button" ${onClick} style="${styleAttr}" class="${base} ${isActive ? 'ring-2 ring-offset-1 ring-zinc-400' : 'opacity-50 hover:opacity-100'}">${label}</button>`;
+                }
+                return `<button type="button" ${onClick} class="${base} ${isActive ? 'bg-zinc-900 text-white border-zinc-900' : 'bg-white text-zinc-600 border-zinc-200 hover:bg-zinc-50'}">${label}</button>`;
+            };
+            let html = chip('すべて', null);
+            genres.forEach(g => { html += chip(escapeHtml(g.name), g.id, genreStyleAttr(g.color)); });
+            if (tasks.some(t => !getGenre(t.category))) html += chip('未分類', '__none__');
+            el.innerHTML = html;
+        }
+
         function render() {
             const activeList = document.getElementById('active-task-list');
             const completedList = document.getElementById('completed-task-list');
             activeList.innerHTML = '';
             completedList.innerHTML = '';
 
-            const activeTasks = tasks.filter(t => t.status !== 'done');
-            const doneTasks = tasks.filter(t => t.status === 'done');
+            renderGenreFilter();
+
+            const isFiltered = activeGenreFilter !== null;
+            const activeTasks = tasks.filter(t => t.status !== 'done' && matchesGenreFilter(t));
+            const doneTasks = tasks.filter(t => t.status === 'done' && matchesGenreFilter(t));
 
             if (activeTasks.length === 0) {
+                const msg = isFiltered
+                    ? { title: 'このジャンルのタスクはありません', sub: '別のジャンルや「すべて」を選んでください。' }
+                    : { title: 'タスク完了！', sub: '上のフォームから新しいタスクを追加してください。' };
                 activeList.innerHTML = `
                     <div class="flex flex-col items-center justify-center py-10 px-4 text-center border-2 border-dashed border-zinc-200 rounded-[1.5rem] bg-zinc-50/50">
                         <div class="w-12 h-12 bg-white rounded-2xl shadow-sm border border-zinc-100 flex items-center justify-center mb-3">
-                            <i data-lucide="coffee" class="w-6 h-6 text-zinc-300"></i>
+                            <i data-lucide="${isFiltered ? 'filter' : 'coffee'}" class="w-6 h-6 text-zinc-300"></i>
                         </div>
-                        <p class="text-sm font-bold text-zinc-400">タスク完了！</p>
-                        <p class="text-xs text-zinc-400 mt-1">上のフォームから新しいタスクを追加してください。</p>
+                        <p class="text-sm font-bold text-zinc-400">${msg.title}</p>
+                        <p class="text-xs text-zinc-400 mt-1">${msg.sub}</p>
                     </div>`;
             } else {
                 activeTasks.forEach(task => { activeList.innerHTML += createTaskHTML(task); });
             }
 
             if (doneTasks.length === 0) {
-                completedList.innerHTML = `<div class="text-xs font-medium text-zinc-400 py-6 text-center">完了したタスクはまだありません。</div>`;
+                completedList.innerHTML = `<div class="text-xs font-medium text-zinc-400 py-6 text-center">${isFiltered ? 'このジャンルの完了タスクはありません。' : '完了したタスクはまだありません。'}</div>`;
             } else {
                 doneTasks.forEach(task => { completedList.innerHTML += createTaskHTML(task); });
             }
