@@ -835,7 +835,8 @@
             try { return (await dbGetMeta('trivia:' + key)) || null; } catch { return null; }
         }
 
-        // 日本語Wikipediaの「M月D日」記事から「記念日」セクションのテキストを取得（CORS対応・APIキー不要）
+        // 日本語Wikipediaの「M月D日」記事から「記念日」セクションを取得（CORS対応・APIキー不要）
+        // 戻り値: { text: 抜粋(プロンプト用), links: [{label, target, url}] (個別記事への出典用) }
         async function fetchWikipediaAnniversaries(month, day) {
             const page = `${month}月${day}日`;
             const api = `https://ja.wikipedia.org/w/api.php?action=parse&page=${encodeURIComponent(page)}&prop=wikitext&format=json&redirects=1&origin=*`;
@@ -843,21 +844,45 @@
             if (!res.ok) throw new Error('wiki fetch failed');
             const data = await res.json();
             const wikitext = (data && data.parse && data.parse.wikitext && data.parse.wikitext['*']) || '';
-            if (!wikitext) return '';
+            if (!wikitext) return { text: '', links: [] };
             // 「記念日」セクション（次の見出し level-2 まで）を抽出
             let m = wikitext.match(/==\s*記念日[\s\S]*?(?=\n==[^=])/);
             if (!m) m = wikitext.match(/==\s*記念日[\s\S]*/);
-            let section = m ? m[0] : '';
-            // wiki記法を軽くクリーニング
-            section = section
+            const rawSection = m ? m[0] : '';
+            // 各記念日（箇条書き行）の先頭リンク＝個別記事とみなして出典候補を収集
+            const links = [];
+            rawSection.split('\n').forEach(line => {
+                const t = line.trim();
+                if (!t.startsWith('*')) return;
+                const lt = t.match(/\[\[([^\[\]|#]+)(?:\|([^\[\]]+))?\]\]/);
+                if (!lt) return;
+                const target = lt[1].trim();
+                if (/^(ファイル|画像|File|Image|Category|カテゴリ|Wikipedia|Help|Template|Portal):/i.test(target)) return;
+                const label = (lt[2] || lt[1]).trim();
+                links.push({ label, target, url: `https://ja.wikipedia.org/wiki/${encodeURIComponent(target.replace(/ /g, '_'))}` });
+            });
+            // wiki記法を軽くクリーニングしてプロンプト用テキストに
+            const text = rawSection
                 .replace(/<ref[^>]*>[\s\S]*?<\/ref>/g, '')
                 .replace(/<ref[^>]*\/>/g, '')
                 .replace(/\{\{[^{}]*\}\}/g, '')
                 .replace(/\[\[(?:[^\[\]|]*\|)?([^\[\]]+)\]\]/g, '$1')
                 .replace(/'''?/g, '')
                 .replace(/\n{2,}/g, '\n')
-                .trim();
-            return section.slice(0, 3500);
+                .trim()
+                .slice(0, 3500);
+            return { text, links };
+        }
+
+        // モデルが選んだ記念日名(name)に最も近い個別記事URLを返す。無ければ fallback。
+        function pickSourceUrl(links, name, fallbackUrl) {
+            if (!links || !links.length || !name) return fallbackUrl;
+            const norm = s => String(s).replace(/[\s　「」『』"'（）()]/g, '').toLowerCase();
+            const n = norm(name);
+            if (!n) return fallbackUrl;
+            let best = links.find(l => norm(l.label) === n || norm(l.target) === n);
+            if (!best) best = links.find(l => { const ll = norm(l.label); return ll && (ll.includes(n) || n.includes(ll)); });
+            return best ? best.url : fallbackUrl;
         }
 
         // Gemma(ローカルAI)に「●●の日」と解説を作らせる。Wikipediaの記念日セクションを根拠に渡す(RAG)。
@@ -866,13 +891,14 @@
             const month = d.getMonth() + 1, day = d.getDate();
             const wikiUrl = `https://ja.wikipedia.org/wiki/${encodeURIComponent(`${month}月${day}日`)}`;
 
-            // まずWikipediaから根拠テキストを取得（失敗してもモデル単独で続行）
-            let context = '';
-            try { context = await fetchWikipediaAnniversaries(month, day); } catch (e) { context = ''; }
+            // まずWikipediaから根拠テキスト＋個別記事リンクを取得（失敗してもモデル単独で続行）
+            let ground = { text: '', links: [] };
+            try { ground = await fetchWikipediaAnniversaries(month, day); } catch (e) { ground = { text: '', links: [] }; }
+            const context = ground.text;
 
             const messages = context
                 ? [
-                    { role: 'system', content: 'あなたは丁寧な編集者です。与えられたWikipedia「記念日」セクションの抜粋【だけ】を根拠に、日本でよく知られた記念日を1つ選び、その制定理由・由来を中心に解説します。抜粋に書かれていない事実を創作してはいけません。JSONのみで出力: {"title":"●●の日","detail":"制定理由・由来を中心に120〜180文字程度で","source":"与える出典URLをそのまま"}。titleは「〜の日」など短い見出し(全角12文字程度まで)。JSON以外は出力しないこと。' },
+                    { role: 'system', content: 'あなたは丁寧な編集者です。与えられたWikipedia「記念日」セクションの抜粋【だけ】を根拠に、日本でよく知られた記念日を1つ選び、その制定理由・由来を中心に解説します。抜粋に書かれていない事実を創作してはいけません。JSONのみで出力: {"title":"●●の日","name":"抜粋に出てくるその記念日の名称をそのまま(例: ドラえもんの日)","detail":"制定理由・由来を中心に120〜180文字程度で","source":"与える出典URLをそのまま"}。titleは「〜の日」など短い見出し(全角12文字程度まで)。JSON以外は出力しないこと。' },
                     { role: 'user', content: `日付: ${month}月${day}日\n出典URL: ${wikiUrl}\n\n--- Wikipedia「記念日」セクション抜粋 ---\n${context}` }
                 ]
                 : [
@@ -896,10 +922,15 @@
             try { const mm = raw.match(/\{[\s\S]*\}/); obj = JSON.parse(mm ? mm[0] : raw); } catch { obj = null; }
             const title = (obj && obj.title ? String(obj.title) : '今日の豆知識').slice(0, 40);
             const detail = (obj && obj.detail ? String(obj.detail) : String(raw)).trim();
-            // 出典は実在URLを優先：根拠ありなら必ずWikipediaの日付ページ、無ければモデルが http(s) を返したときのみ採用
+            // 出典は実在URLを優先：根拠ありなら選んだ記念日の個別記事へ辿る（無ければ日付ページ）。
+            // 根拠なしのときはモデルが http(s) を返した場合のみ採用。
             let source = '';
-            if (context) source = wikiUrl;
-            else if (obj && obj.source && /^https?:\/\//i.test(String(obj.source))) source = String(obj.source).trim();
+            if (context) {
+                const name = (obj && (obj.name || obj.title)) ? String(obj.name || obj.title) : '';
+                source = pickSourceUrl(ground.links, name, wikiUrl);
+            } else if (obj && obj.source && /^https?:\/\//i.test(String(obj.source))) {
+                source = String(obj.source).trim();
+            }
             return { title, detail, source, grounded: !!context };
         }
 
@@ -918,7 +949,13 @@
             const key = triviaDateKey(d);
             if (!force) {
                 const cached = await getCachedTrivia(key);
-                if (cached) { todaysTrivia = cached; refreshTriviaDisplay(); return cached; }
+                if (cached) {
+                    // 新形式（RAG導入後）は grounded フラグを持つ。旧形式は表示しつつ裏で作り直す。
+                    const legacy = !('grounded' in cached);
+                    todaysTrivia = cached; refreshTriviaDisplay();
+                    if (!legacy) return cached;
+                    // legacy はフォールスルーして再生成へ（失敗時は旧データのまま表示）
+                }
             }
             if (!settings.aiEndpointUrl) { refreshTriviaDisplay(); return null; }
             try {
@@ -971,9 +1008,9 @@
                 const safeUrl = (t.source && /^https?:\/\//i.test(t.source)) ? t.source : '';
                 const label = t.grounded ? '出典(Wikipedia)' : '出典';
                 const link = safeUrl
-                    ? `<div class="mt-3 text-[10px] text-zinc-400 text-left w-full">${label}: <a href="${escapeHtml(safeUrl)}" target="_blank" rel="noopener noreferrer" class="underline hover:text-amber-600 break-all">${escapeHtml(safeUrl)}</a></div>`
+                    ? `<div class="mt-3 pt-3 border-t border-zinc-200 text-[10px] text-zinc-400 text-left w-full"><div class="mb-0.5">${label}</div><a href="${escapeHtml(safeUrl)}" target="_blank" rel="noopener noreferrer" class="underline hover:text-amber-600 break-all">${escapeHtml(safeUrl)}</a></div>`
                     : '';
-                content.innerHTML = `<span class="text-zinc-700 font-medium">${escapeHtml(t.detail)}</span>${link}`;
+                content.innerHTML = `<div class="flex flex-col items-center w-full"><span class="text-zinc-700 font-medium text-center">${escapeHtml(t.detail)}</span>${link}</div>`;
             };
 
             if (!force && todaysTrivia && todaysTrivia.detail) { showResult(todaysTrivia); return; }
