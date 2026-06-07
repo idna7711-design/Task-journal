@@ -13,6 +13,12 @@
  *   - すべての応答に Access-Control-Allow-Origin を付与する
  *   - 許可Originは ALLOWED_ORIGINS(カンマ区切り) で制御。未設定時は "*"
  *
+ * デバッグログ受け口:
+ *   POST /v1/debug-log … アプリのエラー時にデバッグログ＋端末情報を受け取り、
+ *                        GitHubリポジトリの debug/ にMarkdownでコミットする。
+ *                        GitHubトークンはこのWorker(サーバー側)にのみ置くため、
+ *                        ブラウザにトークンは一切露出しない。
+ *
  * 必要な環境変数(Secret/Text):
  *   GEMMA_API_KEYS           (Secret) … カンマ区切りで複数キー可 例: key1,key2,key3
  *   GEMMA_API_KEY            (Secret) … 旧変数。GEMMA_API_KEYSがなければこちらを使用（後方互換）
@@ -21,6 +27,11 @@
  *   UPSTREAM_BASE_URL        (Text)   … 例: https://lmstudio.edaaiapps.com
  *   ALLOWED_ORIGINS          (Text/任意) … 例: https://idna7711-design.github.io
  *                                         複数可(カンマ区切り)。未設定なら全許可(*)。
+ *   --- デバッグログ機能を使う場合のみ ---
+ *   GITHUB_TOKEN             (Secret) … contents:write 権限の Fine-grained PAT(対象リポジトリ限定推奨)
+ *   GITHUB_REPO              (Text)   … 例: idna7711-design/Task-journal
+ *   GITHUB_BRANCH            (Text/任意) … 既定 main
+ *   DEBUG_LOG_DIR            (Text/任意) … 既定 debug
  */
 
 export default {
@@ -46,6 +57,14 @@ export default {
       .split(',').map(k => k.trim()).filter(Boolean);
     if (validKeys.length === 0 || !validKeys.includes(token)) {
       return json({ error: { message: 'Unauthorized', type: 'invalid_api_key' } }, 401, cors);
+    }
+
+    // 3.5 デバッグログ受け口（認証済みのみ）。GitHubリポジトリの debug/ にコミットする。
+    if (inUrl.pathname === '/v1/debug-log') {
+      if (request.method !== 'POST') {
+        return json({ error: { message: 'Method Not Allowed' } }, 405, cors);
+      }
+      return await handleDebugLog(request, env, cors);
     }
 
     // 4. 上流URLを組み立て (/v1/... のパスとクエリをそのまま引き継ぐ)
@@ -106,4 +125,87 @@ function json(obj, status, cors) {
     status,
     headers: { 'Content-Type': 'application/json', ...cors },
   });
+}
+
+// ===== デバッグログ → GitHub コミット =====
+async function handleDebugLog(request, env, cors) {
+  const ghToken = env.GITHUB_TOKEN;
+  const repo = env.GITHUB_REPO;
+  const branch = env.GITHUB_BRANCH || 'main';
+  const dir = (env.DEBUG_LOG_DIR || 'debug').replace(/^\/+|\/+$/g, '');
+  if (!ghToken || !repo) {
+    return json({ error: { message: 'GITHUB_TOKEN / GITHUB_REPO not configured' } }, 500, cors);
+  }
+
+  let payload;
+  try { payload = await request.json(); } catch { payload = { reason: 'invalid-json' }; }
+
+  const now = new Date();
+  const stamp = now.toISOString().replace(/[:.]/g, '-');
+  const rnd = Math.random().toString(36).slice(2, 8);
+  const path = `${dir}/${stamp}-${rnd}.md`;
+
+  const md = buildDebugMarkdown(payload, now);
+  const apiUrl = `https://api.github.com/repos/${repo}/contents/${path.split('/').map(encodeURIComponent).join('/')}`;
+
+  let ghRes, ghJson;
+  try {
+    ghRes = await fetch(apiUrl, {
+      method: 'PUT',
+      headers: {
+        'Authorization': `Bearer ${ghToken}`,
+        'Accept': 'application/vnd.github+json',
+        'User-Agent': 'task-journal-debug-logger',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        message: `debug: ${(payload && payload.reason) || 'error'} @ ${stamp}`,
+        content: b64utf8(md),
+        branch,
+      }),
+    });
+    ghJson = await ghRes.json().catch(() => ({}));
+  } catch (e) {
+    return json({ error: { message: 'GitHub fetch failed: ' + e.message } }, 502, cors);
+  }
+  if (!ghRes.ok) {
+    return json({ error: { message: 'GitHub commit failed', status: ghRes.status, detail: ghJson && ghJson.message } }, 502, cors);
+  }
+  return json({ ok: true, path, html_url: ghJson && ghJson.content && ghJson.content.html_url }, 200, cors);
+}
+
+function buildDebugMarkdown(p, now) {
+  p = p || {};
+  const env = p.env || {};
+  const logs = Array.isArray(p.logs) ? p.logs : [];
+  const lines = [];
+  lines.push('# Task-journal Debug Report');
+  lines.push('');
+  lines.push(`- **時刻**: ${now.toISOString()}`);
+  lines.push(`- **理由**: ${p.reason || '(unspecified)'}`);
+  if (p.message) lines.push(`- **メッセージ**: ${String(p.message).slice(0, 500)}`);
+  lines.push('');
+  lines.push('## 端末・実行環境');
+  lines.push('```json');
+  lines.push(JSON.stringify(env, null, 2));
+  lines.push('```');
+  lines.push('');
+  lines.push(`## ログ (${logs.length}件 / 古い→新しい)`);
+  lines.push('```');
+  logs.forEach(e => {
+    lines.push(`[${(e && e.t) || ''}] ${((e && e.level) || 'log').toUpperCase()} ${(e && e.msg) || ''}`);
+  });
+  lines.push('```');
+  return lines.join('\n');
+}
+
+// UTF-8文字列をbase64へ（大きめでもスタックを溢れさせないようチャンク処理）
+function b64utf8(str) {
+  const bytes = new TextEncoder().encode(str);
+  let bin = '';
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    bin += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
+  }
+  return btoa(bin);
 }

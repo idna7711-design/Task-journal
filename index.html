@@ -241,6 +241,25 @@
         </div>
     </div>
 
+    <!-- デバッグログモーダル -->
+    <div id="debug-modal" class="hidden fixed inset-0 bg-zinc-900/40 backdrop-blur-md flex items-center justify-center z-50 p-4">
+        <div class="bg-white rounded-[2rem] shadow-2xl w-full max-w-2xl p-6 sm:p-8 flex flex-col max-h-[90vh]">
+            <div class="flex items-center gap-3 mb-4 shrink-0">
+                <div class="w-10 h-10 rounded-2xl bg-rose-50 flex items-center justify-center text-rose-600">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="terminal" aria-hidden="true" class="lucide lucide-terminal w-5 h-5"><path d="m4 17 6-6-6-6"></path><path d="M12 19h8"></path></svg>
+                </div>
+                <h3 class="font-bold text-zinc-900 text-lg">デバッグログ</h3>
+            </div>
+            <pre id="debug-content" class="flex-1 overflow-auto text-[11px] leading-relaxed bg-zinc-900 text-zinc-100 rounded-2xl p-4 whitespace-pre-wrap break-all font-mono min-h-[200px]"></pre>
+            <div class="flex flex-wrap justify-end gap-2 mt-4 shrink-0">
+                <button onclick="closeDebugModal()" class="px-4 py-2.5 text-xs font-bold text-zinc-500 hover:bg-zinc-100 rounded-xl transition-colors">閉じる</button>
+                <button onclick="copyDebugLog()" class="px-4 py-2.5 text-xs font-bold bg-zinc-100 text-zinc-700 hover:bg-zinc-200 rounded-xl transition-colors">コピー</button>
+                <button onclick="downloadDebugLog()" class="px-4 py-2.5 text-xs font-bold bg-zinc-100 text-zinc-700 hover:bg-zinc-200 rounded-xl transition-colors">ダウンロード(.md)</button>
+                <button onclick="sendDebugLog()" class="px-4 py-2.5 text-xs font-bold bg-rose-600 text-white hover:bg-rose-700 rounded-xl transition-colors shadow active:scale-95">クラウドへ送信</button>
+            </div>
+        </div>
+    </div>
+
     <!-- ジャンル管理モーダル -->
     <div id="genre-modal" class="hidden fixed inset-0 bg-zinc-900/40 backdrop-blur-md flex items-center justify-center z-50 p-4">
         <div class="bg-white rounded-[2rem] shadow-2xl w-full max-w-lg p-8 overflow-hidden transform transition-all flex flex-col max-h-[90vh]">
@@ -356,6 +375,22 @@
                     </button>
                 </div>
 
+                <hr class="border-zinc-100 my-6">
+
+                <div class="flex items-center gap-3 mb-4">
+                    <div class="w-10 h-10 rounded-2xl bg-rose-50 flex items-center justify-center text-rose-600">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="bug" aria-hidden="true" class="lucide lucide-bug w-5 h-5"><path d="m8 2 1.88 1.88"></path><path d="M14.12 3.88 16 2"></path><path d="M9 7.13v-1a3.003 3.003 0 1 1 6 0v1"></path><path d="M12 20c-3.3 0-6-2.7-6-6v-3a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v3c0 3.3-2.7 6-6 6"></path><path d="M12 20v-9"></path><path d="M6.53 9C4.6 8.8 3 7.1 3 5"></path><path d="M6 13H2"></path><path d="M3 21c0-2.1 1.7-3.9 3.8-4"></path><path d="M20.97 5c0 2.1-1.6 3.8-3.5 4"></path><path d="M22 13h-4"></path><path d="M17.2 17c2.1.1 3.8 1.9 3.8 4"></path></svg>
+                    </div>
+                    <h3 class="font-bold text-zinc-900 text-lg">デバッグ</h3>
+                </div>
+                <p class="text-xs text-zinc-500 mb-4 leading-relaxed">
+                    エラー発生時、デバッグログと端末情報を自動でクラウド（Worker経由でGitHubの <code class="text-zinc-500">debug/</code>）へ送信します。「今エラーが出たから見て」と伝えれば内容を確認できます。<br>
+                    手動でログを確認・コピー・送信することもできます。
+                </p>
+                <button type="button" onclick="openDebugModal()" class="w-full flex items-center justify-center gap-2 text-xs font-bold bg-zinc-50 border-2 border-zinc-100 text-zinc-700 hover:bg-zinc-100 px-4 py-3 rounded-2xl transition-all active:scale-95">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="terminal" aria-hidden="true" class="lucide lucide-terminal w-4 h-4"><path d="m4 17 6-6-6-6"></path><path d="M12 19h8"></path></svg> デバッグログを開く
+                </button>
+
             </div>
             
             <div class="flex justify-end gap-3 mt-4 shrink-0 pt-4 border-t border-zinc-100">
@@ -385,6 +420,104 @@
         let activeGenreFilters = new Set(); // 空=すべて。要素は ジャンルID または '__none__'(未分類)
         let syncTimeout = null;
         let db = null;
+
+        // ---- Debug logging ----
+        // console出力・未捕捉エラー・端末情報をリングバッファに記録し、エラー時に
+        // Worker(/v1/debug-log)経由でGitHubの debug/ へ自動アップロードする。
+        // これにより「今エラーが出たから見て」でリポジトリのログを確認できる。
+        const __dbg = {
+            logs: [],
+            cap: 400,
+            lastUpload: 0,
+            reporting: false,
+            push(level, args) {
+                try {
+                    const msg = args.map(a => {
+                        if (a instanceof Error) return (a.stack || (a.name + ': ' + a.message));
+                        if (a && typeof a === 'object') { try { return JSON.stringify(a); } catch { return String(a); } }
+                        return String(a);
+                    }).join(' ');
+                    this.logs.push({ t: new Date().toISOString(), level, msg: msg.slice(0, 2000) });
+                    if (this.logs.length > this.cap) this.logs.splice(0, this.logs.length - this.cap);
+                } catch { /* ログ記録自体は失敗しても無視 */ }
+            }
+        };
+        ['log', 'info', 'warn', 'error', 'debug'].forEach(level => {
+            const orig = console[level] ? console[level].bind(console) : null;
+            console[level] = (...args) => { __dbg.push(level, args); if (orig) orig(...args); };
+        });
+        window.addEventListener('error', (e) => {
+            __dbg.push('error', [`${e.message} @ ${e.filename || ''}:${e.lineno || ''}:${e.colno || ''}`, (e.error && e.error.stack) ? e.error.stack : '']);
+            reportDebug('window.onerror: ' + (e.message || ''));
+        });
+        window.addEventListener('unhandledrejection', (e) => {
+            const r = e.reason;
+            __dbg.push('error', ['unhandledrejection', (r && r.stack) ? r.stack : String(r)]);
+            reportDebug('unhandledrejection: ' + ((r && r.message) ? r.message : String(r)));
+        });
+
+        // 端末・実行環境の情報を収集（APIキー等の秘密は含めない）
+        function collectEnv() {
+            let endpointHost = '';
+            try { endpointHost = (settings && settings.aiEndpointUrl) ? new URL(settings.aiEndpointUrl).host : ''; } catch { }
+            const env = {
+                time: new Date().toISOString(),
+                url: location.href,
+                userAgent: navigator.userAgent,
+                platform: navigator.platform,
+                language: navigator.language,
+                languages: navigator.languages,
+                online: navigator.onLine,
+                cookieEnabled: navigator.cookieEnabled,
+                referrer: document.referrer,
+                screen: { w: screen.width, h: screen.height, dpr: window.devicePixelRatio },
+                viewport: { w: window.innerWidth, h: window.innerHeight },
+                aiEndpointHost: endpointHost,   // ホストのみ（キーやフルURLは送らない）
+                swController: !!(navigator.serviceWorker && navigator.serviceWorker.controller)
+            };
+            try { env.hasAiKey = !!(settings && settings.aiApiKey); } catch { }
+            return env;
+        }
+
+        function buildDebugPayload(reason, message) {
+            return { reason: reason || 'manual', message: message || '', env: collectEnv(), logs: __dbg.logs.slice(-300) };
+        }
+
+        function debugReportText() {
+            const p = buildDebugPayload('manual');
+            const lines = ['# Task-journal Debug Report', 'time: ' + p.env.time, 'url: ' + p.env.url, '', '## ENV', JSON.stringify(p.env, null, 2), '', '## LOGS (' + p.logs.length + ')'];
+            p.logs.forEach(e => lines.push(`[${e.t}] ${String(e.level).toUpperCase()} ${e.msg}`));
+            return lines.join('\n');
+        }
+
+        // 送信先URL（AIエンドポイントと同じWorkerオリジンの /v1/debug-log）
+        function debugLogUrl() {
+            try { return new URL(settings.aiEndpointUrl).origin + '/v1/debug-log'; } catch { return ''; }
+        }
+
+        // クラウド(Worker→GitHub)へ送信。失敗時は throw。
+        async function uploadDebugLog(reason, message) {
+            const url = debugLogUrl();
+            if (!url) throw new Error('NO_ENDPOINT');
+            const res = await fetch(url, { method: 'POST', headers: aiAuthHeaders(), body: JSON.stringify(buildDebugPayload(reason, message)) });
+            if (!res.ok) throw new Error('UPLOAD_FAILED_' + res.status);
+            return await res.json().catch(() => ({}));
+        }
+
+        // エラー発生時の自動レポート。多重送信・連投を抑制する。
+        async function reportDebug(reason, message) {
+            let s;
+            try { s = settings; } catch { return; }   // 初期化前(TDZ)なら何もしない
+            if (!s || !s.aiEndpointUrl) return;
+            if (__dbg.reporting) return;
+            if (Date.now() - __dbg.lastUpload < 15000) return;   // 15秒に1回まで
+            __dbg.reporting = true;
+            try {
+                await uploadDebugLog(reason, message);
+                __dbg.lastUpload = Date.now();
+            } catch { /* 自動送信失敗は静かに無視（手動パネルから再送可能） */ }
+            finally { __dbg.reporting = false; }
+        }
 
         // ---- Genres (Categories) Data ----
         // ジャンルは「人間が管理する」データ。settings.categories に配列で保持し、
@@ -645,6 +778,8 @@
                 toast.classList.add('-translate-y-full', 'opacity-0');
                 setTimeout(() => toast.remove(), 300);
             }, 6000);
+            // エラートースト表示時は、デバッグログをクラウドへ自動アップロード
+            if (type === 'error') reportDebug('toast: ' + String(message).replace(/<[^>]*>/g, ' ').slice(0, 200));
         };
 
         window.downloadHTML = () => {
@@ -1034,9 +1169,40 @@
                     : 'AIへの接続に失敗しました。<br>ローカル環境で実行しているか確認してください。';
                 content.innerHTML = `<div class="text-rose-500 text-xs text-center"><i data-lucide="alert-triangle" class="w-4 h-4 mx-auto mb-1 text-rose-400"></i>${msg}</div>`;
                 lucide.createIcons();
+                reportDebug('trivia: ' + (e && e.message ? e.message : String(e)));
             }
         };
         window.closeTriviaModal = () => document.getElementById('trivia-modal').classList.add('hidden');
+
+        // ---- Debug modal ----
+        window.openDebugModal = () => {
+            document.getElementById('debug-content').textContent = debugReportText();
+            document.getElementById('debug-modal').classList.remove('hidden');
+            lucide.createIcons();
+        };
+        window.closeDebugModal = () => document.getElementById('debug-modal').classList.add('hidden');
+        window.copyDebugLog = async () => {
+            try { await navigator.clipboard.writeText(debugReportText()); showToast('デバッグログをコピーしました。', 'success'); }
+            catch { showToast('コピーに失敗しました。手動で選択してください。'); }
+        };
+        window.downloadDebugLog = () => {
+            const blob = new Blob([debugReportText()], { type: 'text/markdown;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url; a.download = 'task-journal-debug-' + Date.now() + '.md';
+            document.body.appendChild(a); a.click(); document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        };
+        window.sendDebugLog = async () => {
+            if (!settings.aiEndpointUrl) { showToast('先に設定でAIエンドポイント(プロキシ)を登録してください。'); return; }
+            try {
+                const r = await uploadDebugLog('manual');
+                __dbg.lastUpload = Date.now();
+                showToast('デバッグログをクラウドに送信しました。' + (r && r.path ? `（${r.path}）` : ''), 'success');
+            } catch (e) {
+                showToast('送信に失敗しました: ' + (e && e.message ? e.message : String(e)));
+            }
+        };
 
         // ---- Task actions ----
         window.addTask = async (e) => {
@@ -1622,6 +1788,7 @@
             document.getElementById('schedule-modal').addEventListener('click', (e) => { if (e.target.id === 'schedule-modal') closeScheduleModal(); });
             document.getElementById('settings-modal').addEventListener('click', (e) => { if (e.target.id === 'settings-modal') closeSettingsModal(); });
             document.getElementById('trivia-modal').addEventListener('click', (e) => { if (e.target.id === 'trivia-modal') closeTriviaModal(); });
+            document.getElementById('debug-modal').addEventListener('click', (e) => { if (e.target.id === 'debug-modal') closeDebugModal(); });
             document.getElementById('genre-modal').addEventListener('click', (e) => { if (e.target.id === 'genre-modal') closeGenreModal(); });
             document.getElementById('genre-picker-modal').addEventListener('click', (e) => { if (e.target.id === 'genre-picker-modal') closeGenrePicker(); });
             document.getElementById('sync-status').addEventListener('click', () => { if (settings.webhookUrl) pullFromCloud(true); });
