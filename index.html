@@ -163,11 +163,14 @@
                 </div>
 
                 <div class="mt-auto pt-8 border-t border-zinc-100">
-                    <div class="flex items-center gap-3 mb-5 px-1 opacity-60">
-                        <div class="w-2 h-2 rounded-full bg-emerald-500"></div>
-                        <h3 class="text-sm font-bold text-zinc-500 tracking-wide">完了済み</h3>
-                        <span id="completed-count" class="shrink-0 inline-flex items-center justify-center min-w-[1.25rem] h-5 px-1.5 rounded-full bg-zinc-200 text-zinc-600 text-[11px] font-bold">0</span>
-                    </div>
+                    <button id="completed-toggle" type="button" onclick="toggleCompletedSection()" class="w-full flex items-center justify-between gap-3 mb-5 px-1 opacity-60 hover:opacity-100 transition-opacity text-left" aria-expanded="true" aria-controls="completed-task-list">
+                        <span class="flex items-center gap-3 min-w-0">
+                            <span class="w-2 h-2 rounded-full bg-emerald-500 shrink-0"></span>
+                            <span class="text-sm font-bold text-zinc-500 tracking-wide">完了済み</span>
+                            <span id="completed-count" class="shrink-0 inline-flex items-center justify-center min-w-[1.25rem] h-5 px-1.5 rounded-full bg-zinc-200 text-zinc-600 text-[11px] font-bold">0</span>
+                        </span>
+                        <i id="completed-chevron" data-lucide="chevron-down" class="w-4 h-4 text-zinc-500 shrink-0 transition-transform duration-200" aria-hidden="true"></i>
+                    </button>
                     <div id="completed-task-list" class="space-y-3 opacity-70"><div class="text-xs font-medium text-zinc-400 py-6 text-center">完了したタスクはまだありません。</div></div>
                 </div>
 
@@ -418,6 +421,9 @@
         let currentTaskIdForMemo = null;
         let currentTaskIdForSchedule = null;
         let activeGenreFilters = new Set(); // 空=すべて。要素は ジャンルID または '__none__'(未分類)
+        const COMPLETED_COLLAPSE_KEY = 'taskjournal:completedCollapsed';
+        let completedCollapsed = false;
+        try { completedCollapsed = localStorage.getItem(COMPLETED_COLLAPSE_KEY) === 'true'; } catch { /* 保存不可でも開閉は使える */ }
         let syncTimeout = null;
         let db = null;
 
@@ -1731,6 +1737,23 @@
             el.innerHTML = html;
         }
 
+        function applyCompletedSectionState() {
+            const list = document.getElementById('completed-task-list');
+            const toggle = document.getElementById('completed-toggle');
+            const chevron = document.getElementById('completed-chevron');
+            if (!list || !toggle) return;
+            list.hidden = completedCollapsed;
+            toggle.setAttribute('aria-expanded', String(!completedCollapsed));
+            toggle.title = completedCollapsed ? '完了済みタスクを展開' : '完了済みタスクを折りたたむ';
+            if (chevron) chevron.style.transform = completedCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)';
+        }
+
+        window.toggleCompletedSection = () => {
+            completedCollapsed = !completedCollapsed;
+            try { localStorage.setItem(COMPLETED_COLLAPSE_KEY, String(completedCollapsed)); } catch { /* 保存不可でも開閉は続ける */ }
+            applyCompletedSectionState();
+        };
+
         function render() {
             const activeList = document.getElementById('active-task-list');
             const completedList = document.getElementById('completed-task-list');
@@ -1771,6 +1794,7 @@
                 doneTasks.forEach(task => { completedList.innerHTML += createTaskHTML(task); });
             }
             lucide.createIcons();
+            applyCompletedSectionState();
         }
 
         // ---- Init ----
@@ -1797,6 +1821,7 @@
             window.addEventListener('pageshow', (e) => { if (e.persisted && db) render(); });
 
             lucide.createIcons();
+            applyCompletedSectionState();
 
             try {
                 db = await openDB();
