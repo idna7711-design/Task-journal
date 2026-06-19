@@ -42,9 +42,20 @@ scripts.forEach((m, i) => {
 const files = [
     ['sw.js', '.js'],
     ['cloudflare/worker-openai-proxy.js', '.mjs'],
+    ['gas/Code.gs', '.js'],
 ];
 for (const [f, ext] of files) {
     checkSource(f, readFileSync(join(root, f), 'utf8'), ext);
+}
+
+// 3) n8nワークフローJSON
+const workflowFile = 'n8n/taskjournal-notebooklm-sync.template.json';
+try {
+    JSON.parse(readFileSync(join(root, workflowFile), 'utf8'));
+    console.log(`OK  ${workflowFile}`);
+} catch (error) {
+    failed++;
+    console.error(`NG  ${workflowFile}\n${error.message}`);
 }
 
 console.log(failed ? `\n${failed} 件の問題があります` : '\nすべてOK');

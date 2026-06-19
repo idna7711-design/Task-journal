@@ -13,6 +13,7 @@
   │
   ├──(1) GAS Webhook (POST/GET) ──→ Google Apps Script
   │                                   ├─ Google Drive: TaskData.json（同期DB）
+  │                                   ├─ Google Docs: 固定IDのTaskJournal（NotebookLM用）
   │                                   └─ Google カレンダー: 期日付きタスクを登録
   │
   ├──(2) https://api.edaaiapps.com/v1/chat/completions
@@ -45,8 +46,17 @@
 ## 主要なデータの流れ
 
 ### タスク同期（GAS）
-- push: タスク変更時に `{ tasks, markdown }` を GAS へ POST（`text/plain` で preflight 回避）
+- push: タスク変更時に `{ tasks, categories }` を GAS へ POST（`text/plain` で preflight 回避）
 - pull: 起動時・同期アイコンで GET → `updatedAt` ベースの LWW でマージ
+
+### NotebookLM 自動更新
+1. GASがタスク変更のたびに、同じIDのGoogleドキュメント本文を上書き
+2. ローカルn8nがWindows上の`notebooklm-py`へ鮮度確認を定期実行
+3. NotebookLMが更新ありと判定したときだけ再同期を実行
+4. NotebookLMに登録済みのGoogleドキュメントソースを再同期
+
+> NotebookLM個人版に公式の自動再同期APIはないため、手順3・4では非公式ツールを使用する。
+> 認証切れやNotebookLM側の仕様変更時は、再ログインやワークフロー修正が必要になる場合がある。
 
 ### 豆知識（Wikipedia RAG）
 1. 日本語Wikipedia「M月D日」記事の記念日セクションを MediaWiki API で取得

@@ -334,7 +334,7 @@
                 
                 <p class="text-xs text-zinc-500 mb-6 leading-relaxed">
                     Google Apps Script (GAS) の「ウェブアプリ URL」を登録すると、タスクや日時の変更が自動で裏側に送信されます。<br>
-                    NotebookLMには、保存されたMarkdownファイル(.md)をソースとして追加してください。<br>
+                    同期されたタスクは固定のGoogleドキュメントへ反映され、NotebookLMの自動更新に使用されます。<br>
                 </p>
                 
                 <div class="mb-8">
@@ -406,7 +406,7 @@
     <script>
         // ===== TaskJournal (IndexedDB 永続化版) =====
         // ローカルの IndexedDB を「真実」とし、GAS(Drive) と push+pull で同期する。
-        // - push: 変更時に { tasks, markdown } を POST（no-cors / text-plain で preflight回避）
+        // - push: 変更時に { tasks, categories } を POST（no-cors / text-plain で preflight回避）
         // - pull: 起動時・同期アイコンクリック時に GET して updatedAt ベースの LWW でマージ
 
         // ---- State ----
@@ -650,7 +650,7 @@
                         method: 'POST',
                         // text/plain にすると preflight(OPTIONS) を回避できる
                         headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-                        body: JSON.stringify({ tasks, markdown: generateMarkdown() }),
+                        body: JSON.stringify({ tasks, categories: getGenres() }),
                         mode: 'no-cors'
                     });
                     updateSyncStatus('success');
@@ -696,39 +696,6 @@
             } finally {
                 if (showOverlay) showLoading(false);
             }
-        }
-
-        // ---- NotebookLM 用 Markdown 生成 ----
-        function generateMarkdown() {
-            const d = new Date();
-            const pad = n => String(n).padStart(2, '0');
-            const stamp = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
-            const active = tasks.filter(t => t.status !== 'done');
-            const done = tasks.filter(t => t.status === 'done');
-
-            const section = (title, arr) => {
-                let s = `## ${title}\n\n`;
-                if (arr.length === 0) return s + `(なし)\n\n`;
-                arr.forEach(t => {
-                    const statusLabel = t.status === 'done' ? '✅ 完了'
-                        : (t.status === 'doing' ? '🚀 進行中' : '⏳ 未着手');
-                    s += `### ${t.text}\n\n`;
-                    s += `- 状態: ${statusLabel}\n`;
-                    if (t.category) s += `- カテゴリ: ${(getGenre(t.category) || {}).name || t.category}\n`;
-                    if (t.dueDate) s += `- 予定日時: ${t.dueDate}\n`;
-                    if (t.logs && t.logs.length) {
-                        s += `- ログ:\n`;
-                        t.logs.forEach(l => { s += `  - ${l}\n`; });
-                    }
-                    s += `\n`;
-                });
-                return s;
-            };
-
-            let md = `# TaskJournal\n\n最終更新: ${stamp}\n\n`;
-            md += section('進行中・未完了', active);
-            md += section('完了済み', done);
-            return md;
         }
 
         // ---- Sync status indicator ----
