@@ -342,6 +342,12 @@
                     <input type="text" id="webhook-input" class="w-full bg-zinc-50 border-2 border-zinc-100 rounded-2xl p-4 text-sm focus:outline-none focus:border-zinc-300 focus:bg-white transition-colors" placeholder="https://script.google.com/macros/s/..../exec" autocomplete="off">
                 </div>
 
+                <div class="mb-8">
+                    <label class="block text-xs font-bold text-zinc-400 uppercase tracking-wider mb-2 ml-1">同期キー</label>
+                    <input type="password" id="sync-token-input" class="w-full bg-zinc-50 border-2 border-zinc-100 rounded-2xl p-4 text-sm focus:outline-none focus:border-zinc-300 focus:bg-white transition-colors" placeholder="GASのScript Propertiesに登録したキー" autocomplete="off">
+                    <p class="text-[11px] text-zinc-400 mt-2 ml-1 leading-relaxed">キーはこの端末のIndexedDBにだけ保存され、GitHubやデバッグログには送信されません。</p>
+                </div>
+
                 <hr class="border-zinc-100 mb-6">
 
                 <div class="flex items-center gap-3 mb-4">
@@ -413,6 +419,7 @@
         let tasks = [];
         let settings = {
             webhookUrl: '',
+            syncToken: '',
             aiEndpointUrl: 'http://localhost:1234/v1/chat/completions',
             aiModelName: 'local-model',
             aiApiKey: '',
@@ -608,6 +615,12 @@
                 : 'id-' + Date.now() + '-' + Math.random().toString(36).slice(2);
         }
         const now = () => Date.now();
+        const isSyncConfigured = () => !!(settings.webhookUrl && settings.syncToken);
+        function authenticatedSyncUrl() {
+            const url = new URL(settings.webhookUrl);
+            url.searchParams.set('syncToken', settings.syncToken);
+            return url.toString();
+        }
         function getTimeString() {
             const n = new Date();
             return `[${String(n.getHours()).padStart(2, '0')}:${String(n.getMinutes()).padStart(2, '0')}]`;
@@ -641,7 +654,7 @@
 
         // ---- Cloud sync (push) ----
         window.triggerDriveSync = () => {
-            if (!settings.webhookUrl) return;
+            if (!isSyncConfigured()) return;
             updateSyncStatus('syncing');
             clearTimeout(syncTimeout);
             syncTimeout = setTimeout(async () => {
@@ -650,7 +663,7 @@
                         method: 'POST',
                         // text/plain にすると preflight(OPTIONS) を回避できる
                         headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-                        body: JSON.stringify({ tasks, categories: getGenres() }),
+                        body: JSON.stringify({ syncToken: settings.syncToken, tasks, categories: getGenres() }),
                         mode: 'no-cors'
                     });
                     updateSyncStatus('success');
@@ -678,10 +691,11 @@
             tasks = Array.from(byId.values());
         }
         async function pullFromCloud(showOverlay) {
-            if (!settings.webhookUrl) return;
+            if (!isSyncConfigured()) return;
             try {
                 if (showOverlay) showLoading(true);
-                const res = await fetch(settings.webhookUrl, { method: 'GET' });
+                const res = await fetch(authenticatedSyncUrl(), { method: 'GET' });
+                if (!res.ok) throw new Error('SYNC_PULL_' + res.status);
                 const remote = await res.json();
                 if (Array.isArray(remote)) {
                     mergeRemote(remote);
@@ -1372,13 +1386,14 @@
 
         window.saveSettings = async () => {
             settings.webhookUrl = document.getElementById('webhook-input').value.trim();
+            settings.syncToken = document.getElementById('sync-token-input').value.trim();
             settings.aiEndpointUrl = document.getElementById('ai-endpoint-input').value.trim() || 'http://localhost:1234/v1/chat/completions';
             settings.aiModelName = document.getElementById('ai-model-input').value.trim() || 'local-model';
             settings.aiApiKey = document.getElementById('ai-apikey-input').value.trim();
             await persistConfig();
             closeSettingsModal();
-            updateSyncStatus(settings.webhookUrl ? 'idle' : 'off');
-            if (settings.webhookUrl) {
+            updateSyncStatus(isSyncConfigured() ? 'idle' : 'off');
+            if (isSyncConfigured()) {
                 await pullFromCloud(true);
                 triggerDriveSync();
             }
@@ -1782,7 +1797,7 @@
             document.getElementById('debug-modal').addEventListener('click', (e) => { if (e.target.id === 'debug-modal') closeDebugModal(); });
             document.getElementById('genre-modal').addEventListener('click', (e) => { if (e.target.id === 'genre-modal') closeGenreModal(); });
             document.getElementById('genre-picker-modal').addEventListener('click', (e) => { if (e.target.id === 'genre-picker-modal') closeGenrePicker(); });
-            document.getElementById('sync-status').addEventListener('click', () => { if (settings.webhookUrl) pullFromCloud(true); });
+            document.getElementById('sync-status').addEventListener('click', () => { if (isSyncConfigured()) pullFromCloud(true); });
 
             // カレンダー遷移などから「戻る」で復帰した際(bfcache復帰)に再描画し、白紙化を防ぐ
             window.addEventListener('pageshow', (e) => { if (e.persisted && db) render(); });
@@ -1796,6 +1811,7 @@
                 const cfg = await dbGetMeta('config');
                 if (cfg) {
                     settings.webhookUrl = cfg.webhookUrl || '';
+                    settings.syncToken = cfg.syncToken || '';
                     settings.aiEndpointUrl = cfg.aiEndpointUrl || settings.aiEndpointUrl;
                     settings.aiModelName = cfg.aiModelName || settings.aiModelName;
                     settings.aiApiKey = cfg.aiApiKey || '';
@@ -1807,16 +1823,17 @@
                     await persistConfig();
                 }
                 document.getElementById('webhook-input').value = settings.webhookUrl;
+                document.getElementById('sync-token-input').value = settings.syncToken;
                 document.getElementById('ai-endpoint-input').value = settings.aiEndpointUrl;
                 document.getElementById('ai-model-input').value = settings.aiModelName;
                 document.getElementById('ai-apikey-input').value = settings.aiApiKey;
-                updateSyncStatus(settings.webhookUrl ? 'idle' : 'off');
+                updateSyncStatus(isSyncConfigured() ? 'idle' : 'off');
 
                 tasks = (await dbGetAllTasks()).map(normalizeTask);
                 sortTasks();
                 render();
 
-                if (settings.webhookUrl) {
+                if (isSyncConfigured()) {
                     await pullFromCloud(true);
                 }
 

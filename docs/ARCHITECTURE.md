@@ -36,22 +36,23 @@
 | **GitHub** | コード置き場・Pages 公開・`debug/` ログ置き場 | Fine-grained PAT（Contents: Read and write・このrepo限定）→ **Cloudflare Worker の `GITHUB_TOKEN`(Secret) に登録**。repo には置かない |
 | **Cloudflare Worker** (`api.edaaiapps.com`) | AIプロキシ＋デバッグログ受け口 | 環境変数: `GEMMA_API_KEYS` `CF_ACCESS_CLIENT_ID/SECRET` `UPSTREAM_BASE_URL` `ALLOWED_ORIGINS` `GITHUB_TOKEN` `GITHUB_REPO` `GITHUB_BRANCH` `DEBUG_LOG_DIR`。**コード更新は手動**（`cloudflare/worker-openai-proxy.js` をダッシュボードに貼って Deploy） |
 | **Cloudflare Access** | LM Studio への入口を保護 | Service Token（Worker の環境変数に登録済み） |
-| **Google (GAS)** | Drive 同期・カレンダー連携 | GAS プロジェクト（`gas/Code.gs` を手動デプロイ）。WebアプリURL はアプリの設定画面に登録 |
+| **Google (GAS)** | Drive 同期・カレンダー連携 | GAS プロジェクトのScript Propertiesに`SYNC_TOKEN`を登録。WebアプリURLと同期キーは各端末のIndexedDBに保存 |
 | **自宅PC (LM Studio)** | Gemma モデルの実行 | `cloudflare/start-lmstudio-server.bat` で常時稼働（`cloudflare/LM_STUDIO_ALWAYS_ON.md` 参照） |
 | **利用者ブラウザ** | アプリ実行 | IndexedDB に GAS URL・AIエンドポイント・APIキーを保存（端末ローカルのみ） |
 
-> **原則**: トークン・APIキーは「Worker の環境変数」か「端末の IndexedDB」のどちらかにしか存在しない。
+> **原則**: トークン・APIキーは「Worker / GAS の秘密設定」か「端末の IndexedDB」のどちらかにしか存在しない。
 > リポジトリ・HTML・チャットには書かない。
 
 ## 主要なデータの流れ
 
 ### タスク同期（GAS）
-- push: タスク変更時に `{ tasks, categories }` を GAS へ POST（`text/plain` で preflight 回避）
-- pull: 起動時・同期アイコンで GET → `updatedAt` ベースの LWW でマージ
+- push: タスク変更時に同期キー付きで`{ tasks, categories }`をGASへPOST
+- pull: 起動時・同期アイコンで同期キー付きGET → `updatedAt`ベースのLWWでマージ
+- GASは認証成功後に件数・文字長・リクエストサイズを検証
 
 ### NotebookLM 自動更新
 1. GASがタスク変更のたびに、同じIDのGoogleドキュメント本文を上書き
-2. ローカルn8nがWindows上の`notebooklm-py`へ鮮度確認を定期実行
+2. Windowsタスクスケジューラが`notebooklm-py`へ鮮度確認を定期実行
 3. NotebookLMが更新ありと判定したときだけ再同期を実行
 4. NotebookLMに登録済みのGoogleドキュメントソースを再同期
 

@@ -24,20 +24,22 @@ GAS の `ContentService` ではレスポンスヘッダを自前で設定でき�
 1. [script.google.com](https://script.google.com/) で新規プロジェクト作成
 2. `Code.gs` の内容を貼り付け（`appsscript.json` はプロジェクト設定で「マニフェストを表示」して反映）
 3. `FOLDER_ID` を自分の Drive フォルダIDに設定（URLの `folders/` 以降）
-4. **デプロイ → 新しいデプロイ → 種類「ウェブアプリ」**
+4. プロジェクトの設定 → スクリプト プロパティへ`SYNC_TOKEN`を追加
+5. **デプロイ → 新しいデプロイ → 種類「ウェブアプリ」**
    - 次のユーザーとして実行: **自分**
    - アクセスできるユーザー: **全員（匿名含む）**
-5. 発行された **ウェブアプリ URL**（`.../exec`）をアプリの「同期設定」に登録
-6. 初回は Drive / Calendar の権限承認が必要
-7. `NOTEBOOK_DOC_ID`に、NotebookLM用の固定GoogleドキュメントIDを設定する
-8. GASエディタで関数`setupNotebookDocument`を選び、1回だけ「実行」する
-9. 実行ログに表示された固定GoogleドキュメントをNotebookLMのソースとして追加する
+6. 発行されたウェブアプリURLと`SYNC_TOKEN`をアプリの同期設定へ登録
+7. 初回は Drive / Calendar の権限承認が必要
+8. `NOTEBOOK_DOC_ID`に、NotebookLM用の固定GoogleドキュメントIDを設定する
+9. GASエディタで関数`setupNotebookDocument`を選び、1回だけ「実行」する
+10. 実行ログに表示された固定GoogleドキュメントをNotebookLMのソースとして追加する
 
 ## アプリ ↔ GAS の契約（インターフェース）
 
 ### POST（アプリ → GAS / push）
 ```json
 {
+  "syncToken": "Script Propertiesと同じランダムキー",
   "tasks": [ /* タスク配列 */ ],
   "categories": [ /* ジャンルID・名前・色 */ ]
 }
@@ -46,13 +48,13 @@ GAS の `ContentService` ではレスポンスヘッダを自前で設定でき�
 - `tasks`と`categories` → 固定IDのGoogleドキュメントへ整形して上書き（NotebookLM用）
 
 ### GET（GAS → アプリ / pull）
+- クエリ`syncToken`が必要
 - `TaskData.json` の中身（tasks配列のJSON）を返す
 - 無ければ `[]`
 
 ## NotebookLM自動再同期
 
 Googleドキュメントの更新だけではNotebookLMへ自動反映されません。
-`n8n/taskjournal-notebooklm-sync.template.json`をローカルn8nへインポートし、NotebookLM側の鮮度確認後に
-必要な場合だけ`scripts/notebooklm-refresh.ps1`から再同期する構成を使用します。
+Windowsタスクスケジューラから`scripts/notebooklm-refresh.ps1`を2分ごとに実行し、NotebookLM側の鮮度確認後に必要な場合だけ再同期します。
 
 NotebookLM個人版には公式の再同期APIがないため、非公式の`notebooklm-py`を使用します。

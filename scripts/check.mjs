@@ -48,15 +48,33 @@ for (const [f, ext] of files) {
     checkSource(f, readFileSync(join(root, f), 'utf8'), ext);
 }
 
-// 3) n8nワークフローJSON
-const workflowFile = 'n8n/taskjournal-notebooklm-sync.template.json';
-try {
-    JSON.parse(readFileSync(join(root, workflowFile), 'utf8'));
-    console.log(`OK  ${workflowFile}`);
-} catch (error) {
-    failed++;
-    console.error(`NG  ${workflowFile}\n${error.message}`);
+function checkPowerShell(file) {
+    const checker = [
+        'param([Parameter(Mandatory=$true)][string]$Path)',
+        '$ErrorActionPreference = "Stop"',
+        '[void][scriptblock]::Create([IO.File]::ReadAllText($Path))',
+    ].join('\n');
+    const dir = mkdtempSync(join(tmpdir(), 'tj-check-'));
+    const checkerFile = join(dir, 'check.ps1');
+    writeFileSync(checkerFile, checker);
+    const r = spawnSync('powershell.exe', [
+        '-NoProfile',
+        '-ExecutionPolicy', 'Bypass',
+        '-File', checkerFile,
+        join(root, file),
+    ], { encoding: 'utf8' });
+    rmSync(dir, { recursive: true, force: true });
+    if (r.status === 0) {
+        console.log(`OK  ${file}`);
+    } else {
+        failed++;
+        console.error(`NG  ${file}\n${(r.stderr || r.stdout || '').trim()}`);
+    }
 }
+
+// 3) Windows タスクスケジューラ用 PowerShell
+checkPowerShell('scripts/notebooklm-refresh.ps1');
+checkPowerShell('scripts/register-notebooklm-sync-task.ps1');
 
 console.log(failed ? `\n${failed} 件の問題があります` : '\nすべてOK');
 process.exit(failed ? 1 : 0);

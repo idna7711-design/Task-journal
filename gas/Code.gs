@@ -21,10 +21,19 @@
 const FOLDER_ID = '1AxPEwynYHM_vKjsXLKKgpj3pxxMpgZds';
 const JSON_FILE_NAME = 'TaskData.json';
 const NOTEBOOK_DOC_ID = '1avg594_Kg4HqXNFZijWatgSn1g1ofTjXa5eeOiHHdSE';
+const SYNC_TOKEN_PROPERTY = 'SYNC_TOKEN';
+const MAX_BODY_BYTES = 1000000;
+const MAX_TASKS = 1000;
+const MAX_CATEGORIES = 100;
+const MAX_LOGS_PER_TASK = 200;
 
 function doPost(e) {
   if (!e || !e.postData) {
     return ContentService.createTextOutput('No data');
+  }
+
+  if (Number(e.postData.length || 0) > MAX_BODY_BYTES) {
+    return ContentService.createTextOutput('Error: payload too large');
   }
 
   let data;
@@ -34,8 +43,22 @@ function doPost(e) {
     return ContentService.createTextOutput('Error: invalid JSON');
   }
 
+  const queryToken = e && e.parameter ? e.parameter.syncToken : '';
+  if (!isAuthorized(data.syncToken || queryToken)) {
+    return ContentService.createTextOutput('Unauthorized');
+  }
+
   if (!Array.isArray(data.tasks)) {
     return ContentService.createTextOutput('Error: tasks must be an array');
+  }
+
+  let safeTasks;
+  let safeCategories;
+  try {
+    safeTasks = validateTasks(data.tasks);
+    safeCategories = validateCategories(data.categories);
+  } catch (err) {
+    return ContentService.createTextOutput('Error: ' + err.message);
   }
 
   const lock = LockService.getScriptLock();
@@ -44,11 +67,11 @@ function doPost(e) {
     const folder = DriveApp.getFolderById(FOLDER_ID);
 
     // 1. 複数端末同期用DBを更新
-    upsertFile(folder, JSON_FILE_NAME, JSON.stringify(data.tasks));
+    upsertFile(folder, JSON_FILE_NAME, JSON.stringify(safeTasks));
 
     // 2. NotebookLMが参照する固定IDのGoogleドキュメントを更新
     const doc = getNotebookDocument();
-    renderNotebookDocument(doc, data.tasks, data.categories);
+    renderNotebookDocument(doc, safeTasks, safeCategories);
   } finally {
     lock.releaseLock();
   }
@@ -84,6 +107,12 @@ function setupNotebookDocument() {
 }
 
 function doGet(e) {
+  if (!isAuthorized(e && e.parameter ? e.parameter.syncToken : '')) {
+    return ContentService
+      .createTextOutput('{"error":"Unauthorized"}')
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+
   try {
     const folder = DriveApp.getFolderById(FOLDER_ID);
     const files = folder.getFilesByName(JSON_FILE_NAME);
@@ -109,6 +138,65 @@ function upsertFile(folder, name, content) {
   } else {
     folder.createFile(name, content, MimeType.PLAIN_TEXT);
   }
+}
+
+function isAuthorized(candidate) {
+  const expected = PropertiesService.getScriptProperties().getProperty(SYNC_TOKEN_PROPERTY);
+  return !!expected && typeof candidate === 'string' && candidate === expected;
+}
+
+function validateTasks(tasks) {
+  if (tasks.length > MAX_TASKS) throw new Error('too many tasks');
+  return tasks.map(function(task) {
+    if (!task || typeof task !== 'object') throw new Error('invalid task');
+    const logs = Array.isArray(task.logs) ? task.logs : [];
+    if (logs.length > MAX_LOGS_PER_TASK) throw new Error('too many task logs');
+    return {
+      id: boundedString(task.id, 100, 'task id'),
+      text: boundedString(task.text, 500, 'task text'),
+      dueDate: optionalString(task.dueDate, 40, 'due date'),
+      category: optionalString(task.category, 100, 'category'),
+      status: ['todo', 'doing', 'done'].indexOf(task.status) >= 0 ? task.status : 'todo',
+      pinned: !!task.pinned,
+      logs: logs.map(function(log) { return boundedString(log, 1000, 'task log'); }),
+      createdAt: finiteNumber(task.createdAt),
+      updatedAt: finiteNumber(task.updatedAt)
+    };
+  });
+}
+
+function validateCategories(categories) {
+  if (categories == null) return [];
+  if (!Array.isArray(categories) || categories.length > MAX_CATEGORIES) {
+    throw new Error('invalid categories');
+  }
+  return categories.map(function(category) {
+    if (!category || typeof category !== 'object') throw new Error('invalid category');
+    return {
+      id: boundedString(category.id, 100, 'category id'),
+      name: boundedString(category.name, 100, 'category name'),
+      color: optionalString(category.color, 30, 'category color')
+    };
+  });
+}
+
+function boundedString(value, maxLength, label) {
+  if (typeof value !== 'string' || !value || value.length > maxLength) {
+    throw new Error('invalid ' + label);
+  }
+  return value;
+}
+
+function optionalString(value, maxLength, label) {
+  if (value == null || value === '') return null;
+  if (typeof value !== 'string' || value.length > maxLength) {
+    throw new Error('invalid ' + label);
+  }
+  return value;
+}
+
+function finiteNumber(value) {
+  return typeof value === 'number' && isFinite(value) ? value : Date.now();
 }
 
 /** NotebookLMへ登録済みの固定ドキュメントを取得する。 */
