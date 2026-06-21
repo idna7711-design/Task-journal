@@ -1,11 +1,12 @@
 # WindowsでのNotebookLM自動同期
 
-固定Googleドキュメントの更新確認とNotebookLM再同期は、Windowsタスクスケジューラで2分ごとに実行します。
+固定Googleドキュメントの更新確認とNotebookLM再同期は、Windowsタスクスケジューラで15分ごとに実行します。
 n8nの`Execute Command`は使用しません。
+PowerShellは非表示・非対話モードで実行するため、作業中にウィンドウや入力フォーカスを奪いません。
 
 ## 構成
 
-1. タスクスケジューラが`scripts/notebooklm-refresh.ps1`を2分ごとに実行
+1. タスクスケジューラが`scripts/notebooklm-refresh.ps1`を15分ごとに非表示実行
 2. `notebooklm source stale`でGoogleドキュメントの鮮度を確認
 3. 更新がある場合だけ`notebooklm source refresh`を実行
 
@@ -19,3 +20,6 @@ n8nの`Execute Command`は使用しません。
 
 NotebookLM個人版の非公開APIを利用するため、Google側の仕様変更で停止する可能性があります。
 停止時は`notebooklm auth check --test`とタスクスケジューラの実行結果を確認してください。
+
+NotebookLMのGoogleドライブソースは、このアカウントで固定Googleドキュメント更新後9分以上待っても
+自動取り込みされなかったため、Windowsタスクを撤去せずフォールバックとして維持します。
