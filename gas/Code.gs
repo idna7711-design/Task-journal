@@ -221,8 +221,12 @@ function renderNotebookDocument(doc, tasks, categories) {
   const active = tasks.filter(function(task) { return task && task.status !== 'done'; });
   const done = tasks.filter(function(task) { return task && task.status === 'done'; });
   const body = doc.getBody();
-  body.clear();
+  // Body.clear()は文書セクションの最終要素まで削除しようとして失敗する場合がある。
+  // 空要素を一時的に残し、その後ろにタイトル段落を追加してから空要素を削除する。
+  // 削除時点ではタイトル段落が末尾にあるため、最終要素の削除にはならない。
+  body.setText('');
   body.appendParagraph('TaskJournal').setHeading(DocumentApp.ParagraphHeading.TITLE);
+  body.removeChild(body.getChild(0));
   body.appendParagraph('最終更新: ' + Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm:ss'));
   appendTaskSection(body, '進行中・未完了', active, categoryNames);
   appendTaskSection(body, '完了済み', done, categoryNames);
