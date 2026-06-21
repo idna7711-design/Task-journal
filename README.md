@@ -9,7 +9,7 @@
 
 - 📝 タスク管理（ジャンル分け・メモ・期日・Googleカレンダー連携）
 - ☁️ Google Drive 自動同期（GAS Webhook 経由・複数端末OK）
-- 📚 固定Googleドキュメント経由のNotebookLM自動更新（Windowsタスクスケジューラ使用）
+- 📚 固定Googleドキュメント経由のNotebookLM自動更新（非表示のWindowsタスクで最大15分ごと）
 - 🤖 ローカルAI（LM Studio / Gemma）によるタスク自動分類
 - 💡 「今日は何の日」豆知識（Wikipedia を根拠にAIが生成・出典リンク付き）
 - 🐛 エラー時のデバッグログ自動クラウド保存（`debug/` へ自動コミット）

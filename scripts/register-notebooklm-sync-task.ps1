@@ -47,6 +47,8 @@ Copy-Item -LiteralPath $refreshScript -Destination $installedRefreshScript -Forc
 
 $arguments = @(
     '-NoProfile'
+    '-NonInteractive'
+    '-WindowStyle Hidden'
     '-ExecutionPolicy Bypass'
     "-File `"$installedRefreshScript`""
     "-NotebookId `"$NotebookId`""
@@ -56,11 +58,12 @@ $arguments = @(
 ) -join ' '
 
 $action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument $arguments
-$trigger = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(1) -RepetitionInterval (New-TimeSpan -Minutes 2)
+$trigger = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(1) -RepetitionInterval (New-TimeSpan -Minutes 15)
 $settings = New-ScheduledTaskSettingsSet `
     -StartWhenAvailable `
+    -Hidden `
     -MultipleInstances IgnoreNew `
-    -ExecutionTimeLimit (New-TimeSpan -Minutes 1)
+    -ExecutionTimeLimit (New-TimeSpan -Minutes 10)
 $principal = New-ScheduledTaskPrincipal `
     -UserId "$env:USERDOMAIN\$env:USERNAME" `
     -LogonType Interactive `

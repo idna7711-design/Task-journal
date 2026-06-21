@@ -52,12 +52,13 @@
 
 ### NotebookLM 自動更新
 1. GASがタスク変更のたびに、同じIDのGoogleドキュメント本文を上書き
-2. Windowsタスクスケジューラが`notebooklm-py`へ鮮度確認を定期実行
+2. Windowsタスクスケジューラが15分ごとに非表示で`notebooklm-py`へ鮮度確認を実行
 3. NotebookLMが更新ありと判定したときだけ再同期を実行
 4. NotebookLMに登録済みのGoogleドキュメントソースを再同期
 
 > NotebookLM個人版に公式の自動再同期APIはないため、手順3・4では非公式ツールを使用する。
 > 認証切れやNotebookLM側の仕様変更時は、再ログインやワークフロー修正が必要になる場合がある。
+> 固定Googleドキュメント更新後9分以上待つ実機テストでNotebookLMの自動取り込みを確認できなかったため、Windows処理は撤去していない。
 
 ### 豆知識（Wikipedia RAG）
 1. 日本語Wikipedia「M月D日」記事の記念日セクションを MediaWiki API で取得
