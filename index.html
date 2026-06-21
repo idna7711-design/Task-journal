@@ -412,7 +412,7 @@
     <script>
         // ===== TaskJournal (IndexedDB 永続化版) =====
         // ローカルの IndexedDB を「真実」とし、GAS(Drive) と push+pull で同期する。
-        // - push: 変更時に { tasks, categories } を POST（no-cors / text-plain で preflight回避）
+        // - push: 変更時に { tasks, categories } を text/plain でPOSTし、GASの応答を確認
         // - pull: 起動時・同期アイコンクリック時に GET して updatedAt ベースの LWW でマージ
 
         // ---- State ----
@@ -659,13 +659,16 @@
             clearTimeout(syncTimeout);
             syncTimeout = setTimeout(async () => {
                 try {
-                    await fetch(settings.webhookUrl, {
+                    const response = await fetch(settings.webhookUrl, {
                         method: 'POST',
                         // text/plain にすると preflight(OPTIONS) を回避できる
                         headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-                        body: JSON.stringify({ syncToken: settings.syncToken, tasks, categories: getGenres() }),
-                        mode: 'no-cors'
+                        body: JSON.stringify({ syncToken: settings.syncToken, tasks, categories: getGenres() })
                     });
+                    const result = (await response.text()).trim();
+                    if (!response.ok || result !== 'Success') {
+                        throw new Error(result || `HTTP ${response.status}`);
+                    }
                     updateSyncStatus('success');
                 } catch (e) {
                     console.error('Drive sync error', e);

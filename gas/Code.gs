@@ -62,8 +62,8 @@ function doPost(e) {
   }
 
   const lock = LockService.getScriptLock();
-  lock.waitLock(30000);
   try {
+    lock.waitLock(30000);
     const folder = DriveApp.getFolderById(FOLDER_ID);
 
     // 1. 複数端末同期用DBを更新
@@ -72,8 +72,13 @@ function doPost(e) {
     // 2. NotebookLMが参照する固定IDのGoogleドキュメントを更新
     const doc = getNotebookDocument();
     renderNotebookDocument(doc, safeTasks, safeCategories);
+  } catch (err) {
+    console.error('TaskJournal sync failed: ' + (err && err.stack ? err.stack : err));
+    return ContentService.createTextOutput(
+      'Error: ' + (err && err.message ? err.message : 'sync failed')
+    );
   } finally {
-    lock.releaseLock();
+    if (lock.hasLock()) lock.releaseLock();
   }
 
   // ※ カレンダー登録はアプリの「カレンダーに追加」ボタン押下時のみ行う。
