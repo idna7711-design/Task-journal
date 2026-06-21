@@ -2,9 +2,9 @@
  * TaskJournal バックエンド (Google Apps Script)
  *
  * 役割:
- *   doPost … アプリから { tasks, markdown } を受け取り
- *            - TaskData.json   … 同期用DB（tasks配列）を Drive に保存
- *            - TaskJournal.md  … NotebookLM用Markdownを Drive に保存
+ *   doPost … アプリから { tasks, categories } を受け取り
+ *            - TaskData.json … 同期用DB（tasks配列）を Drive に保存
+ *            - 固定IDのGoogleドキュメント … NotebookLM用のタスク一覧を上書き
  *            （カレンダー登録はアプリの「カレンダーに追加」ボタンからのみ。GAS自動同期は廃止）
  *   doGet  … TaskData.json の中身（tasks配列）をJSONで返す（他デバイスからのpull用）
  *
@@ -19,12 +19,21 @@
 // ▼ Driveフォルダの「ID」だけを指定（URL全体ではない）
 //   例: https://drive.google.com/drive/folders/XXXX の XXXX 部分
 const FOLDER_ID = '1AxPEwynYHM_vKjsXLKKgpj3pxxMpgZds';
-const MD_FILE_NAME = 'TaskJournal.md';
 const JSON_FILE_NAME = 'TaskData.json';
+const NOTEBOOK_DOC_ID = '1avg594_Kg4HqXNFZijWatgSn1g1ofTjXa5eeOiHHdSE';
+const SYNC_TOKEN_PROPERTY = 'SYNC_TOKEN';
+const MAX_BODY_BYTES = 1000000;
+const MAX_TASKS = 1000;
+const MAX_CATEGORIES = 100;
+const MAX_LOGS_PER_TASK = 200;
 
 function doPost(e) {
   if (!e || !e.postData) {
     return ContentService.createTextOutput('No data');
+  }
+
+  if (Number(e.postData.length || 0) > MAX_BODY_BYTES) {
+    return ContentService.createTextOutput('Error: payload too large');
   }
 
   let data;
@@ -34,16 +43,37 @@ function doPost(e) {
     return ContentService.createTextOutput('Error: invalid JSON');
   }
 
-  const folder = DriveApp.getFolderById(FOLDER_ID);
-
-  // 1. 同期用DB（tasks配列）を保存
-  if (data.tasks) {
-    upsertFile(folder, JSON_FILE_NAME, JSON.stringify(data.tasks));
+  const queryToken = e && e.parameter ? e.parameter.syncToken : '';
+  if (!isAuthorized(data.syncToken || queryToken)) {
+    return ContentService.createTextOutput('Unauthorized');
   }
 
-  // 2. NotebookLM用Markdownを保存
-  if (data.markdown) {
-    upsertFile(folder, MD_FILE_NAME, data.markdown);
+  if (!Array.isArray(data.tasks)) {
+    return ContentService.createTextOutput('Error: tasks must be an array');
+  }
+
+  let safeTasks;
+  let safeCategories;
+  try {
+    safeTasks = validateTasks(data.tasks);
+    safeCategories = validateCategories(data.categories);
+  } catch (err) {
+    return ContentService.createTextOutput('Error: ' + err.message);
+  }
+
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    const folder = DriveApp.getFolderById(FOLDER_ID);
+
+    // 1. 複数端末同期用DBを更新
+    upsertFile(folder, JSON_FILE_NAME, JSON.stringify(safeTasks));
+
+    // 2. NotebookLMが参照する固定IDのGoogleドキュメントを更新
+    const doc = getNotebookDocument();
+    renderNotebookDocument(doc, safeTasks, safeCategories);
+  } finally {
+    lock.releaseLock();
   }
 
   // ※ カレンダー登録はアプリの「カレンダーに追加」ボタン押下時のみ行う。
@@ -53,7 +83,36 @@ function doPost(e) {
   return ContentService.createTextOutput('Success');
 }
 
+/**
+ * 初回セットアップ用。GASエディタから1回実行すると、固定Googleドキュメントへ
+ * 現在のTaskData.jsonを反映する。戻り値のURLをNotebookLMへソース登録する。
+ */
+function setupNotebookDocument() {
+  const folder = DriveApp.getFolderById(FOLDER_ID);
+  const doc = getNotebookDocument();
+  const url = doc.getUrl();
+  let tasks = [];
+  const files = folder.getFilesByName(JSON_FILE_NAME);
+  if (files.hasNext()) {
+    try {
+      const parsed = JSON.parse(files.next().getBlob().getDataAsString());
+      if (Array.isArray(parsed)) tasks = parsed;
+    } catch (err) {
+      // JSONが壊れていても空のドキュメントを作成し、次回同期で回復できるようにする。
+    }
+  }
+  renderNotebookDocument(doc, tasks, []);
+  console.log(url);
+  return url;
+}
+
 function doGet(e) {
+  if (!isAuthorized(e && e.parameter ? e.parameter.syncToken : '')) {
+    return ContentService
+      .createTextOutput('{"error":"Unauthorized"}')
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+
   try {
     const folder = DriveApp.getFolderById(FOLDER_ID);
     const files = folder.getFilesByName(JSON_FILE_NAME);
@@ -79,4 +138,118 @@ function upsertFile(folder, name, content) {
   } else {
     folder.createFile(name, content, MimeType.PLAIN_TEXT);
   }
+}
+
+function isAuthorized(candidate) {
+  const expected = PropertiesService.getScriptProperties().getProperty(SYNC_TOKEN_PROPERTY);
+  return !!expected && typeof candidate === 'string' && candidate === expected;
+}
+
+function validateTasks(tasks) {
+  if (tasks.length > MAX_TASKS) throw new Error('too many tasks');
+  return tasks.map(function(task) {
+    if (!task || typeof task !== 'object') throw new Error('invalid task');
+    const logs = Array.isArray(task.logs) ? task.logs : [];
+    if (logs.length > MAX_LOGS_PER_TASK) throw new Error('too many task logs');
+    return {
+      id: boundedString(task.id, 100, 'task id'),
+      text: boundedString(task.text, 500, 'task text'),
+      dueDate: optionalString(task.dueDate, 40, 'due date'),
+      category: optionalString(task.category, 100, 'category'),
+      status: ['todo', 'doing', 'done'].indexOf(task.status) >= 0 ? task.status : 'todo',
+      pinned: !!task.pinned,
+      logs: logs.map(function(log) { return boundedString(log, 1000, 'task log'); }),
+      createdAt: finiteNumber(task.createdAt),
+      updatedAt: finiteNumber(task.updatedAt)
+    };
+  });
+}
+
+function validateCategories(categories) {
+  if (categories == null) return [];
+  if (!Array.isArray(categories) || categories.length > MAX_CATEGORIES) {
+    throw new Error('invalid categories');
+  }
+  return categories.map(function(category) {
+    if (!category || typeof category !== 'object') throw new Error('invalid category');
+    return {
+      id: boundedString(category.id, 100, 'category id'),
+      name: boundedString(category.name, 100, 'category name'),
+      color: optionalString(category.color, 30, 'category color')
+    };
+  });
+}
+
+function boundedString(value, maxLength, label) {
+  if (typeof value !== 'string' || !value || value.length > maxLength) {
+    throw new Error('invalid ' + label);
+  }
+  return value;
+}
+
+function optionalString(value, maxLength, label) {
+  if (value == null || value === '') return null;
+  if (typeof value !== 'string' || value.length > maxLength) {
+    throw new Error('invalid ' + label);
+  }
+  return value;
+}
+
+function finiteNumber(value) {
+  return typeof value === 'number' && isFinite(value) ? value : Date.now();
+}
+
+/** NotebookLMへ登録済みの固定ドキュメントを取得する。 */
+function getNotebookDocument() {
+  return DocumentApp.openById(NOTEBOOK_DOC_ID);
+}
+
+/** タスク配列をNotebookLM向けの読みやすいGoogleドキュメントへ変換する。 */
+function renderNotebookDocument(doc, tasks, categories) {
+  const categoryNames = {};
+  if (Array.isArray(categories)) {
+    categories.forEach(function(category) {
+      if (category && category.id) categoryNames[category.id] = category.name || category.id;
+    });
+  }
+
+  const active = tasks.filter(function(task) { return task && task.status !== 'done'; });
+  const done = tasks.filter(function(task) { return task && task.status === 'done'; });
+  const body = doc.getBody();
+  body.clear();
+  body.appendParagraph('TaskJournal').setHeading(DocumentApp.ParagraphHeading.TITLE);
+  body.appendParagraph('最終更新: ' + Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm:ss'));
+  appendTaskSection(body, '進行中・未完了', active, categoryNames);
+  appendTaskSection(body, '完了済み', done, categoryNames);
+  doc.saveAndClose();
+}
+
+function appendTaskSection(body, title, tasks, categoryNames) {
+  body.appendParagraph(title).setHeading(DocumentApp.ParagraphHeading.HEADING1);
+  if (tasks.length === 0) {
+    body.appendParagraph('なし');
+    return;
+  }
+
+  tasks.forEach(function(task) {
+    body.appendParagraph(String(task.text || '（名称なし）'))
+      .setHeading(DocumentApp.ParagraphHeading.HEADING2);
+    const status = task.status === 'doing' ? '進行中' : (task.status === 'done' ? '完了' : '未着手');
+    body.appendListItem('状態: ' + status).setGlyphType(DocumentApp.GlyphType.BULLET);
+    if (task.category) {
+      body.appendListItem('カテゴリ: ' + (categoryNames[task.category] || task.category))
+        .setGlyphType(DocumentApp.GlyphType.BULLET);
+    }
+    if (task.dueDate) {
+      body.appendListItem('予定日時: ' + task.dueDate).setGlyphType(DocumentApp.GlyphType.BULLET);
+    }
+    if (Array.isArray(task.logs) && task.logs.length > 0) {
+      body.appendListItem('ログ').setGlyphType(DocumentApp.GlyphType.BULLET);
+      task.logs.forEach(function(log) {
+        body.appendListItem(String(log))
+          .setGlyphType(DocumentApp.GlyphType.BULLET)
+          .setNestingLevel(1);
+      });
+    }
+  });
 }
