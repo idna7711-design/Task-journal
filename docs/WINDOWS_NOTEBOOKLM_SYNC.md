@@ -2,13 +2,18 @@
 
 固定Googleドキュメントの更新確認とNotebookLM再同期は、Windowsタスクスケジューラで15分ごとに実行します。
 n8nの`Execute Command`は使用しません。
-PowerShellは非表示・非対話モードで実行するため、作業中にウィンドウや入力フォーカスを奪いません。
+PowerShellとNotebookLM CLIはどちらもウィンドウを作らずに実行するため、
+作業中に画面や入力フォーカスを奪いません。
 
 ## 構成
 
 1. タスクスケジューラが`scripts/notebooklm-refresh.ps1`を15分ごとに非表示実行
-2. `notebooklm source stale`でGoogleドキュメントの鮮度を確認
-3. 更新がある場合だけ`notebooklm source refresh`を実行
+2. `notebooklm auth refresh`で保存済みのGoogle認証を延命
+3. `notebooklm source stale`でGoogleドキュメントの鮮度を確認
+4. 更新がある場合だけ`notebooklm source refresh`を実行
+
+すべてのNotebookLM CLI呼び出しは、Windowsの`CreateNoWindow`を指定して実行します。
+初回またはGoogle側で認証が失効した場合だけ、手動で`notebooklm login`を実行してください。
 
 ## 登録
 
