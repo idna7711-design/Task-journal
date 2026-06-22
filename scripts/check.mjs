@@ -72,9 +72,25 @@ function checkPowerShell(file) {
     }
 }
 
+function checkVbScript(file) {
+    const r = spawnSync('cscript.exe', [
+        '//B',
+        '//NoLogo',
+        join(root, file),
+        '--self-test',
+    ], { encoding: 'utf8' });
+    if (r.status === 0) {
+        console.log(`OK  ${file}`);
+    } else {
+        failed++;
+        console.error(`NG  ${file}\n${(r.stderr || r.stdout || '').trim()}`);
+    }
+}
+
 // 3) Windows タスクスケジューラ用 PowerShell
 checkPowerShell('scripts/notebooklm-refresh.ps1');
 checkPowerShell('scripts/register-notebooklm-sync-task.ps1');
+checkVbScript('scripts/notebooklm-sync-hidden.vbs');
 
 console.log(failed ? `\n${failed} 件の問題があります` : '\nすべてOK');
 process.exit(failed ? 1 : 0);

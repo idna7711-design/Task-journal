@@ -18,10 +18,12 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $refreshScript = Join-Path $PSScriptRoot 'notebooklm-refresh.ps1'
+$hiddenLauncher = Join-Path $PSScriptRoot 'notebooklm-sync-hidden.vbs'
 $installDirectory = Join-Path $env:LOCALAPPDATA 'TaskJournal\Sync'
 $installedRefreshScript = Join-Path $installDirectory 'notebooklm-refresh.ps1'
+$installedHiddenLauncher = Join-Path $installDirectory 'notebooklm-sync-hidden.vbs'
 
-foreach ($path in @($refreshScript, $NotebookLmCommand, $NotebookLmHome)) {
+foreach ($path in @($refreshScript, $hiddenLauncher, $NotebookLmCommand, $NotebookLmHome)) {
     if ($path.Contains('"') -or -not (Test-Path -LiteralPath $path)) {
         throw "Required path is invalid or missing: $path"
     }
@@ -44,20 +46,32 @@ foreach ($account in @("$env:USERDOMAIN\$env:USERNAME", 'NT AUTHORITY\SYSTEM', '
 }
 Set-Acl -LiteralPath $installDirectory -AclObject $acl
 Copy-Item -LiteralPath $refreshScript -Destination $installedRefreshScript -Force
+Copy-Item -LiteralPath $hiddenLauncher -Destination $installedHiddenLauncher -Force
 
-$arguments = @(
+$powershellArguments = @(
     '-NoProfile'
     '-NonInteractive'
-    '-WindowStyle Hidden'
     '-ExecutionPolicy Bypass'
-    "-File `"$installedRefreshScript`""
-    "-NotebookId `"$NotebookId`""
-    "-SourceId `"$SourceId`""
-    "-NotebookLmCommand `"$NotebookLmCommand`""
-    "-NotebookLmHome `"$NotebookLmHome`""
-) -join ' '
+    '-File'
+    $installedRefreshScript
+    '-NotebookId'
+    $NotebookId
+    '-SourceId'
+    $SourceId
+    '-NotebookLmCommand'
+    $NotebookLmCommand
+    '-NotebookLmHome'
+    $NotebookLmHome
+)
 
-$action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument $arguments
+$arguments = @(
+    '//B'
+    '//NoLogo'
+    "`"$installedHiddenLauncher`""
+) + @($powershellArguments | ForEach-Object { "`"$_`"" })
+
+$wscript = Join-Path $env:SystemRoot 'System32\wscript.exe'
+$action = New-ScheduledTaskAction -Execute $wscript -Argument ($arguments -join ' ')
 $trigger = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(1) -RepetitionInterval (New-TimeSpan -Minutes 15)
 $settings = New-ScheduledTaskSettingsSet `
     -StartWhenAvailable `
@@ -75,7 +89,7 @@ Register-ScheduledTask `
     -Trigger $trigger `
     -Settings $settings `
     -Principal $principal `
-    -Description 'Refresh the TaskJournal NotebookLM source when its Google Doc changes.' `
+    -Description 'Refresh the TaskJournal NotebookLM source without showing a console window.' `
     -Force | Out-Null
 
 Write-Output "Scheduled task registered: $TaskName"

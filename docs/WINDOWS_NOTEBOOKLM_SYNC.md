@@ -2,15 +2,17 @@
 
 固定Googleドキュメントの更新確認とNotebookLM再同期は、Windowsタスクスケジューラで15分ごとに実行します。
 n8nの`Execute Command`は使用しません。
-PowerShellとNotebookLM CLIはどちらもウィンドウを作らずに実行するため、
+コンソールを持たない`wscript.exe`からPowerShellを非表示で起動し、
+NotebookLM CLIもウィンドウを作らずに実行するため、
 作業中に画面や入力フォーカスを奪いません。
 
 ## 構成
 
-1. タスクスケジューラが`scripts/notebooklm-refresh.ps1`を15分ごとに非表示実行
-2. `notebooklm auth refresh`で保存済みのGoogle認証を延命
-3. `notebooklm source stale`でGoogleドキュメントの鮮度を確認
-4. 更新がある場合だけ`notebooklm source refresh`を実行
+1. タスクスケジューラが`scripts/notebooklm-sync-hidden.vbs`を15分ごとに実行
+2. `wscript.exe`がPowerShellを最初から非表示で起動
+3. `notebooklm auth refresh`で保存済みのGoogle認証を延命
+4. `notebooklm source stale`でGoogleドキュメントの鮮度を確認
+5. 更新がある場合だけ`notebooklm source refresh`を実行
 
 すべてのNotebookLM CLI呼び出しは、Windowsの`CreateNoWindow`を指定して実行します。
 初回またはGoogle側で認証が失効した場合だけ、手動で`notebooklm login`を実行してください。
@@ -20,7 +22,7 @@ PowerShellとNotebookLM CLIはどちらもウィンドウを作らずに実行�
 `scripts/register-notebooklm-sync-task.ps1`へNotebookLMのノートブックID、ソースID、CLIパス、認証保存先を渡します。
 登録タスク名は`TaskJournal-NotebookLM-Sync`です。Windowsへのログイン中だけ、現在のユーザー権限で動作します。
 
-定期実行するPowerShellは`%LOCALAPPDATA%\TaskJournal\Sync`へコピーされ、
+定期実行するPowerShellと非表示起動スクリプトは`%LOCALAPPDATA%\TaskJournal\Sync`へコピーされ、
 本人・SYSTEM・Administratorsだけが変更できるACLで保護されます。
 
 NotebookLM個人版の非公開APIを利用するため、Google側の仕様変更で停止する可能性があります。
