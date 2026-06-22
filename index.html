@@ -818,13 +818,69 @@
             return g ? g.id : '__NONE__';
         }
 
-        // タスクを既存ジャンルのいずれかに振り分ける。返り値: ジャンルid / '__NONE__' / null(通信失敗)
-        async function aiCategorize(text) {
+        const AI_CLASSIFY_RETRY_DELAYS_MS = [5000, 15000];
+
+        function wait(ms) {
+            return new Promise(resolve => setTimeout(resolve, ms));
+        }
+
+        function aiFailureFromStatus(status) {
+            if (status === 401 || status === 403) return { type: 'auth', status, retryable: false };
+            if (status === 404) return { type: 'endpoint', status, retryable: false };
+            if (status === 408 || status === 429 || status >= 500) return { type: 'temporary', status, retryable: true };
+            return { type: 'request', status, retryable: false };
+        }
+
+        function aiFailureFromError(error) {
+            if (error && error.message === 'API_KEY_NON_ASCII') return { type: 'auth', status: 0, retryable: false };
+            return { type: 'network', status: 0, retryable: true };
+        }
+
+        async function fetchAiCategory(request, onRetry) {
+            let failure = null;
+            for (let attempt = 0; attempt <= AI_CLASSIFY_RETRY_DELAYS_MS.length; attempt++) {
+                try {
+                    const response = await fetch(settings.aiEndpointUrl, request);
+                    if (response.ok) return response;
+                    failure = aiFailureFromStatus(response.status);
+                } catch (error) {
+                    failure = aiFailureFromError(error);
+                }
+
+                const delayMs = AI_CLASSIFY_RETRY_DELAYS_MS[attempt];
+                if (!failure.retryable || delayMs === undefined) break;
+                console.warn('AI classify retry scheduled', { nextAttempt: attempt + 2, delayMs, type: failure.type, status: failure.status });
+                if (onRetry) onRetry({ nextAttempt: attempt + 2, delayMs });
+                await wait(delayMs);
+            }
+
+            const error = new Error('AI_CLASSIFY_REQUEST_FAILED');
+            error.aiFailure = failure || { type: 'unknown', status: 0, retryable: false };
+            throw error;
+        }
+
+        function aiClassifyFailureMessage(failure) {
+            const f = failure || { type: 'unknown', status: 0 };
+            if (f.type === 'auth') return 'AIの認証に失敗しました。設定のAPIキーを確認してください。';
+            if (f.type === 'endpoint') return 'AIの接続先が見つかりません。設定のAIエンドポイントURLを確認してください。';
+            if (f.type === 'temporary') return `AIが混雑中、停止中、またはeGPU未接続の可能性があります。自動再試行後も応答がありませんでした${f.status ? `（HTTP ${f.status}）` : ''}。`;
+            if (f.type === 'network') {
+                let localEndpoint = false;
+                try { localEndpoint = ['localhost', '127.0.0.1', '::1'].includes(new URL(settings.aiEndpointUrl).hostname); } catch { /* URLエラーは下の共通案内を使う */ }
+                if (localEndpoint && location.protocol === 'https:') return 'HTTPS版アプリからlocalhostへ接続できません。設定からHTML版をダウンロードして開くか、公開AIプロキシを設定してください。';
+                return 'AIサーバーに接続できません。ネット接続、LM Studio、Cloudflare Tunnel、eGPUの状態を確認してください。';
+            }
+            if (f.type === 'response') return 'AIには接続できましたが、応答形式を読み取れませんでした。LM Studioのモデル状態を確認してください。';
+            return 'AIから正常な応答を受け取れませんでした。LM Studioを確認して、もう一度お試しください。';
+        }
+
+        // タスクを既存ジャンルのいずれかに振り分け、失敗時は表示用の理由も返す。
+        async function aiCategorize(text, onRetry) {
             try {
                 const genres = getGenres();
                 const list = genres.map(g => `- ${genrePlainName(g.name)}`).join('\n');
                 const names = genres.map(g => `"${genrePlainName(g.name)}"`).join(', ');
-                const res = await fetch(settings.aiEndpointUrl, {
+                const res = await fetchAiCategory({
                     method: 'POST',
                     headers: aiAuthHeaders(),
                     body: JSON.stringify({
@@ -835,18 +891,19 @@
                             { role: 'user', content: `Task: "${text}"` }
                         ]
                     })
-                });
-                if (!res.ok) throw new Error('API Connection Error');
+                }, onRetry);
                 const result = await res.json();
                 const content = result.choices[0].message.content;
                 const m = content.match(/\{[\s\S]*\}/);
                 let answer = '';
                 if (m) { try { answer = JSON.parse(m[0]).genre; } catch (e) {} }
                 if (!answer) answer = content;
-                return resolveGenreId(answer);
+                return { category: resolveGenreId(answer), failure: null };
             } catch (e) {
+                const failure = e.aiFailure
+                    || (e && e.message === 'API_KEY_NON_ASCII' ? aiFailureFromError(e) : { type: 'response', status: 0, retryable: false });
                 console.error('AI classify error', e);
-                return null;
+                return { category: null, failure };
             }
         }
 
@@ -903,10 +960,17 @@
             lucide.createIcons();
 
             let hasError = false;
+            let classifyFailure = null;
             const unmatched = []; // 既存ジャンルに該当しなかったタスク
             for (const t of targets) {
-                const cat = await aiCategorize(t.text);
-                if (cat === null) { hasError = true; break; }
+                btn.innerHTML = `<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i> 解析中...`;
+                lucide.createIcons();
+                const result = await aiCategorize(t.text, ({ delayMs }) => {
+                    btn.innerHTML = `<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i> ${delayMs / 1000}秒後に再試行…`;
+                    lucide.createIcons();
+                });
+                const cat = result.category;
+                if (cat === null) { hasError = true; classifyFailure = result.failure; break; }
                 if (cat === '__NONE__') { unmatched.push(t); continue; }
                 t.category = cat;
                 t.updatedAt = now();
@@ -917,8 +981,8 @@
             render();
 
             if (hasError) {
-                btn.innerHTML = `<i data-lucide="alert-triangle" class="w-4 h-4 text-rose-600"></i> 接続エラー`;
-                window.showToast("<strong class='block mb-1'>ローカルAIへの接続に失敗しました</strong>HTTPS環境ではセキュリティ制限により localhost への通信がブロックされます。設定からアプリ(HTML)をダウンロードし、ローカル環境で開いてお試しください。", 'error');
+                btn.innerHTML = `<i data-lucide="alert-triangle" class="w-4 h-4 text-rose-600"></i> AI分類エラー`;
+                window.showToast(`<strong class='block mb-1'>ジャンルの自動分類に失敗しました</strong>${aiClassifyFailureMessage(classifyFailure)} タスクは未分類のまま保存されています。`, 'error');
                 setTimeout(() => { btn.innerHTML = originalHTML; lucide.createIcons(); }, 5000);
             } else {
                 btn.innerHTML = `<i data-lucide="check" class="w-4 h-4"></i> 完了`;
@@ -937,8 +1001,13 @@
 
         window.classifySingleTask = async (id, text) => {
             if (!settings.aiEndpointUrl) return;
-            const cat = await aiCategorize(text);
-            if (cat === null || cat === '__NONE__') return; // 該当なしは未分類のまま（手動 or 一括分類で対応）
+            const result = await aiCategorize(text);
+            const cat = result.category;
+            if (cat === null) {
+                window.showToast(`<strong class='block mb-1'>タスクは保存済みです</strong>${aiClassifyFailureMessage(result.failure)} ジャンルだけ未分類のままです。`, 'error');
+                return;
+            }
+            if (cat === '__NONE__') return; // 該当なしは未分類のまま（手動 or 一括分類で対応）
             const t = tasks.find(x => x.id === id);
             if (!t) return;
             t.category = cat;
