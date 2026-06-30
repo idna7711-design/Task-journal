@@ -22,8 +22,10 @@ const FOLDER_ID = '1AxPEwynYHM_vKjsXLKKgpj3pxxMpgZds';
 const JSON_FILE_NAME = 'TaskData.json';
 const NOTEBOOK_DOC_ID = '1avg594_Kg4HqXNFZijWatgSn1g1ofTjXa5eeOiHHdSE';
 const SYNC_TOKEN_PROPERTY = 'SYNC_TOKEN';
+const SYNC_VERSION = 2;
 const MAX_BODY_BYTES = 1000000;
 const MAX_TASKS = 1000;
+const MAX_TOMBSTONES = 5000;
 const MAX_CATEGORIES = 100;
 const MAX_LOGS_PER_TASK = 200;
 
@@ -53,25 +55,42 @@ function doPost(e) {
   }
 
   let safeTasks;
+  let safeTombstones;
   let safeCategories;
   try {
     safeTasks = validateTasks(data.tasks);
+    safeTombstones = validateTombstones(data.tombstones);
     safeCategories = validateCategories(data.categories);
   } catch (err) {
     return ContentService.createTextOutput('Error: ' + err.message);
   }
 
+  const usesSyncV2 = Number(data.syncVersion) === SYNC_VERSION;
   const lock = LockService.getScriptLock();
+  let mergedState;
   try {
     lock.waitLock(30000);
     const folder = DriveApp.getFolderById(FOLDER_ID);
 
-    // 1. 複数端末同期用DBを更新
-    upsertFile(folder, JSON_FILE_NAME, JSON.stringify(safeTasks));
+    // 1. 端末ごとの変更をタスク単位で統合し、削除履歴も保存する。
+    const currentState = readSyncState(folder);
+    let categoriesUpdatedAt = finiteNumberOrZero(data.categoriesUpdatedAt);
+    if (!usesSyncV2 && currentState.categories.length === 0 && safeCategories.length > 0) {
+      categoriesUpdatedAt = Date.now();
+    }
+    mergedState = mergeSyncState(currentState, {
+      tasks: safeTasks,
+      tombstones: safeTombstones,
+      categories: safeCategories,
+      categoriesUpdatedAt: categoriesUpdatedAt
+    });
+    mergedState.revision = finiteNumberOrZero(currentState.revision) + 1;
+    mergedState.updatedAt = Date.now();
+    upsertFile(folder, JSON_FILE_NAME, JSON.stringify(mergedState));
 
     // 2. NotebookLMが参照する固定IDのGoogleドキュメントを更新
     const doc = getNotebookDocument();
-    renderNotebookDocument(doc, safeTasks, safeCategories);
+    renderNotebookDocument(doc, mergedState.tasks, mergedState.categories);
   } catch (err) {
     console.error('TaskJournal sync failed: ' + (err && err.stack ? err.stack : err));
     return ContentService.createTextOutput(
@@ -85,6 +104,11 @@ function doPost(e) {
   //    日時設定のたびに自動登録すると、ボタン押下分と合わせて二重に予定が入るため、
   //    GAS側での自動同期は廃止した。
 
+  if (usesSyncV2) {
+    return ContentService
+      .createTextOutput(JSON.stringify(mergedState))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
   return ContentService.createTextOutput('Success');
 }
 
@@ -96,17 +120,8 @@ function setupNotebookDocument() {
   const folder = DriveApp.getFolderById(FOLDER_ID);
   const doc = getNotebookDocument();
   const url = doc.getUrl();
-  let tasks = [];
-  const files = folder.getFilesByName(JSON_FILE_NAME);
-  if (files.hasNext()) {
-    try {
-      const parsed = JSON.parse(files.next().getBlob().getDataAsString());
-      if (Array.isArray(parsed)) tasks = parsed;
-    } catch (err) {
-      // JSONが壊れていても空のドキュメントを作成し、次回同期で回復できるようにする。
-    }
-  }
-  renderNotebookDocument(doc, tasks, []);
+  const state = readSyncState(folder);
+  renderNotebookDocument(doc, state.tasks, state.categories);
   console.log(url);
   return url;
 }
@@ -118,21 +133,112 @@ function doGet(e) {
       .setMimeType(ContentService.MimeType.JSON);
   }
 
+  const lock = LockService.getScriptLock();
   try {
+    lock.waitLock(10000);
     const folder = DriveApp.getFolderById(FOLDER_ID);
-    const files = folder.getFilesByName(JSON_FILE_NAME);
-    if (files.hasNext()) {
-      const content = files.next().getBlob().getDataAsString();
-      return ContentService
-        .createTextOutput(content)
-        .setMimeType(ContentService.MimeType.JSON);
-    }
+    const state = readSyncState(folder);
+    const usesSyncV2 = Number(e && e.parameter ? e.parameter.syncVersion : 0) === SYNC_VERSION;
+    return ContentService
+      .createTextOutput(JSON.stringify(usesSyncV2 ? state : state.tasks))
+      .setMimeType(ContentService.MimeType.JSON);
   } catch (err) {
     // フォールバック（下で空配列を返す）
+  } finally {
+    if (lock.hasLock()) lock.releaseLock();
   }
   return ContentService
     .createTextOutput('[]')
     .setMimeType(ContentService.MimeType.JSON);
+}
+
+function createEmptySyncState() {
+  return {
+    syncVersion: SYNC_VERSION,
+    revision: 0,
+    updatedAt: 0,
+    tasks: [],
+    tombstones: [],
+    categories: [],
+    categoriesUpdatedAt: 0
+  };
+}
+
+/** 旧形式（タスク配列）もv2へ読み替え、既存データを失わない。 */
+function readSyncState(folder) {
+  const files = folder.getFilesByName(JSON_FILE_NAME);
+  if (!files.hasNext()) return createEmptySyncState();
+  try {
+    const parsed = JSON.parse(files.next().getBlob().getDataAsString());
+    return normalizeStoredState(parsed);
+  } catch (err) {
+    throw new Error('TaskData.json is invalid');
+  }
+}
+
+function normalizeStoredState(parsed) {
+  const state = createEmptySyncState();
+  if (Array.isArray(parsed)) {
+    state.tasks = validateTasks(parsed);
+    return state;
+  }
+  if (!parsed || typeof parsed !== 'object') return state;
+  state.revision = finiteNumberOrZero(parsed.revision);
+  state.updatedAt = finiteNumberOrZero(parsed.updatedAt);
+  state.tasks = validateTasks(Array.isArray(parsed.tasks) ? parsed.tasks : []);
+  state.tombstones = validateTombstones(parsed.tombstones);
+  state.categories = validateCategories(parsed.categories);
+  state.categoriesUpdatedAt = finiteNumberOrZero(parsed.categoriesUpdatedAt);
+  return mergeSyncState(createEmptySyncState(), state);
+}
+
+/** 削除を優先し、通常の更新はupdatedAtが新しい方を採用する。 */
+function mergeSyncState(current, incoming) {
+  const taskById = {};
+  const tombstoneById = {};
+
+  function applyTask(task) {
+    if (!task || !task.id || tombstoneById[task.id]) return;
+    const existing = taskById[task.id];
+    const incomingTime = finiteNumberOrZero(task.updatedAt || task.createdAt);
+    const existingTime = existing
+      ? finiteNumberOrZero(existing.updatedAt || existing.createdAt)
+      : -1;
+    if (!existing || incomingTime > existingTime) taskById[task.id] = task;
+  }
+
+  function applyTombstone(tombstone) {
+    if (!tombstone || !tombstone.id) return;
+    const existing = tombstoneById[tombstone.id];
+    if (!existing || tombstone.deletedAt > existing.deletedAt) {
+      tombstoneById[tombstone.id] = tombstone;
+    }
+    delete taskById[tombstone.id];
+  }
+
+  (current.tasks || []).forEach(applyTask);
+  (current.tombstones || []).forEach(applyTombstone);
+  (incoming.tasks || []).forEach(applyTask);
+  (incoming.tombstones || []).forEach(applyTombstone);
+
+  const currentCategoriesUpdatedAt = finiteNumberOrZero(current.categoriesUpdatedAt);
+  const incomingCategoriesUpdatedAt = finiteNumberOrZero(incoming.categoriesUpdatedAt);
+  const useIncomingCategories = incomingCategoriesUpdatedAt > currentCategoriesUpdatedAt
+    || (currentCategoriesUpdatedAt === 0
+      && (current.categories || []).length === 0
+      && (incoming.categories || []).length > 0);
+
+  return {
+    syncVersion: SYNC_VERSION,
+    revision: finiteNumberOrZero(current.revision),
+    updatedAt: finiteNumberOrZero(current.updatedAt),
+    tasks: Object.keys(taskById).map(function(id) { return taskById[id]; }),
+    tombstones: Object.keys(tombstoneById).map(function(id) { return tombstoneById[id]; }),
+    categories: useIncomingCategories ? (incoming.categories || []) : (current.categories || []),
+    categoriesUpdatedAt: useIncomingCategories
+      ? incomingCategoriesUpdatedAt
+      : currentCategoriesUpdatedAt
+  };
 }
 
 /** 同名ファイルがあれば内容を更新、無ければ新規作成 */
@@ -164,8 +270,24 @@ function validateTasks(tasks) {
       status: ['todo', 'doing', 'done'].indexOf(task.status) >= 0 ? task.status : 'todo',
       pinned: !!task.pinned,
       logs: logs.map(function(log) { return boundedString(log, 1000, 'task log'); }),
-      createdAt: finiteNumber(task.createdAt),
-      updatedAt: finiteNumber(task.updatedAt)
+      createdAt: finiteNumberOrZero(task.createdAt),
+      updatedAt: finiteNumberOrZero(task.updatedAt) || finiteNumberOrZero(task.createdAt)
+    };
+  });
+}
+
+function validateTombstones(tombstones) {
+  if (tombstones == null) return [];
+  if (!Array.isArray(tombstones) || tombstones.length > MAX_TOMBSTONES) {
+    throw new Error('invalid tombstones');
+  }
+  return tombstones.map(function(tombstone) {
+    if (!tombstone || typeof tombstone !== 'object') throw new Error('invalid tombstone');
+    const deletedAt = finiteNumberOrZero(tombstone.deletedAt);
+    if (!deletedAt) throw new Error('invalid deletion time');
+    return {
+      id: boundedString(tombstone.id, 100, 'tombstone id'),
+      deletedAt: deletedAt
     };
   });
 }
@@ -200,8 +322,8 @@ function optionalString(value, maxLength, label) {
   return value;
 }
 
-function finiteNumber(value) {
-  return typeof value === 'number' && isFinite(value) ? value : Date.now();
+function finiteNumberOrZero(value) {
+  return typeof value === 'number' && isFinite(value) && value >= 0 ? value : 0;
 }
 
 /** NotebookLMへ登録済みの固定ドキュメントを取得する。 */

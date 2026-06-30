@@ -411,19 +411,21 @@
 
     <script>
         // ===== TaskJournal (IndexedDB 永続化版) =====
-        // ローカルの IndexedDB を「真実」とし、GAS(Drive) と push+pull で同期する。
-        // - push: 変更時に { tasks, categories } を text/plain でPOSTし、GASの応答を確認
-        // - pull: 起動時・同期アイコンクリック時に GET して updatedAt ベースの LWW でマージ
+        // IndexedDBとGAS(Drive)を、タスク単位の更新時刻と削除履歴で双方向同期する。
+        // - push: 変更時にタスク・削除履歴・ジャンルをPOSTし、GAS側で既存状態と統合
+        // - pull: 起動時・復帰時・同期アイコンクリック時に取得し、削除優先でローカルへ反映
 
         // ---- State ----
         let tasks = [];
+        let taskTombstones = [];
         let settings = {
             webhookUrl: '',
             syncToken: '',
             aiEndpointUrl: 'http://localhost:1234/v1/chat/completions',
             aiModelName: 'local-model',
             aiApiKey: '',
-            categories: null // ジャンル一覧（人間が管理）。初期化時に既定値を入れる
+            categories: null, // ジャンル一覧（人間が管理）。初期化時に既定値を入れる
+            categoriesUpdatedAt: 0
         };
         let currentTaskIdForMemo = null;
         let currentTaskIdForSchedule = null;
@@ -432,6 +434,7 @@
         let completedCollapsed = false;
         try { completedCollapsed = localStorage.getItem(COMPLETED_COLLAPSE_KEY) === 'true'; } catch { /* 保存不可でも開閉は使える */ }
         let syncTimeout = null;
+        let lastCloudPullAt = 0;
         let db = null;
 
         // ---- Debug logging ----
@@ -597,12 +600,13 @@
         const dbGetAllTasks = () => idb(store('tasks', 'readonly').getAll());
         const dbPutTask = (t) => idb(store('tasks', 'readwrite').put(t));
         const dbDeleteTask = (id) => idb(store('tasks', 'readwrite').delete(id));
-        function dbBulkPutTasks(arr) {
+        function dbReplaceTasks(arr) {
             return new Promise((res, rej) => {
                 const tx = db.transaction('tasks', 'readwrite');
                 tx.oncomplete = () => res();
                 tx.onerror = () => rej(tx.error);
                 const s = tx.objectStore('tasks');
+                s.clear();
                 arr.forEach(x => s.put(x));
             });
         }
@@ -619,6 +623,7 @@
         function authenticatedSyncUrl() {
             const url = new URL(settings.webhookUrl);
             url.searchParams.set('syncToken', settings.syncToken);
+            url.searchParams.set('syncVersion', '2');
             return url.toString();
         }
         function getTimeString() {
@@ -652,6 +657,55 @@
             };
         }
 
+        function normalizeTombstones(items) {
+            if (!Array.isArray(items)) return [];
+            const byId = new Map();
+            items.forEach(item => {
+                if (!item || !item.id || !Number.isFinite(item.deletedAt)) return;
+                const existing = byId.get(item.id);
+                if (!existing || item.deletedAt > existing.deletedAt) {
+                    byId.set(item.id, { id: String(item.id), deletedAt: item.deletedAt });
+                }
+            });
+            return Array.from(byId.values());
+        }
+
+        async function persistTaskTombstones() {
+            await dbPutMeta({ key: 'taskTombstones', items: taskTombstones });
+        }
+
+        function mergeTaskCollections(localTasks, localTombstones, remoteTasks, remoteTombstones) {
+            const tombstoneById = new Map(normalizeTombstones(localTombstones).map(t => [t.id, t]));
+            normalizeTombstones(remoteTombstones).forEach(tombstone => {
+                const local = tombstoneById.get(tombstone.id);
+                if (!local || tombstone.deletedAt > local.deletedAt) {
+                    tombstoneById.set(tombstone.id, tombstone);
+                }
+            });
+
+            const byId = new Map((Array.isArray(localTasks) ? localTasks : [])
+                .filter(task => task && task.id && !tombstoneById.has(task.id))
+                .map(task => [task.id, task]));
+            (Array.isArray(remoteTasks) ? remoteTasks : []).forEach(remoteTask => {
+                if (!remoteTask || !remoteTask.id || tombstoneById.has(remoteTask.id)) return;
+                const local = byId.get(remoteTask.id);
+                if (!local) {
+                    byId.set(remoteTask.id, normalizeTask(remoteTask));
+                    return;
+                }
+                const localUpdatedAt = local.updatedAt || local.createdAt || 0;
+                const remoteUpdatedAt = remoteTask.updatedAt || remoteTask.createdAt || 0;
+                if (remoteUpdatedAt > localUpdatedAt) {
+                    byId.set(remoteTask.id, normalizeTask(remoteTask));
+                }
+            });
+
+            return {
+                tasks: Array.from(byId.values()),
+                tombstones: Array.from(tombstoneById.values())
+            };
+        }
+
         // ---- Cloud sync (push) ----
         window.triggerDriveSync = () => {
             if (!isSyncConfigured()) return;
@@ -663,11 +717,25 @@
                         method: 'POST',
                         // text/plain にすると preflight(OPTIONS) を回避できる
                         headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-                        body: JSON.stringify({ syncToken: settings.syncToken, tasks, categories: getGenres() })
+                        body: JSON.stringify({
+                            syncVersion: 2,
+                            syncToken: settings.syncToken,
+                            tasks,
+                            tombstones: taskTombstones,
+                            categories: getGenres(),
+                            categoriesUpdatedAt: settings.categoriesUpdatedAt || 0
+                        })
                     });
                     const result = (await response.text()).trim();
-                    if (!response.ok || result !== 'Success') {
+                    let remote = null;
+                    try { remote = JSON.parse(result); } catch { /* 旧GASのSuccess応答はそのまま許可 */ }
+                    if (!response.ok || (result !== 'Success' && (!remote || remote.syncVersion !== 2))) {
                         throw new Error(result || `HTTP ${response.status}`);
+                    }
+                    if (remote && remote.syncVersion === 2) {
+                        await mergeRemote(remote);
+                        sortTasks();
+                        render();
                     }
                     updateSyncStatus('success');
                 } catch (e) {
@@ -678,20 +746,28 @@
         };
 
         // ---- Cloud sync (pull) ----
-        function mergeRemote(remote) {
-            const byId = new Map(tasks.map(t => [t.id, t]));
-            remote.forEach(r => {
-                if (!r || !r.id) return;
-                const local = byId.get(r.id);
-                if (!local) {
-                    byId.set(r.id, normalizeTask(r));
-                } else {
-                    const lu = local.updatedAt || local.createdAt || 0;
-                    const ru = r.updatedAt || r.createdAt || 0;
-                    if (ru > lu) byId.set(r.id, normalizeTask(r));
-                }
-            });
-            tasks = Array.from(byId.values());
+        async function mergeRemote(remote) {
+            const cloud = Array.isArray(remote)
+                ? { tasks: remote, tombstones: [], categories: null, categoriesUpdatedAt: 0 }
+                : remote;
+            const merged = mergeTaskCollections(
+                tasks,
+                taskTombstones,
+                cloud.tasks,
+                cloud.tombstones
+            );
+            tasks = merged.tasks;
+            taskTombstones = merged.tombstones;
+            await dbReplaceTasks(tasks);
+            await persistTaskTombstones();
+
+            const remoteCategoriesUpdatedAt = Number(cloud.categoriesUpdatedAt) || 0;
+            if (Array.isArray(cloud.categories)
+                && remoteCategoriesUpdatedAt > (settings.categoriesUpdatedAt || 0)) {
+                settings.categories = cloud.categories;
+                settings.categoriesUpdatedAt = remoteCategoriesUpdatedAt;
+                await persistConfig();
+            }
         }
         async function pullFromCloud(showOverlay) {
             if (!isSyncConfigured()) return;
@@ -700,19 +776,32 @@
                 const res = await fetch(authenticatedSyncUrl(), { method: 'GET' });
                 if (!res.ok) throw new Error('SYNC_PULL_' + res.status);
                 const remote = await res.json();
-                if (Array.isArray(remote)) {
-                    mergeRemote(remote);
-                    await dbBulkPutTasks(tasks);
+                if (remote && remote.error) throw new Error('SYNC_PULL_' + remote.error);
+                if (Array.isArray(remote) || (remote && remote.syncVersion === 2)) {
+                    await mergeRemote(remote);
                     sortTasks();
                     render();
                 }
+                lastCloudPullAt = Date.now();
                 updateSyncStatus('success');
+                // 取得後にローカル固有の変更も送り、手動同期1回で双方向を揃える。
+                triggerDriveSync();
             } catch (e) {
                 console.error('Pull error', e);
+                updateSyncStatus('error');
+                if (showOverlay) {
+                    window.showToast('クラウド同期に失敗しました。通信状態と同期設定を確認してください。', 'error');
+                }
                 // 取得失敗してもローカルデータで継続
             } finally {
                 if (showOverlay) showLoading(false);
             }
+        }
+
+        function refreshFromCloudIfStale() {
+            if (!db || !isSyncConfigured() || !navigator.onLine) return;
+            if (Date.now() - lastCloudPullAt < 30000) return;
+            pullFromCloud(false);
         }
 
         // ---- Sync status indicator ----
@@ -1288,6 +1377,11 @@
 
         window.deleteTask = async (id) => {
             if (!confirm('タスクを削除しますか？')) return;
+            taskTombstones = normalizeTombstones([
+                ...taskTombstones,
+                { id, deletedAt: now() }
+            ]);
+            await persistTaskTombstones();
             tasks = tasks.filter(x => x.id !== id);
             await dbDeleteTask(id);
             render();
@@ -1467,6 +1561,7 @@
             const used = settings.categories.map(g => g.color);
             const nextColor = color || GENRE_COLOR_KEYS.find(c => !used.includes(c)) || GENRE_COLOR_KEYS[settings.categories.length % GENRE_COLOR_KEYS.length];
             settings.categories.push({ id: uid(), name, color: nextColor });
+            settings.categoriesUpdatedAt = now();
             await persistConfig();
             renderGenreList();
             render();
@@ -1479,6 +1574,7 @@
             const name = String(value || '').trim();
             if (!g || !name) { renderGenreList(); return; }
             g.name = name;
+            settings.categoriesUpdatedAt = now();
             await persistConfig();
             renderGenreList();
             render();
@@ -1490,6 +1586,7 @@
             const g = settings.categories.find(x => x.id === id);
             if (!g) return;
             g.color = color;
+            settings.categoriesUpdatedAt = now();
             await persistConfig();
             renderGenreList();
             render();
@@ -1511,6 +1608,7 @@
                     t.category = null; t.updatedAt = now(); await dbPutTask(t);
                 }
             }
+            settings.categoriesUpdatedAt = now();
             await persistConfig();
             renderGenreList();
             render();
@@ -1801,6 +1899,10 @@
             document.getElementById('genre-modal').addEventListener('click', (e) => { if (e.target.id === 'genre-modal') closeGenreModal(); });
             document.getElementById('genre-picker-modal').addEventListener('click', (e) => { if (e.target.id === 'genre-picker-modal') closeGenrePicker(); });
             document.getElementById('sync-status').addEventListener('click', () => { if (isSyncConfigured()) pullFromCloud(true); });
+            window.addEventListener('online', refreshFromCloudIfStale);
+            document.addEventListener('visibilitychange', () => {
+                if (document.visibilityState === 'visible') refreshFromCloudIfStale();
+            });
 
             // カレンダー遷移などから「戻る」で復帰した際(bfcache復帰)に再描画し、白紙化を防ぐ
             window.addEventListener('pageshow', (e) => { if (e.persisted && db) render(); });
@@ -1812,19 +1914,27 @@
                 db = await openDB();
 
                 const cfg = await dbGetMeta('config');
+                let shouldPersistConfig = false;
                 if (cfg) {
                     settings.webhookUrl = cfg.webhookUrl || '';
                     settings.syncToken = cfg.syncToken || '';
                     settings.aiEndpointUrl = cfg.aiEndpointUrl || settings.aiEndpointUrl;
                     settings.aiModelName = cfg.aiModelName || settings.aiModelName;
                     settings.aiApiKey = cfg.aiApiKey || '';
-                    if (Array.isArray(cfg.categories) && cfg.categories.length) settings.categories = cfg.categories;
+                    if (Array.isArray(cfg.categories)) settings.categories = cfg.categories;
+                    settings.categoriesUpdatedAt = Number(cfg.categoriesUpdatedAt) || 0;
+                    if (Array.isArray(cfg.categories) && !settings.categoriesUpdatedAt) {
+                        settings.categoriesUpdatedAt = now();
+                        shouldPersistConfig = true;
+                    }
                 }
-                // ジャンル未設定なら既定5個を採用して保存（以後はユーザー管理データになる）
-                if (!Array.isArray(settings.categories) || settings.categories.length === 0) {
+                // ジャンル未設定(null)なら既定5個を採用。空配列は意図的な「ジャンルなし」として維持する。
+                if (!Array.isArray(settings.categories)) {
                     settings.categories = DEFAULT_GENRES.map(g => ({ ...g }));
-                    await persistConfig();
+                    settings.categoriesUpdatedAt = now();
+                    shouldPersistConfig = true;
                 }
+                if (shouldPersistConfig) await persistConfig();
                 document.getElementById('webhook-input').value = settings.webhookUrl;
                 document.getElementById('sync-token-input').value = settings.syncToken;
                 document.getElementById('ai-endpoint-input').value = settings.aiEndpointUrl;
@@ -1832,7 +1942,12 @@
                 document.getElementById('ai-apikey-input').value = settings.aiApiKey;
                 updateSyncStatus(isSyncConfigured() ? 'idle' : 'off');
 
-                tasks = (await dbGetAllTasks()).map(normalizeTask);
+                const tombstoneMeta = await dbGetMeta('taskTombstones');
+                taskTombstones = normalizeTombstones(tombstoneMeta && tombstoneMeta.items);
+                const deletedIds = new Set(taskTombstones.map(t => t.id));
+                const storedTasks = (await dbGetAllTasks()).map(normalizeTask);
+                tasks = storedTasks.filter(task => !deletedIds.has(task.id));
+                if (tasks.length !== storedTasks.length) await dbReplaceTasks(tasks);
                 sortTasks();
                 render();
 

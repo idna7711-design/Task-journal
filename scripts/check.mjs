@@ -76,5 +76,15 @@ function checkPowerShell(file) {
 checkPowerShell('scripts/notebooklm-refresh.ps1');
 checkPowerShell('scripts/register-notebooklm-sync-task.ps1');
 
+const syncCheck = spawnSync(process.execPath, [join(root, 'scripts', 'check-device-sync.mjs')], {
+    encoding: 'utf8',
+});
+if (syncCheck.status === 0) {
+    console.log(syncCheck.stdout.trim());
+} else {
+    failed++;
+    console.error((syncCheck.stderr || syncCheck.stdout || 'NG  端末同期シナリオ').trim());
+}
+
 console.log(failed ? `\n${failed} 件の問題があります` : '\nすべてOK');
 process.exit(failed ? 1 : 0);

@@ -39,18 +39,34 @@ GAS の `ContentService` ではレスポンスヘッダを自前で設定でき�
 ### POST（アプリ → GAS / push）
 ```json
 {
+  "syncVersion": 2,
   "syncToken": "Script Propertiesと同じランダムキー",
   "tasks": [ /* タスク配列 */ ],
-  "categories": [ /* ジャンルID・名前・色 */ ]
+  "tombstones": [ /* 削除したタスクのID・削除時刻 */ ],
+  "categories": [ /* ジャンルID・名前・色 */ ],
+  "categoriesUpdatedAt": 0
 }
 ```
-- `tasks` → `TaskData.json` に保存（同期用DB）
-- `tasks`と`categories` → 固定IDのGoogleドキュメントへ整形して上書き（NotebookLM用）
+- `TaskData.json`の既存状態とタスクID単位で統合して保存
+- 通常編集は`updatedAt`が新しい方、削除は`tombstones`を優先
+- 別端末で追加されたタスクは、受信配列に含まれなくても保持
+- 統合後の`tasks`と`categories`を固定IDのGoogleドキュメントへ反映（NotebookLM用）
+- `syncVersion: 2`の場合は統合後の状態をJSONで返す
 
 ### GET（GAS → アプリ / pull）
 - クエリ`syncToken`が必要
-- `TaskData.json` の中身（tasks配列のJSON）を返す
-- 無ければ `[]`
+- `syncVersion=2`ではタスク・削除履歴・ジャンルを含む状態を返す
+- パラメータがない旧アプリには従来どおりタスク配列だけを返す
+- 旧形式の`TaskData.json`（タスク配列）は読み取り時に自動でv2として扱う
+
+## 複数端末同期の競合ルール
+
+- 削除したタスクIDは削除履歴に残り、古い端末から再送されても復活しない
+- 同じタスクを複数端末で編集した場合は、`updatedAt`が新しい内容を採用する
+- 端末ごとに別のタスクを追加した場合は、両方を保持する
+- アプリがオンラインへ戻った時と再表示された時にも、30秒以上空いていれば自動取得する
+
+`Code.gs`を変更した場合は、GASのウェブアプリを新しいバージョンとして再デプロイしてください。
 
 ## NotebookLM自動再同期
 
