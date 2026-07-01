@@ -434,6 +434,8 @@
         let completedCollapsed = false;
         try { completedCollapsed = localStorage.getItem(COMPLETED_COLLAPSE_KEY) === 'true'; } catch { /* 保存不可でも開閉は使える */ }
         let syncTimeout = null;
+        let pushInProgress = false;
+        let pushQueued = false;
         let pullPromise = null;
         let lastCloudPullAt = 0;
         let db = null;
@@ -725,8 +727,14 @@
         window.triggerDriveSync = () => {
             if (!isSyncConfigured()) return;
             updateSyncStatus('syncing');
+            if (pushInProgress) {
+                pushQueued = true;
+                return;
+            }
             clearTimeout(syncTimeout);
             syncTimeout = setTimeout(async () => {
+                pushInProgress = true;
+                let succeeded = false;
                 try {
                     const response = await fetchWithTimeout(settings.webhookUrl, {
                         method: 'POST',
@@ -740,7 +748,7 @@
                             categories: getGenres(),
                             categoriesUpdatedAt: settings.categoriesUpdatedAt || 0
                         })
-                    });
+                    }, 60000);
                     const result = (await response.text()).trim();
                     let remote = null;
                     try { remote = JSON.parse(result); } catch { /* 旧GASのSuccess応答はそのまま許可 */ }
@@ -752,10 +760,16 @@
                         sortTasks();
                         render();
                     }
+                    succeeded = true;
                     updateSyncStatus('success');
                 } catch (e) {
                     console.error('Drive sync error', e);
                     updateSyncStatus('error');
+                } finally {
+                    pushInProgress = false;
+                    const shouldRetry = succeeded && pushQueued;
+                    pushQueued = false;
+                    if (shouldRetry) triggerDriveSync();
                 }
             }, 1500);
         };
