@@ -434,6 +434,7 @@
         let completedCollapsed = false;
         try { completedCollapsed = localStorage.getItem(COMPLETED_COLLAPSE_KEY) === 'true'; } catch { /* 保存不可でも開閉は使える */ }
         let syncTimeout = null;
+        let pullPromise = null;
         let lastCloudPullAt = 0;
         let db = null;
 
@@ -626,6 +627,20 @@
             url.searchParams.set('syncVersion', '2');
             return url.toString();
         }
+        async function fetchWithTimeout(url, options = {}, timeoutMs = 20000) {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+            try {
+                return await fetch(url, { ...options, signal: controller.signal });
+            } finally {
+                clearTimeout(timeoutId);
+            }
+        }
+        function syncErrorMessage(error) {
+            return error && error.name === 'AbortError'
+                ? 'クラウドが20秒以内に応答しませんでした。ローカルデータは保持されています。'
+                : 'クラウド同期に失敗しました。通信状態と同期設定を確認してください。';
+        }
         function getTimeString() {
             const n = new Date();
             return `[${String(n.getHours()).padStart(2, '0')}:${String(n.getMinutes()).padStart(2, '0')}]`;
@@ -713,7 +728,7 @@
             clearTimeout(syncTimeout);
             syncTimeout = setTimeout(async () => {
                 try {
-                    const response = await fetch(settings.webhookUrl, {
+                    const response = await fetchWithTimeout(settings.webhookUrl, {
                         method: 'POST',
                         // text/plain にすると preflight(OPTIONS) を回避できる
                         headers: { 'Content-Type': 'text/plain;charset=utf-8' },
@@ -771,9 +786,19 @@
         }
         async function pullFromCloud(showOverlay) {
             if (!isSyncConfigured()) return;
-            try {
+            if (pullPromise) {
                 if (showOverlay) showLoading(true);
-                const res = await fetch(authenticatedSyncUrl(), { method: 'GET' });
+                try {
+                    await pullPromise;
+                } catch (e) {
+                    if (showOverlay) window.showToast(syncErrorMessage(e), 'error');
+                } finally {
+                    if (showOverlay) showLoading(false);
+                }
+                return;
+            }
+            const runPull = async () => {
+                const res = await fetchWithTimeout(authenticatedSyncUrl(), { method: 'GET' });
                 if (!res.ok) throw new Error('SYNC_PULL_' + res.status);
                 const remote = await res.json();
                 if (remote && remote.error) throw new Error('SYNC_PULL_' + remote.error);
@@ -786,14 +811,20 @@
                 updateSyncStatus('success');
                 // 取得後にローカル固有の変更も送り、手動同期1回で双方向を揃える。
                 triggerDriveSync();
+            };
+            try {
+                if (showOverlay) showLoading(true);
+                pullPromise = runPull();
+                await pullPromise;
             } catch (e) {
                 console.error('Pull error', e);
                 updateSyncStatus('error');
                 if (showOverlay) {
-                    window.showToast('クラウド同期に失敗しました。通信状態と同期設定を確認してください。', 'error');
+                    window.showToast(syncErrorMessage(e), 'error');
                 }
                 // 取得失敗してもローカルデータで継続
             } finally {
+                pullPromise = null;
                 if (showOverlay) showLoading(false);
             }
         }

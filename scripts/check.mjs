@@ -76,6 +76,21 @@ function checkPowerShell(file) {
 checkPowerShell('scripts/notebooklm-refresh.ps1');
 checkPowerShell('scripts/register-notebooklm-sync-task.ps1');
 
+const indexHtml = readFileSync(join(root, 'index.html'), 'utf8');
+for (const requiredSyncSafety of [
+    'fetchWithTimeout',
+    'new AbortController()',
+    'let pullPromise = null',
+    'クラウドが20秒以内に応答しませんでした。ローカルデータは保持されています。',
+]) {
+    if (indexHtml.includes(requiredSyncSafety)) {
+        console.log(`OK  同期停止対策: ${requiredSyncSafety}`);
+    } else {
+        failed++;
+        console.error(`NG  同期停止対策がありません: ${requiredSyncSafety}`);
+    }
+}
+
 const syncCheck = spawnSync(process.execPath, [join(root, 'scripts', 'check-device-sync.mjs')], {
     encoding: 'utf8',
 });
