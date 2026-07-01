@@ -46,11 +46,13 @@
 ## 主要なデータの流れ
 
 ### タスク同期（GAS）
-- push: タスク変更時に同期キー付きで`{ tasks, tombstones, categories }`をGASへPOST
+- push: タスク変更時に同期キー付きで`{ tasks, tombstones, conflicts, categories }`をGASへPOST
 - pull: 起動時・オンライン復帰時・アプリ再表示時・同期アイコン操作時にGET
 - 通常編集はタスクごとの`updatedAt`が新しい方を採用し、削除履歴（tombstone）は編集より優先
 - GASは`LockService`内で既存データと統合し、端末1台の配列で全体を上書きしない
 - ジャンルは`categoriesUpdatedAt`が新しい端末の一覧を採用
+- 同じ基準版から分岐した編集は、勝者だけでなく両候補を`conflicts`へ保存してアプリに表示
+- 競合比較AIへ送るのは候補のタイトル・予定日時・状態だけ。AIは提案のみで自動統合・削除しない
 - 旧アプリには従来のタスク配列を返し、同期形式v2のアプリには削除履歴を含む状態を返す
 - GASは認証成功後に件数・文字長・リクエストサイズを検証
 
