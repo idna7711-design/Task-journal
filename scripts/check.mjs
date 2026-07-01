@@ -81,6 +81,8 @@ for (const requiredSyncSafety of [
     'fetchWithTimeout',
     'new AbortController()',
     'let pullPromise = null',
+    'let pushInProgress = false',
+    '}, 60000);',
     'クラウドが20秒以内に応答しませんでした。ローカルデータは保持されています。',
 ]) {
     if (indexHtml.includes(requiredSyncSafety)) {
