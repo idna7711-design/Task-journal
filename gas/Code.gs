@@ -26,6 +26,7 @@ const SYNC_VERSION = 2;
 const MAX_BODY_BYTES = 1000000;
 const MAX_TASKS = 1000;
 const MAX_TOMBSTONES = 5000;
+const MAX_CONFLICTS = 2000;
 const MAX_CATEGORIES = 100;
 const MAX_LOGS_PER_TASK = 200;
 
@@ -56,10 +57,12 @@ function doPost(e) {
 
   let safeTasks;
   let safeTombstones;
+  let safeConflicts;
   let safeCategories;
   try {
     safeTasks = validateTasks(data.tasks);
     safeTombstones = validateTombstones(data.tombstones);
+    safeConflicts = validateConflicts(data.conflicts);
     safeCategories = validateCategories(data.categories);
   } catch (err) {
     return ContentService.createTextOutput('Error: ' + err.message);
@@ -81,6 +84,7 @@ function doPost(e) {
     mergedState = mergeSyncState(currentState, {
       tasks: safeTasks,
       tombstones: safeTombstones,
+      conflicts: safeConflicts,
       categories: safeCategories,
       categoriesUpdatedAt: categoriesUpdatedAt
     });
@@ -159,6 +163,7 @@ function createEmptySyncState() {
     updatedAt: 0,
     tasks: [],
     tombstones: [],
+    conflicts: [],
     categories: [],
     categoriesUpdatedAt: 0
   };
@@ -187,6 +192,7 @@ function normalizeStoredState(parsed) {
   state.updatedAt = finiteNumberOrZero(parsed.updatedAt);
   state.tasks = validateTasks(Array.isArray(parsed.tasks) ? parsed.tasks : []);
   state.tombstones = validateTombstones(parsed.tombstones);
+  state.conflicts = validateConflicts(parsed.conflicts);
   state.categories = validateCategories(parsed.categories);
   state.categoriesUpdatedAt = finiteNumberOrZero(parsed.categoriesUpdatedAt);
   return mergeSyncState(createEmptySyncState(), state);
@@ -196,6 +202,7 @@ function normalizeStoredState(parsed) {
 function mergeSyncState(current, incoming) {
   const taskById = {};
   const tombstoneById = {};
+  const conflictById = {};
 
   function applyTask(task) {
     if (!task || !task.id || tombstoneById[task.id]) return;
@@ -204,6 +211,13 @@ function mergeSyncState(current, incoming) {
     const existingTime = existing
       ? finiteNumberOrZero(existing.updatedAt || existing.createdAt)
       : -1;
+    if (existing && taskContentSignature(existing) !== taskContentSignature(task)) {
+      const incomingIsSequential = finiteNumberOrZero(task.baseUpdatedAt) === existingTime;
+      if (!incomingIsSequential) {
+        const conflict = createConflict(existing, task);
+        if (!conflictById[conflict.id]) conflictById[conflict.id] = conflict;
+      }
+    }
     if (!existing || incomingTime > existingTime) taskById[task.id] = task;
   }
 
@@ -218,8 +232,23 @@ function mergeSyncState(current, incoming) {
 
   (current.tasks || []).forEach(applyTask);
   (current.tombstones || []).forEach(applyTombstone);
+  (current.conflicts || []).forEach(applyConflict);
   (incoming.tasks || []).forEach(applyTask);
   (incoming.tombstones || []).forEach(applyTombstone);
+  (incoming.conflicts || []).forEach(applyConflict);
+
+  function applyConflict(conflict) {
+    if (!conflict || !conflict.id) return;
+    const existing = conflictById[conflict.id];
+    if (!existing || finiteNumberOrZero(conflict.resolvedAt) > finiteNumberOrZero(existing.resolvedAt)) {
+      conflictById[conflict.id] = conflict;
+    }
+  }
+
+  Object.keys(taskById).forEach(function(id) {
+    const task = taskById[id];
+    task.baseUpdatedAt = finiteNumberOrZero(task.updatedAt || task.createdAt);
+  });
 
   const currentCategoriesUpdatedAt = finiteNumberOrZero(current.categoriesUpdatedAt);
   const incomingCategoriesUpdatedAt = finiteNumberOrZero(incoming.categoriesUpdatedAt);
@@ -234,6 +263,7 @@ function mergeSyncState(current, incoming) {
     updatedAt: finiteNumberOrZero(current.updatedAt),
     tasks: Object.keys(taskById).map(function(id) { return taskById[id]; }),
     tombstones: Object.keys(tombstoneById).map(function(id) { return tombstoneById[id]; }),
+    conflicts: Object.keys(conflictById).map(function(id) { return conflictById[id]; }),
     categories: useIncomingCategories ? (incoming.categories || []) : (current.categories || []),
     categoriesUpdatedAt: useIncomingCategories
       ? incomingCategoriesUpdatedAt
@@ -271,7 +301,8 @@ function validateTasks(tasks) {
       pinned: !!task.pinned,
       logs: logs.map(function(log) { return boundedString(log, 1000, 'task log'); }),
       createdAt: finiteNumberOrZero(task.createdAt),
-      updatedAt: finiteNumberOrZero(task.updatedAt) || finiteNumberOrZero(task.createdAt)
+      updatedAt: finiteNumberOrZero(task.updatedAt) || finiteNumberOrZero(task.createdAt),
+      baseUpdatedAt: finiteNumberOrZero(task.baseUpdatedAt)
     };
   });
 }
@@ -290,6 +321,53 @@ function validateTombstones(tombstones) {
       deletedAt: deletedAt
     };
   });
+}
+
+function validateConflicts(conflicts) {
+  if (conflicts == null) return [];
+  if (!Array.isArray(conflicts) || conflicts.length > MAX_CONFLICTS) throw new Error('invalid conflicts');
+  return conflicts.map(function(conflict) {
+    if (!conflict || typeof conflict !== 'object' || !Array.isArray(conflict.variants) || conflict.variants.length !== 2) {
+      throw new Error('invalid conflict');
+    }
+    if (!/^[A-Za-z0-9._-]{1,180}$/.test(String(conflict.id))) throw new Error('invalid conflict id');
+    const variants = validateTasks(conflict.variants);
+    return {
+      id: boundedString(conflict.id, 180, 'conflict id'),
+      taskId: boundedString(conflict.taskId, 100, 'conflict task id'),
+      detectedAt: finiteNumberOrZero(conflict.detectedAt),
+      resolvedAt: finiteNumberOrZero(conflict.resolvedAt),
+      variants: variants
+    };
+  });
+}
+
+function taskContentSignature(task) {
+  return JSON.stringify([
+    task.text || '', task.dueDate || null, task.category || null,
+    task.status || 'todo', !!task.pinned, Array.isArray(task.logs) ? task.logs : []
+  ]);
+}
+
+function simpleHash(text) {
+  let hash = 2166136261;
+  for (let i = 0; i < text.length; i++) {
+    hash ^= text.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(36);
+}
+
+function createConflict(taskA, taskB) {
+  const variants = validateTasks([taskA, taskB]);
+  const signatures = [taskContentSignature(variants[0]), taskContentSignature(variants[1])].sort();
+  return {
+    id: variants[0].id + '-' + simpleHash(signatures.join('|')),
+    taskId: variants[0].id,
+    detectedAt: Date.now(),
+    resolvedAt: 0,
+    variants: variants
+  };
 }
 
 function validateCategories(categories) {

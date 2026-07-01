@@ -43,19 +43,21 @@ GAS の `ContentService` ではレスポンスヘッダを自前で設定でき�
   "syncToken": "Script Propertiesと同じランダムキー",
   "tasks": [ /* タスク配列 */ ],
   "tombstones": [ /* 削除したタスクのID・削除時刻 */ ],
+  "conflicts": [ /* 同じタスクから分岐した編集候補 */ ],
   "categories": [ /* ジャンルID・名前・色 */ ],
   "categoriesUpdatedAt": 0
 }
 ```
 - `TaskData.json`の既存状態とタスクID単位で統合して保存
 - 通常編集は`updatedAt`が新しい方、削除は`tombstones`を優先
+- 同じ基準版から分岐した編集は`conflicts`へ両候補を保存し、勝者だけを返して敗者を消さない
 - 別端末で追加されたタスクは、受信配列に含まれなくても保持
 - 統合後の`tasks`と`categories`を固定IDのGoogleドキュメントへ反映（NotebookLM用）
 - `syncVersion: 2`の場合は統合後の状態をJSONで返す
 
 ### GET（GAS → アプリ / pull）
 - クエリ`syncToken`が必要
-- `syncVersion=2`ではタスク・削除履歴・ジャンルを含む状態を返す
+- `syncVersion=2`ではタスク・削除履歴・競合候補・ジャンルを含む状態を返す
 - パラメータがない旧アプリには従来どおりタスク配列だけを返す
 - 旧形式の`TaskData.json`（タスク配列）は読み取り時に自動でv2として扱う
 

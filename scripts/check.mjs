@@ -93,6 +93,19 @@ for (const requiredSyncSafety of [
     }
 }
 
+for (const requiredFeature of [
+    'id="conflict-section"',
+    'compareConflictWithAI',
+    'resolveConflict',
+    'タスクのタイトル',
+    '予定日時（任意）',
+]) {
+    if (indexHtml.includes(requiredFeature)) console.log(`OK  競合・編集機能: ${requiredFeature}`);
+    else { failed++; console.error(`NG  競合・編集機能がありません: ${requiredFeature}`); }
+}
+if (!indexHtml.includes('id="task-datetime"')) console.log('OK  新規追加欄に予定日時なし');
+else { failed++; console.error('NG  新規追加欄に予定日時が残っています'); }
+
 const syncCheck = spawnSync(process.execPath, [join(root, 'scripts', 'check-device-sync.mjs')], {
     encoding: 'utf8',
 });

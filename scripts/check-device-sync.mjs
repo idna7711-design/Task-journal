@@ -29,7 +29,7 @@ const scenarios = String.raw`
   function assert(condition, message) {
     if (!condition) throw new Error(message);
   }
-  function task(id, updatedAt, text) {
+  function task(id, updatedAt, text, baseUpdatedAt) {
     return {
       id: id,
       text: text || id,
@@ -39,7 +39,8 @@ const scenarios = String.raw`
       pinned: false,
       logs: [],
       createdAt: 1,
-      updatedAt: updatedAt
+      updatedAt: updatedAt,
+      baseUpdatedAt: baseUpdatedAt || 0
     };
   }
   function incoming(tasks, tombstones, categories, categoriesUpdatedAt) {
@@ -68,6 +69,14 @@ const scenarios = String.raw`
   state = mergeSyncState(state, incoming([task('b', 25, '古い編集')], [], [], 0));
   assert(state.tasks.filter(function(item) { return item.id === 'b'; })[0].text === '新しい編集', '古い編集が新しい編集を上書きする');
 
+  let conflictState = createEmptySyncState();
+  conflictState = mergeSyncState(conflictState, incoming([task('c', 10, '元の内容')], [], [], 0));
+  conflictState = mergeSyncState(conflictState, incoming([task('c', 20, '順次編集', 10)], [], [], 0));
+  assert(conflictState.conflicts.length === 0, '順次編集が競合扱いになる');
+  conflictState = mergeSyncState(conflictState, incoming([task('c', 30, '別端末の編集', 10)], [], [], 0));
+  assert(conflictState.conflicts.length === 1, '分岐した編集を競合として保持できない');
+  assert(conflictState.conflicts[0].variants.length === 2, '競合の両候補が残らない');
+
   const categories = [{ id: 'work', name: '仕事', color: 'blue' }];
   state = mergeSyncState(state, incoming([], [], categories, 50));
   state = mergeSyncState(state, incoming([], [], [], 45));
@@ -83,6 +92,8 @@ const scenarios = String.raw`
   console.log('OK  古い全量送信による消失を防止');
   console.log('OK  削除タスクの復活を防止');
   console.log('OK  同一タスクは新しい編集を採用');
+  console.log('OK  順次編集と競合編集を区別');
+  console.log('OK  競合の両候補を保持');
   console.log('OK  ジャンル一覧の競合を解決');
   console.log('OK  全削除したジャンルの復活を防止');
   console.log('OK  旧TaskData.jsonを自動移行');
@@ -94,6 +105,10 @@ try {
     const clientFunctions = [
         extractFunction(htmlSource, 'uid'),
         extractFunction(htmlSource, 'normalizeTask'),
+        extractFunction(htmlSource, 'taskContentSignature'),
+        extractFunction(htmlSource, 'simpleHash'),
+        extractFunction(htmlSource, 'createConflict'),
+        extractFunction(htmlSource, 'normalizeConflicts'),
         extractFunction(htmlSource, 'normalizeTombstones'),
         extractFunction(htmlSource, 'mergeTaskCollections'),
     ].join('\n');
@@ -106,10 +121,15 @@ try {
         { id: 'remote', text: '端末B', createdAt: 1, updatedAt: 20 },
         { id: 'deleted', text: '古い端末', createdAt: 1, updatedAt: 999 }
       ];
-      const result = mergeTaskCollections(local, [], remote, [{ id: 'deleted', deletedAt: 30 }]);
+      const result = mergeTaskCollections(local, [], remote, [{ id: 'deleted', deletedAt: 30 }], [], []);
       if (result.tasks.length !== 2) throw new Error('端末側で追加タスクを統合できない');
       if (result.tasks.some(item => item.id === 'deleted')) throw new Error('端末側で削除タスクが復活する');
       if (result.tombstones.length !== 1) throw new Error('端末側で削除履歴を保持できない');
+      const sequential = mergeTaskCollections(
+        [{ id: 'same', text: '元', createdAt: 1, updatedAt: 10, baseUpdatedAt: 10 }], [],
+        [{ id: 'same', text: '編集', createdAt: 1, updatedAt: 20, baseUpdatedAt: 10 }], [], [], []
+      );
+      if (sequential.conflicts.length !== 0) throw new Error('端末側で順次編集が競合になる');
     `;
     vm.runInNewContext(`${clientFunctions}\n${clientScenarios}`, {
         crypto: { randomUUID: () => 'test-id' },
