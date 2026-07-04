@@ -583,6 +583,8 @@
                 finishReason: details.finishReason || '',
                 hasReasoningContent: !!details.hasReasoningContent,
                 reasoningLength: details.reasoningLength || 0,
+                responseContentType: details.responseContentType || '',
+                responseLength: details.responseLength || 0,
             };
         }
 
@@ -592,6 +594,9 @@
             const status = Number(details.status || 0);
             if (error && error.code === 'AI_EMPTY_CONTENT') {
                 return 'ローカルAIは応答しましたが、本文が空でした。モデルの出力設定や推論トークン設定を確認してください。';
+            }
+            if (error && error.code === 'AI_INVALID_JSON') {
+                return 'AIから一時的に読み取れない応答が返りました。自動再試行でも直らなかったため、少し待ってからもう一度お試しください。';
             }
             if (status === 401 || status === 403) {
                 return 'AIエンドポイントの認証に失敗しました。設定のAIキーが現在のWorker設定と一致しているか確認してください。';
@@ -640,13 +645,21 @@
                 });
             }
 
+            const responseContentType = response.headers.get('content-type') || '';
+            const responseText = await response.text();
             let result;
             try {
-                result = await response.json();
+                result = JSON.parse(responseText);
             } catch (error) {
+                if (attempt === 0) {
+                    await new Promise(resolve => setTimeout(resolve, 1500));
+                    return requestAiChat(context, payload, timeoutMs, 1);
+                }
                 throw new AiRequestError('AI_INVALID_JSON', 'AI response was not valid JSON', {
                     endpointHost: info.host,
                     endpointPath: info.pathname,
+                    responseContentType,
+                    responseLength: responseText.length,
                 });
             }
 
