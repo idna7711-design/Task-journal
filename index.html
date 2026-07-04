@@ -424,14 +424,17 @@
         let tasks = [];
         let taskTombstones = [];
         let taskConflicts = [];
+        let syncOutbox = [];
         let settings = {
             webhookUrl: '',
             syncToken: '',
-            aiEndpointUrl: 'http://localhost:1234/v1/chat/completions',
+            aiEndpointUrl: '',
             aiModelName: 'local-model',
             aiApiKey: '',
             categories: null, // ジャンル一覧（人間が管理）。初期化時に既定値を入れる
-            categoriesUpdatedAt: 0
+            categoriesUpdatedAt: 0,
+            categoriesServerVersion: 0,
+            categoriesMutationId: ''
         };
         let currentTaskIdForMemo = null;
         let currentTaskIdForSchedule = null;
@@ -443,6 +446,9 @@
         let pushInProgress = false;
         let pushQueued = false;
         let pullPromise = null;
+        let syncCapabilityVerified = false;
+        let syncRetryAttempt = 0;
+        let syncRetryTimer = null;
         let lastCloudPullAt = 0;
         let db = null;
 
@@ -599,7 +605,7 @@
             return 'AIへの接続または応答処理に失敗しました。タスク本体は保持されています。';
         }
 
-        async function requestAiChat(context, payload, timeoutMs = 45000) {
+        async function requestAiChat(context, payload, timeoutMs = 45000, attempt = 0) {
             const info = aiEndpointInfo();
             let response;
             try {
@@ -609,6 +615,10 @@
                     body: JSON.stringify(payload),
                 }, timeoutMs);
             } catch (error) {
+                if (attempt === 0) {
+                    await new Promise(resolve => setTimeout(resolve, 1500));
+                    return requestAiChat(context, payload, timeoutMs, 1);
+                }
                 throw new AiRequestError('AI_FETCH_FAILED', error && error.message ? error.message : 'AI fetch failed', {
                     endpointHost: info.host,
                     endpointPath: info.pathname,
@@ -617,6 +627,10 @@
 
             if (!response.ok) {
                 const responseSnippet = await response.text().then(t => String(t).slice(0, 500)).catch(() => '');
+                if (attempt === 0 && [502, 503, 504].includes(response.status)) {
+                    await new Promise(resolve => setTimeout(resolve, 1500));
+                    return requestAiChat(context, payload, timeoutMs, 1);
+                }
                 throw new AiRequestError('AI_HTTP_' + response.status, 'AI endpoint returned HTTP ' + response.status, {
                     status: response.status,
                     statusText: response.statusText,
@@ -639,6 +653,10 @@
             const message = result && result.choices && result.choices[0] && result.choices[0].message ? result.choices[0].message : {};
             const content = String(message.content || '').trim();
             if (!content) {
+                if (attempt === 0) {
+                    await new Promise(resolve => setTimeout(resolve, 1500));
+                    return requestAiChat(context, payload, timeoutMs, 1);
+                }
                 throw new AiRequestError('AI_EMPTY_CONTENT', 'AI response content was empty', {
                     endpointHost: info.host,
                     endpointPath: info.pathname,
@@ -729,6 +747,37 @@
         const dbGetMeta = (key) => idb(store('meta', 'readonly').get(key));
         const dbPutMeta = (obj) => idb(store('meta', 'readwrite').put(obj));
 
+        function dbPersistLocalMutation(task, operation, resolvesConflictId = '') {
+            return new Promise((resolve, reject) => {
+                const tx = db.transaction(['tasks', 'meta'], 'readwrite');
+                tx.oncomplete = () => resolve();
+                tx.onerror = () => reject(tx.error);
+                const taskStore = tx.objectStore('tasks');
+                const metaStore = tx.objectStore('meta');
+                const request = metaStore.get('syncOutbox');
+                request.onerror = () => reject(request.error);
+                request.onsuccess = () => {
+                    const items = normalizeOutbox(request.result && request.result.items);
+                    const previous = [...items].reverse().find(item => item.taskId === task.id);
+                    const mutation = {
+                        mutationId: uid(),
+                        taskId: task.id,
+                        operation,
+                        baseVersion: Number(task.serverVersion) || 0,
+                        parentMutationId: previous ? previous.mutationId : (task.lastMutationId || ''),
+                        resolvesConflictId,
+                        task: { ...normalizeTask(task), deleted: operation === 'delete' },
+                        createdAt: now()
+                    };
+                    items.push(mutation);
+                    syncOutbox = items;
+                    metaStore.put({ key: 'syncOutbox', items });
+                    if (operation === 'delete') taskStore.delete(task.id);
+                    else taskStore.put(task);
+                };
+            });
+        }
+
         // ---- Utilities ----
         function uid() {
             return (crypto && crypto.randomUUID) ? crypto.randomUUID()
@@ -736,12 +785,6 @@
         }
         const now = () => Date.now();
         const isSyncConfigured = () => !!(settings.webhookUrl && settings.syncToken);
-        function authenticatedSyncUrl() {
-            const url = new URL(settings.webhookUrl);
-            url.searchParams.set('syncToken', settings.syncToken);
-            url.searchParams.set('syncVersion', '2');
-            return url.toString();
-        }
         async function fetchWithTimeout(url, options = {}, timeoutMs = 20000) {
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
@@ -751,7 +794,44 @@
                 clearTimeout(timeoutId);
             }
         }
+        async function postSyncRequest(payload, timeoutMs = 20000) {
+            const response = await fetchWithTimeout(settings.webhookUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                body: JSON.stringify({ protocolVersion: 3, syncToken: settings.syncToken, ...payload })
+            }, timeoutMs);
+            const text = (await response.text()).trim();
+            let result;
+            try { result = JSON.parse(text); } catch { result = null; }
+            if (!response.ok || !result || result.protocolVersion !== 3) {
+                const error = new Error(result && result.error ? String(result.error) : 'SYNC_PROTOCOL_MISMATCH');
+                error.code = result && result.error ? String(result.error) : 'SYNC_PROTOCOL_MISMATCH';
+                throw error;
+            }
+            if (result.error) {
+                const error = new Error(String(result.error));
+                error.code = String(result.error);
+                throw error;
+            }
+            return result;
+        }
+        async function ensureSyncV3() {
+            if (syncCapabilityVerified) return;
+            const result = await postSyncRequest({ action: 'capabilities' });
+            if (!result.capabilities || !result.capabilities.mutationSync) {
+                const error = new Error('SYNC_PROTOCOL_MISMATCH');
+                error.code = 'SYNC_PROTOCOL_MISMATCH';
+                throw error;
+            }
+            syncCapabilityVerified = true;
+        }
         function syncErrorMessage(error) {
+            if (error && error.code === 'SYNC_PROTOCOL_MISMATCH') {
+                return 'GASが古い同期方式です。GASをバージョン3へ更新するまで送信を停止しました。ローカルデータは保持されています。';
+            }
+            if (error && error.code === 'Unauthorized') {
+                return '同期キーが一致しません。設定を確認してください。ローカルデータは保持されています。';
+            }
             return error && error.name === 'AbortError'
                 ? 'クラウドが20秒以内に応答しませんでした。ローカルデータは保持されています。'
                 : 'クラウド同期に失敗しました。通信状態と同期設定を確認してください。';
@@ -785,8 +865,32 @@
                 logs: Array.isArray(t.logs) ? t.logs : [],
                 createdAt: t.createdAt || Date.now(),
                 updatedAt,
-                baseUpdatedAt: Number.isFinite(t.baseUpdatedAt) ? t.baseUpdatedAt : 0
+                baseUpdatedAt: Number.isFinite(t.baseUpdatedAt) ? t.baseUpdatedAt : 0,
+                serverVersion: Number.isFinite(t.serverVersion) ? t.serverVersion : 0,
+                lastMutationId: typeof t.lastMutationId === 'string' ? t.lastMutationId : '',
+                deleted: !!t.deleted
             };
+        }
+
+        function normalizeOutbox(items) {
+            if (!Array.isArray(items)) return [];
+            const seen = new Set();
+            return items.filter(item => {
+                if (!item || !/^[A-Za-z0-9._-]{1,100}$/.test(String(item.mutationId || ''))) return false;
+                if (!/^[A-Za-z0-9._-]{1,100}$/.test(String(item.taskId || ''))) return false;
+                if (!['create', 'update', 'delete'].includes(item.operation) || seen.has(item.mutationId)) return false;
+                seen.add(item.mutationId);
+                return true;
+            }).map(item => ({
+                mutationId: String(item.mutationId),
+                taskId: String(item.taskId),
+                operation: item.operation,
+                baseVersion: Number(item.baseVersion) || 0,
+                parentMutationId: String(item.parentMutationId || ''),
+                resolvesConflictId: String(item.resolvesConflictId || ''),
+                task: normalizeTask(item.task || { id: item.taskId }),
+                createdAt: Number(item.createdAt) || 0
+            }));
         }
 
         function taskContentSignature(task) {
@@ -844,7 +948,12 @@
                 if (!item || !item.id || !Number.isFinite(item.deletedAt)) return;
                 const existing = byId.get(item.id);
                 if (!existing || item.deletedAt > existing.deletedAt) {
-                    byId.set(item.id, { id: String(item.id), deletedAt: item.deletedAt });
+                    byId.set(item.id, {
+                        id: String(item.id),
+                        deletedAt: item.deletedAt,
+                        serverVersion: Number(item.serverVersion) || 0,
+                        lastMutationId: String(item.lastMutationId || '')
+                    });
                 }
             });
             return Array.from(byId.values());
@@ -909,8 +1018,95 @@
             };
         }
 
-        // ---- Cloud sync (push) ----
-        window.triggerDriveSync = () => {
+        // ---- Cloud sync v3 ----
+        async function applySyncV3Result(remote, submittedMutationIds) {
+            const acked = new Set(Array.isArray(remote.ackedMutationIds) ? remote.ackedMutationIds : []);
+            const submitted = new Set(submittedMutationIds || []);
+            syncOutbox = syncOutbox.filter(item => !(submitted.has(item.mutationId) && acked.has(item.mutationId)));
+
+            const canonical = new Map((remote.tasks || []).map(task => [task.id, normalizeTask(task)]));
+            // v2からの初回移行時、未送信だったローカル差分は捨てずに競合候補として次回送る。
+            const pendingTaskIds = new Set(syncOutbox.map(item => item.taskId));
+            tasks.forEach(localTask => {
+                if (pendingTaskIds.has(localTask.id) || (localTask.serverVersion || 0) > 0) return;
+                const serverTask = canonical.get(localTask.id);
+                if (serverTask && taskContentSignature(serverTask) === taskContentSignature(localTask)) return;
+                const mutationId = uid();
+                syncOutbox.push({
+                    mutationId,
+                    taskId: localTask.id,
+                    operation: serverTask ? 'update' : 'create',
+                    baseVersion: 0,
+                    parentMutationId: '',
+                    task: normalizeTask(localTask),
+                    createdAt: now()
+                });
+                pendingTaskIds.add(localTask.id);
+                pushQueued = true;
+            });
+            await dbPutMeta({ key: 'syncOutbox', items: syncOutbox });
+
+            syncOutbox.forEach(item => {
+                if (item.operation === 'delete') canonical.delete(item.taskId);
+                else canonical.set(item.taskId, normalizeTask(item.task));
+            });
+            tasks = Array.from(canonical.values());
+            taskTombstones = normalizeTombstones(remote.tombstones);
+            taskConflicts = normalizeConflicts(remote.conflicts);
+            await dbReplaceTasks(tasks);
+            await persistTaskTombstones();
+            await persistTaskConflicts();
+
+            const submittedCategoryMutationId = remote.submittedCategoryMutationId || '';
+            if (submittedCategoryMutationId && remote.ackedCategoryMutationId === submittedCategoryMutationId
+                && settings.categoriesMutationId === submittedCategoryMutationId) {
+                settings.categoriesMutationId = '';
+            } else if (submittedCategoryMutationId && settings.categoriesMutationId === submittedCategoryMutationId) {
+                // 別端末が先にジャンルを更新していた場合は、最新サーバー版を基準に一度だけ再送する。
+                settings.categoriesServerVersion = Number(remote.categoriesVersion) || 0;
+                settings.categoriesMutationId = uid();
+                pushQueued = true;
+            }
+            if (Array.isArray(remote.categories) && !settings.categoriesMutationId) {
+                settings.categories = remote.categories;
+                settings.categoriesServerVersion = Number(remote.categoriesVersion) || 0;
+                await persistConfig();
+            }
+            sortTasks();
+            render();
+        }
+
+        async function runSyncV3() {
+            await ensureSyncV3();
+            const submitted = syncOutbox.map(item => ({ ...item, task: { ...item.task } }));
+            const result = await postSyncRequest({
+                action: 'sync',
+                mutations: submitted,
+                categoryMutation: settings.categoriesMutationId ? {
+                    mutationId: settings.categoriesMutationId,
+                    baseVersion: settings.categoriesServerVersion || 0,
+                    categories: getGenres()
+                } : null,
+                resolvedConflictIds: taskConflicts.filter(item => item.resolvedAt).map(item => item.id)
+            }, 60000);
+            result.submittedCategoryMutationId = settings.categoriesMutationId || '';
+            await applySyncV3Result(result, submitted.map(item => item.mutationId));
+            lastCloudPullAt = Date.now();
+            syncRetryAttempt = 0;
+            clearTimeout(syncRetryTimer);
+            updateSyncStatus('success');
+        }
+
+        function scheduleSyncRetry(error) {
+            if (!isSyncConfigured() || (error && error.code === 'SYNC_PROTOCOL_MISMATCH')) return;
+            const delays = [5000, 15000, 60000];
+            if (syncRetryAttempt >= delays.length) return;
+            const delay = delays[syncRetryAttempt++];
+            clearTimeout(syncRetryTimer);
+            syncRetryTimer = setTimeout(() => triggerDriveSync(true), delay);
+        }
+
+        window.triggerDriveSync = (immediate = false) => {
             if (!isSyncConfigured()) return;
             updateSyncStatus('syncing');
             if (pushInProgress) {
@@ -920,75 +1116,22 @@
             clearTimeout(syncTimeout);
             syncTimeout = setTimeout(async () => {
                 pushInProgress = true;
-                let succeeded = false;
                 try {
-                    const response = await fetchWithTimeout(settings.webhookUrl, {
-                        method: 'POST',
-                        // text/plain にすると preflight(OPTIONS) を回避できる
-                        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-                        body: JSON.stringify({
-                            syncVersion: 2,
-                            syncToken: settings.syncToken,
-                            tasks,
-                            tombstones: taskTombstones,
-                            conflicts: taskConflicts,
-                            categories: getGenres(),
-                            categoriesUpdatedAt: settings.categoriesUpdatedAt || 0
-                        })
-                    }, 60000);
-                    const result = (await response.text()).trim();
-                    let remote = null;
-                    try { remote = JSON.parse(result); } catch { /* 旧GASのSuccess応答はそのまま許可 */ }
-                    if (!response.ok || (result !== 'Success' && (!remote || remote.syncVersion !== 2))) {
-                        throw new Error(result || `HTTP ${response.status}`);
-                    }
-                    if (remote && remote.syncVersion === 2) {
-                        await mergeRemote(remote);
-                        sortTasks();
-                        render();
-                    }
-                    succeeded = true;
-                    updateSyncStatus('success');
-                } catch (e) {
-                    console.error('Drive sync error', e);
+                    await runSyncV3();
+                } catch (error) {
+                    console.error('Drive sync error', error);
                     updateSyncStatus('error');
+                    scheduleSyncRetry(error);
                 } finally {
                     pushInProgress = false;
-                    const shouldRetry = succeeded && pushQueued;
+                    const rerun = pushQueued;
                     pushQueued = false;
-                    if (shouldRetry) triggerDriveSync();
+                    if (rerun) triggerDriveSync(true);
                 }
-            }, 1500);
+            }, immediate ? 0 : 1500);
         };
 
         // ---- Cloud sync (pull) ----
-        async function mergeRemote(remote) {
-            const cloud = Array.isArray(remote)
-                ? { tasks: remote, tombstones: [], categories: null, categoriesUpdatedAt: 0 }
-                : remote;
-            const merged = mergeTaskCollections(
-                tasks,
-                taskTombstones,
-                cloud.tasks,
-                cloud.tombstones,
-                taskConflicts,
-                cloud.conflicts
-            );
-            tasks = merged.tasks;
-            taskTombstones = merged.tombstones;
-            taskConflicts = merged.conflicts;
-            await dbReplaceTasks(tasks);
-            await persistTaskTombstones();
-            await persistTaskConflicts();
-
-            const remoteCategoriesUpdatedAt = Number(cloud.categoriesUpdatedAt) || 0;
-            if (Array.isArray(cloud.categories)
-                && remoteCategoriesUpdatedAt > (settings.categoriesUpdatedAt || 0)) {
-                settings.categories = cloud.categories;
-                settings.categoriesUpdatedAt = remoteCategoriesUpdatedAt;
-                await persistConfig();
-            }
-        }
         async function pullFromCloud(showOverlay) {
             if (!isSyncConfigured()) return;
             if (pullPromise) {
@@ -1003,19 +1146,7 @@
                 return;
             }
             const runPull = async () => {
-                const res = await fetchWithTimeout(authenticatedSyncUrl(), { method: 'GET' });
-                if (!res.ok) throw new Error('SYNC_PULL_' + res.status);
-                const remote = await res.json();
-                if (remote && remote.error) throw new Error('SYNC_PULL_' + remote.error);
-                if (Array.isArray(remote) || (remote && remote.syncVersion === 2)) {
-                    await mergeRemote(remote);
-                    sortTasks();
-                    render();
-                }
-                lastCloudPullAt = Date.now();
-                updateSyncStatus('success');
-                // 取得後にローカル固有の変更も送り、手動同期1回で双方向を揃える。
-                triggerDriveSync();
+                await runSyncV3();
             };
             try {
                 if (showOverlay) showLoading(true);
@@ -1080,12 +1211,15 @@
         }
 
         // ---- Notifications & Downloads ----
-        window.showToast = (message, type = 'error') => {
+        window.showToast = (message, type = 'error', allowTrustedHtml = false) => {
             const toast = document.createElement('div');
             const bgClass = type === 'error' ? 'bg-rose-100 border-rose-200 text-rose-800' : 'bg-emerald-100 border-emerald-200 text-emerald-800';
             const icon = type === 'error' ? '<i data-lucide="alert-triangle" class="w-5 h-5 text-rose-600 shrink-0"></i>' : '<i data-lucide="check-circle" class="w-5 h-5 text-emerald-600 shrink-0"></i>';
             toast.className = `fixed top-4 right-4 left-4 sm:left-auto sm:w-96 ${bgClass} border p-4 rounded-2xl shadow-xl text-sm font-medium z-[100] transition-all duration-300 transform -translate-y-full opacity-0 flex items-start gap-3`;
-            toast.innerHTML = `${icon}<div>${message}</div>`;
+            toast.innerHTML = `${icon}<div class="toast-message"></div>`;
+            const messageElement = toast.querySelector('.toast-message');
+            if (allowTrustedHtml) messageElement.innerHTML = String(message);
+            else messageElement.textContent = String(message);
             document.body.appendChild(toast);
             lucide.createIcons();
             requestAnimationFrame(() => toast.classList.remove('-translate-y-full', 'opacity-0'));
@@ -1227,7 +1361,7 @@
                 if (cat === '__NONE__') { unmatched.push(t); continue; }
                 t.category = cat;
                 t.updatedAt = now();
-                await dbPutTask(t);
+                await dbPersistLocalMutation(t, 'update');
             }
 
             btn.classList.remove('pointer-events-none', 'opacity-70');
@@ -1235,7 +1369,7 @@
 
             if (hasError) {
                 btn.innerHTML = `<i data-lucide="alert-triangle" class="w-4 h-4 text-rose-600"></i> 接続エラー`;
-                window.showToast(`<strong class='block mb-1'>AI解析に失敗しました</strong>${escapeHtml(aiErrorMessage(lastAiError))}`, 'error');
+                window.showToast(`<strong class='block mb-1'>AI解析に失敗しました</strong>${escapeHtml(aiErrorMessage(lastAiError))}`, 'error', true);
                 setTimeout(() => { btn.innerHTML = originalHTML; lucide.createIcons(); }, 5000);
             } else {
                 btn.innerHTML = `<i data-lucide="check" class="w-4 h-4"></i> 完了`;
@@ -1246,7 +1380,7 @@
 
             // 該当ジャンルが無かったタスクがあれば、AIに新ジャンルを提案させる
             if (!hasError && unmatched.length > 0) {
-                window.showToast(`<strong class='block mb-1'>${unmatched.length}件は既存ジャンルに該当しませんでした</strong>AIが新しいジャンルを提案します。`, 'success');
+                window.showToast(`<strong class='block mb-1'>${unmatched.length}件は既存ジャンルに該当しませんでした</strong>AIが新しいジャンルを提案します。`, 'success', true);
                 openGenreModal();
                 await runGenreSuggestion(unmatched.map(t => t.text));
             }
@@ -1260,7 +1394,7 @@
             if (!t) return;
             t.category = cat;
             t.updatedAt = now();
-            await dbPutTask(t);
+            await dbPersistLocalMutation(t, 'update');
             render();
             triggerDriveSync();
         };
@@ -1528,10 +1662,12 @@
                 logs: [],
                 createdAt: now(),
                 updatedAt: now(),
-                baseUpdatedAt: 0
+                baseUpdatedAt: 0,
+                serverVersion: 0,
+                lastMutationId: ''
             };
             tasks.push(task);
-            await dbPutTask(task);
+            await dbPersistLocalMutation(task, 'create');
             sortTasks();
             render();
             triggerDriveSync();
@@ -1547,7 +1683,7 @@
             if (!t) return;
             t.dueDate = newDate || null;
             t.updatedAt = now();
-            await dbPutTask(t);
+            await dbPersistLocalMutation(t, 'update');
             triggerDriveSync();
         };
 
@@ -1559,7 +1695,7 @@
             t.status = newStatus;
             t.logs = [...(t.logs || []), `${getTimeString()} ${logMsg}`];
             t.updatedAt = now();
-            await dbPutTask(t);
+            await dbPersistLocalMutation(t, 'update');
             sortTasks();
             render();
             triggerDriveSync();
@@ -1571,7 +1707,7 @@
             t.status = 'doing';
             t.logs = [...(t.logs || []), `${getTimeString()} 🚀 開始しました`];
             t.updatedAt = now();
-            await dbPutTask(t);
+            await dbPersistLocalMutation(t, 'update');
             sortTasks();
             render();
             triggerDriveSync();
@@ -1584,7 +1720,7 @@
             t.status = 'todo';
             t.logs = [...(t.logs || []), `${getTimeString()} ↩ 開始前に戻しました`];
             t.updatedAt = now();
-            await dbPutTask(t);
+            await dbPersistLocalMutation(t, 'update');
             sortTasks();
             render();
             triggerDriveSync();
@@ -1596,7 +1732,7 @@
             if (!t) return;
             t.pinned = !t.pinned;
             t.updatedAt = now();
-            await dbPutTask(t);
+            await dbPersistLocalMutation(t, 'update');
             sortTasks();
             render();
             triggerDriveSync();
@@ -1604,13 +1740,10 @@
 
         window.deleteTask = async (id) => {
             if (!confirm('タスクを削除しますか？')) return;
-            taskTombstones = normalizeTombstones([
-                ...taskTombstones,
-                { id, deletedAt: now() }
-            ]);
-            await persistTaskTombstones();
+            const task = tasks.find(x => x.id === id);
+            if (!task) return;
             tasks = tasks.filter(x => x.id !== id);
-            await dbDeleteTask(id);
+            await dbPersistLocalMutation(task, 'delete');
             render();
             triggerDriveSync();
         };
@@ -1670,7 +1803,7 @@
             t.text = evTitle;
             t.dueDate = dt || null;
             t.updatedAt = now();
-            await dbPutTask(t);
+            await dbPersistLocalMutation(t, 'update');
             sortTasks();
             render();
             triggerDriveSync();
@@ -1703,7 +1836,7 @@
             t.logs = [...(t.logs || []), `${getTimeString()} 📝 ${memoInput.value}`];
             if (t.status === 'todo') t.status = 'doing';
             t.updatedAt = now();
-            await dbPutTask(t);
+            await dbPersistLocalMutation(t, 'update');
             closeMemoModal();
             sortTasks();
             render();
@@ -1716,7 +1849,7 @@
         window.saveSettings = async () => {
             settings.webhookUrl = document.getElementById('webhook-input').value.trim();
             settings.syncToken = document.getElementById('sync-token-input').value.trim();
-            settings.aiEndpointUrl = document.getElementById('ai-endpoint-input').value.trim() || 'http://localhost:1234/v1/chat/completions';
+            settings.aiEndpointUrl = document.getElementById('ai-endpoint-input').value.trim();
             settings.aiModelName = document.getElementById('ai-model-input').value.trim() || 'local-model';
             settings.aiApiKey = document.getElementById('ai-apikey-input').value.trim();
             await persistConfig();
@@ -1727,8 +1860,10 @@
                 triggerDriveSync();
             }
             // AIエンドポイント設定後、今日の豆知識を用意して見出しを更新
-            ensureTodaysTrivia();
-            scheduleTriviaPrep();
+            if (settings.aiEndpointUrl) {
+                ensureTodaysTrivia();
+                scheduleTriviaPrep();
+            }
         };
 
         // 設定（ジャンル含む）をローカルDBへ保存
@@ -1793,7 +1928,7 @@
             const used = settings.categories.map(g => g.color);
             const nextColor = color || GENRE_COLOR_KEYS.find(c => !used.includes(c)) || GENRE_COLOR_KEYS[settings.categories.length % GENRE_COLOR_KEYS.length];
             settings.categories.push({ id: uid(), name, color: nextColor });
-            settings.categoriesUpdatedAt = now();
+            settings.categoriesMutationId = uid();
             await persistConfig();
             renderGenreList();
             render();
@@ -1806,7 +1941,7 @@
             const name = String(value || '').trim();
             if (!g || !name) { renderGenreList(); return; }
             g.name = name;
-            settings.categoriesUpdatedAt = now();
+            settings.categoriesMutationId = uid();
             await persistConfig();
             renderGenreList();
             render();
@@ -1818,7 +1953,7 @@
             const g = settings.categories.find(x => x.id === id);
             if (!g) return;
             g.color = color;
-            settings.categoriesUpdatedAt = now();
+            settings.categoriesMutationId = uid();
             await persistConfig();
             renderGenreList();
             render();
@@ -1837,10 +1972,10 @@
             settings.categories = settings.categories.filter(x => x.id !== id);
             if (used > 0) {
                 for (const t of tasks.filter(t => t.category === id)) {
-                    t.category = null; t.updatedAt = now(); await dbPutTask(t);
+                    t.category = null; t.updatedAt = now(); await dbPersistLocalMutation(t, 'update');
                 }
             }
-            settings.categoriesUpdatedAt = now();
+            settings.categoriesMutationId = uid();
             await persistConfig();
             renderGenreList();
             render();
@@ -1913,13 +2048,21 @@
             if (!t) { closeGenrePicker(); return; }
             t.category = genreId || null;
             t.updatedAt = now();
-            await dbPutTask(t);
+            await dbPersistLocalMutation(t, 'update');
             closeGenrePicker();
             render();
             triggerDriveSync();
         };
 
         function conflictVariantHTML(conflictId, variant, index) {
+            if (variant.deleted) {
+                return `<div class="rounded-2xl bg-white border border-rose-200 p-3">
+                    <div class="text-[11px] font-bold text-rose-700 mb-2">候補${index === 0 ? 'A' : 'B'}：削除</div>
+                    <p class="text-sm font-bold text-zinc-800 break-words">${escapeHtml(variant.text || 'このタスク')}</p>
+                    <p class="mt-2 text-[11px] text-zinc-500">別端末の編集と削除が重なりました。削除を採用するまで内容は失われません。</p>
+                    <button type="button" onclick="resolveConflict('${conflictId}', ${index})" class="mt-3 w-full px-3 py-2 text-xs font-bold rounded-xl bg-rose-50 text-rose-800 hover:bg-rose-100 border border-rose-200">削除を採用</button>
+                </div>`;
+            }
             const due = variant.dueDate ? new Date(variant.dueDate).toLocaleString('ja-JP') : '未設定';
             const genre = getGenre(variant.category);
             const logs = Array.isArray(variant.logs) && variant.logs.length
@@ -1954,7 +2097,7 @@
                     <div id="conflict-ai-${conflict.id}" class="hidden mt-3 rounded-xl bg-violet-50 border border-violet-100 p-3 text-xs text-violet-900"></div>
                     <div class="flex flex-col sm:flex-row gap-2 mt-3">
                         <button type="button" onclick="compareConflictWithAI('${conflict.id}')" class="flex-1 px-3 py-2 text-xs font-bold rounded-xl bg-violet-600 text-white hover:bg-violet-700">AIに同じタスクか比較してもらう</button>
-                        <button type="button" onclick="resolveConflict('${conflict.id}', 'both')" class="flex-1 px-3 py-2 text-xs font-bold rounded-xl bg-white text-zinc-700 hover:bg-zinc-50 border border-zinc-200">両方を別タスクで残す</button>
+                        ${conflict.variants.some(variant => variant.deleted) ? '' : `<button type="button" onclick="resolveConflict('${conflict.id}', 'both')" class="flex-1 px-3 py-2 text-xs font-bold rounded-xl bg-white text-zinc-700 hover:bg-zinc-50 border border-zinc-200">両方を別タスクで残す</button>`}
                     </div>
                 </article>`).join('');
         }
@@ -2002,16 +2145,23 @@
             const current = tasks.find(task => task.id === conflict.taskId);
             const chosenIndex = choice === 1 ? 1 : 0;
             const chosen = normalizeTask({ ...conflict.variants[chosenIndex], id: conflict.taskId });
-            chosen.baseUpdatedAt = current ? current.updatedAt : chosen.baseUpdatedAt;
-            chosen.updatedAt = now();
             tasks = tasks.filter(task => task.id !== conflict.taskId);
-            tasks.push(chosen);
-            await dbPutTask(chosen);
+            if (chosen.deleted) {
+                const deleteBase = current || normalizeTask({ ...chosen, deleted: false });
+                await dbPersistLocalMutation(deleteBase, 'delete', conflictId);
+            } else {
+                chosen.deleted = false;
+                chosen.serverVersion = current ? current.serverVersion : chosen.serverVersion;
+                chosen.lastMutationId = current ? current.lastMutationId : chosen.lastMutationId;
+                chosen.updatedAt = now();
+                tasks.push(chosen);
+                await dbPersistLocalMutation(chosen, current ? 'update' : 'create', conflictId);
+            }
 
             if (choice === 'both') {
-                const other = normalizeTask({ ...conflict.variants[1], id: uid(), createdAt: now(), updatedAt: now(), baseUpdatedAt: 0 });
+                const other = normalizeTask({ ...conflict.variants[1], id: uid(), createdAt: now(), updatedAt: now(), baseUpdatedAt: 0, serverVersion: 0, lastMutationId: '' });
                 tasks.push(other);
-                await dbPutTask(other);
+                await dbPersistLocalMutation(other, 'create');
             }
             conflict.resolvedAt = now();
             taskConflicts = normalizeConflicts(taskConflicts);
@@ -2258,15 +2408,17 @@
                     settings.aiApiKey = cfg.aiApiKey || '';
                     if (Array.isArray(cfg.categories)) settings.categories = cfg.categories;
                     settings.categoriesUpdatedAt = Number(cfg.categoriesUpdatedAt) || 0;
-                    if (Array.isArray(cfg.categories) && !settings.categoriesUpdatedAt) {
-                        settings.categoriesUpdatedAt = now();
+                    settings.categoriesServerVersion = Number(cfg.categoriesServerVersion) || 0;
+                    settings.categoriesMutationId = typeof cfg.categoriesMutationId === 'string' ? cfg.categoriesMutationId : '';
+                    if (Array.isArray(cfg.categories) && !settings.categoriesServerVersion && !settings.categoriesMutationId) {
+                        settings.categoriesMutationId = uid();
                         shouldPersistConfig = true;
                     }
                 }
                 // ジャンル未設定(null)なら既定5個を採用。空配列は意図的な「ジャンルなし」として維持する。
                 if (!Array.isArray(settings.categories)) {
                     settings.categories = DEFAULT_GENRES.map(g => ({ ...g }));
-                    settings.categoriesUpdatedAt = now();
+                    settings.categoriesMutationId = uid();
                     shouldPersistConfig = true;
                 }
                 if (shouldPersistConfig) await persistConfig();
@@ -2281,6 +2433,8 @@
                 taskTombstones = normalizeTombstones(tombstoneMeta && tombstoneMeta.items);
                 const conflictMeta = await dbGetMeta('taskConflicts');
                 taskConflicts = normalizeConflicts(conflictMeta && conflictMeta.items);
+                const outboxMeta = await dbGetMeta('syncOutbox');
+                syncOutbox = normalizeOutbox(outboxMeta && outboxMeta.items);
                 const deletedIds = new Set(taskTombstones.map(t => t.id));
                 const storedTasks = (await dbGetAllTasks()).map(normalizeTask);
                 tasks = storedTasks.filter(task => !deletedIds.has(task.id));
@@ -2289,12 +2443,15 @@
                 render();
 
                 if (isSyncConfigured()) {
-                    await pullFromCloud(true);
+                    // ローカルデータを先に使える状態にし、同期は画面を遮らず裏側で行う。
+                    pullFromCloud(false);
                 }
 
                 // 今日の豆知識をキャッシュ確認→無ければ生成。日付が変わる前の先読みも開始。
-                ensureTodaysTrivia();
-                scheduleTriviaPrep();
+                if (settings.aiEndpointUrl) {
+                    ensureTodaysTrivia();
+                    scheduleTriviaPrep();
+                }
             } catch (err) {
                 console.error('Init error', err);
                 window.showToast('ローカルDB(IndexedDB)の初期化に失敗しました。プライベートブラウズ等では利用できない場合があります。', 'error');
