@@ -88,6 +88,57 @@ const scenarios = String.raw`
   const legacy = normalizeStoredState([task('legacy', 5)]);
   assert(legacy.syncVersion === 2 && legacy.tasks.length === 1, '旧タスク配列をv2へ移行できない');
 
+  function mutation(id, taskId, operation, baseVersion, parentMutationId, text) {
+    return {
+      mutationId: id,
+      taskId: taskId,
+      operation: operation,
+      baseVersion: baseVersion,
+      parentMutationId: parentMutationId || '',
+      task: task(taskId, 1, text || taskId, 0),
+      createdAt: 1
+    };
+  }
+  let v3 = normalizeProtocol3State(createEmptySyncState());
+  let v3Result = applyMutations(v3, [mutation('m1', 'v3-task', 'create', 0, '', '初版')], null, []);
+  v3 = v3Result.state;
+  assert(v3.tasks[0].serverVersion === 1 && v3.tasks[0].text === '初版', 'v3で新規作成できない');
+
+  v3Result = applyMutations(v3, [mutation('m2', 'v3-task', 'update', 1, 'm1', '端末時計が古い後発編集')], null, []);
+  v3 = v3Result.state;
+  assert(v3.tasks[0].text === '端末時計が古い後発編集', '端末時計に依存して後発編集を失う');
+  assert(v3.tasks[0].serverVersion === 2, 'タスク版番号が進まない');
+
+  v3Result = applyMutations(v3, [mutation('m2', 'v3-task', 'update', 1, 'm1', '端末時計が古い後発編集')], null, []);
+  assert(v3Result.state.tasks[0].serverVersion === 2, '同じ変更の再送が二重適用される');
+
+  v3Result = applyMutations(v3, [
+    mutation('m3', 'v3-task', 'update', 2, 'm2', 'オフライン編集1'),
+    mutation('m4', 'v3-task', 'update', 2, 'm3', 'オフライン編集2')
+  ], null, []);
+  v3 = v3Result.state;
+  assert(v3.tasks[0].text === 'オフライン編集2' && v3.tasks[0].serverVersion === 4, '連続オフライン編集を順番に適用できない');
+
+  v3Result = applyMutations(v3, [mutation('other-device', 'v3-task', 'update', 2, 'm2', '別端末の分岐編集')], null, []);
+  assert(v3Result.state.conflicts.some(function(item) { return !item.resolvedAt; }), '分岐編集の両候補を保持できない');
+
+  const deleteMutation = mutation('delete-device', 'v3-task', 'delete', 2, 'm2', '削除前の内容');
+  v3Result = applyMutations(v3Result.state, [deleteMutation], null, []);
+  const deleteConflict = v3Result.state.conflicts.find(function(item) {
+    return item.variants.some(function(variant) { return variant.deleted; });
+  });
+  assert(deleteConflict && deleteConflict.variants.length === 2, '削除と編集の競合候補を両方保持できない');
+  const resolution = mutation('resolve-delete', 'v3-task', 'delete', 0, '', '削除前の内容');
+  resolution.resolvesConflictId = deleteConflict.id;
+  v3Result = applyMutations(v3Result.state, [resolution], null, []);
+  assert(v3Result.state.tombstones.some(function(item) { return item.id === 'v3-task'; }), '競合解決として削除を確定できない');
+  assert(v3Result.state.conflicts.find(function(item) { return item.id === deleteConflict.id; }).resolvedAt > 0, '解決済み競合が残る');
+
+  const categoryResult = applyMutations(v3Result.state, [], {
+    mutationId: 'category-1', baseVersion: 0, categories: [{ id: 'Work', name: '仕事', color: 'blue' }]
+  }, []);
+  assert(categoryResult.state.categoriesVersion === 1 && categoryResult.ackedCategoryMutationId === 'category-1', 'ジャンル版番号同期が動かない');
+
   console.log('OK  端末A/Bの追加を保持');
   console.log('OK  古い全量送信による消失を防止');
   console.log('OK  削除タスクの復活を防止');
@@ -97,6 +148,13 @@ const scenarios = String.raw`
   console.log('OK  ジャンル一覧の競合を解決');
   console.log('OK  全削除したジャンルの復活を防止');
   console.log('OK  旧TaskData.jsonを自動移行');
+  console.log('OK  v3は端末時計に依存しない');
+  console.log('OK  v3変更IDで二重適用を防止');
+  console.log('OK  v3は連続オフライン編集を保持');
+  console.log('OK  v3は分岐編集を競合保存');
+  console.log('OK  v3は削除と編集を競合保存');
+  console.log('OK  v3競合解決をサーバーへ確定');
+  console.log('OK  v3はジャンルを版番号同期');
 })();
 `;
 

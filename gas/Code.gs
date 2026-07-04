@@ -23,12 +23,15 @@ const JSON_FILE_NAME = 'TaskData.json';
 const NOTEBOOK_DOC_ID = '1avg594_Kg4HqXNFZijWatgSn1g1ofTjXa5eeOiHHdSE';
 const SYNC_TOKEN_PROPERTY = 'SYNC_TOKEN';
 const SYNC_VERSION = 2;
+const PROTOCOL_VERSION = 3;
 const MAX_BODY_BYTES = 1000000;
 const MAX_TASKS = 1000;
 const MAX_TOMBSTONES = 5000;
 const MAX_CONFLICTS = 2000;
 const MAX_CATEGORIES = 100;
 const MAX_LOGS_PER_TASK = 200;
+const MAX_MUTATIONS = 500;
+const MAX_APPLIED_MUTATIONS = 5000;
 
 function doPost(e) {
   if (!e || !e.postData) {
@@ -49,6 +52,17 @@ function doPost(e) {
   const queryToken = e && e.parameter ? e.parameter.syncToken : '';
   if (!isAuthorized(data.syncToken || queryToken)) {
     return ContentService.createTextOutput('Unauthorized');
+  }
+
+  if (data.action === 'capabilities') {
+    return jsonOutput({
+      protocolVersion: PROTOCOL_VERSION,
+      capabilities: { mutationSync: true, conflictPreservation: true, postOnlyToken: true }
+    });
+  }
+
+  if (data.action === 'sync' && Number(data.protocolVersion) === PROTOCOL_VERSION) {
+    return handleMutationSync(data);
   }
 
   if (!Array.isArray(data.tasks)) {
@@ -117,6 +131,205 @@ function doPost(e) {
 }
 
 /**
+ * 同期v3: 端末時刻ではなくタスクごとの版番号で変更を直列化する。
+ * 送信済みmutationIdは再送されても二重適用せず、分岐は両候補を競合として保持する。
+ */
+function handleMutationSync(data) {
+  let mutations;
+  let categoryMutation;
+  let resolvedConflictIds;
+  try {
+    mutations = validateMutations(data.mutations);
+    categoryMutation = validateCategoryMutation(data.categoryMutation);
+    resolvedConflictIds = validateResolvedConflictIds(data.resolvedConflictIds);
+  } catch (err) {
+    return jsonOutput({ protocolVersion: PROTOCOL_VERSION, error: 'Invalid request: ' + err.message });
+  }
+
+  const lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(30000);
+    const folder = DriveApp.getFolderById(FOLDER_ID);
+    const state = normalizeProtocol3State(readSyncState(folder));
+    const result = applyMutations(state, mutations, categoryMutation, resolvedConflictIds);
+    result.state.revision = finiteNumberOrZero(state.revision) + 1;
+    result.state.updatedAt = Date.now();
+    upsertFile(folder, JSON_FILE_NAME, JSON.stringify(result.state));
+
+    const doc = getNotebookDocument();
+    renderNotebookDocument(doc, result.state.tasks, result.state.categories);
+
+    return jsonOutput({
+      protocolVersion: PROTOCOL_VERSION,
+      revision: result.state.revision,
+      tasks: result.state.tasks,
+      tombstones: result.state.tombstones,
+      conflicts: result.state.conflicts,
+      categories: result.state.categories,
+      categoriesVersion: result.state.categoriesVersion,
+      ackedMutationIds: result.ackedMutationIds,
+      ackedCategoryMutationId: result.ackedCategoryMutationId
+    });
+  } catch (err) {
+    console.error('TaskJournal mutation sync failed: ' + (err && err.stack ? err.stack : err));
+    return jsonOutput({ protocolVersion: PROTOCOL_VERSION, error: err && err.message ? err.message : 'sync failed' });
+  } finally {
+    if (lock.hasLock()) lock.releaseLock();
+  }
+}
+
+function normalizeProtocol3State(state) {
+  state.protocolVersion = PROTOCOL_VERSION;
+  state.tasks = validateTasks(state.tasks || []).map(function(task) {
+    task.serverVersion = positiveIntegerOrZero(task.serverVersion) || 1;
+    task.lastMutationId = safeIdOrEmpty(task.lastMutationId);
+    task.deleted = false;
+    return task;
+  });
+  state.tombstones = validateTombstones(state.tombstones || []).map(function(item) {
+    item.serverVersion = positiveIntegerOrZero(item.serverVersion) || 1;
+    item.lastMutationId = safeIdOrEmpty(item.lastMutationId);
+    return item;
+  });
+  state.conflicts = validateConflicts(state.conflicts || []);
+  state.appliedMutations = validateAppliedMutations(state.appliedMutations);
+  state.categoriesVersion = positiveIntegerOrZero(state.categoriesVersion)
+    || positiveIntegerOrZero(state.categoriesUpdatedAt);
+  state.lastCategoryMutationId = safeIdOrEmpty(state.lastCategoryMutationId);
+  return state;
+}
+
+function applyMutations(state, mutations, categoryMutation, resolvedConflictIds) {
+  const taskById = {};
+  const tombstoneById = {};
+  const conflictById = {};
+  const applied = {};
+  const acked = [];
+
+  state.tasks.forEach(function(task) { taskById[task.id] = task; });
+  state.tombstones.forEach(function(item) { tombstoneById[item.id] = item; });
+  state.conflicts.forEach(function(item) { conflictById[item.id] = item; });
+  state.appliedMutations.forEach(function(item) { applied[item.id] = item; });
+  resolvedConflictIds.forEach(function(id) {
+    if (conflictById[id]) conflictById[id].resolvedAt = Date.now();
+  });
+
+  mutations.forEach(function(mutation) {
+    if (applied[mutation.mutationId]) {
+      acked.push(mutation.mutationId);
+      return;
+    }
+    const currentTask = taskById[mutation.taskId];
+    const currentTombstone = tombstoneById[mutation.taskId];
+    const current = currentTask || currentTombstone || null;
+    const currentVersion = current ? positiveIntegerOrZero(current.serverVersion) : 0;
+    const currentMutationId = current ? safeIdOrEmpty(current.lastMutationId) : '';
+    const resolvingConflict = mutation.resolvesConflictId && conflictById[mutation.resolvesConflictId]
+      && !conflictById[mutation.resolvesConflictId].resolvedAt
+      && conflictById[mutation.resolvesConflictId].taskId === mutation.taskId;
+    const followsCurrent = mutation.baseVersion === currentVersion
+      || (!!mutation.parentMutationId && mutation.parentMutationId === currentMutationId)
+      || !!resolvingConflict;
+
+    if (followsCurrent) {
+      const nextVersion = currentVersion + 1;
+      if (mutation.operation === 'delete') {
+        delete taskById[mutation.taskId];
+        tombstoneById[mutation.taskId] = {
+          id: mutation.taskId,
+          deletedAt: Date.now(),
+          serverVersion: nextVersion,
+          lastMutationId: mutation.mutationId
+        };
+      } else {
+        const next = validateTasks([mutation.task])[0];
+        next.id = mutation.taskId;
+        next.serverVersion = nextVersion;
+        next.lastMutationId = mutation.mutationId;
+        next.deleted = false;
+        taskById[mutation.taskId] = next;
+        delete tombstoneById[mutation.taskId];
+      }
+      if (resolvingConflict) conflictById[mutation.resolvesConflictId].resolvedAt = Date.now();
+    } else {
+      const currentVariant = currentTask
+        ? currentTask
+        : deletionVariant(mutation.taskId, mutation.task && mutation.task.text, currentVersion, currentMutationId);
+      const incomingVariant = mutation.operation === 'delete'
+        ? deletionVariant(mutation.taskId, mutation.task && mutation.task.text, mutation.baseVersion, mutation.mutationId)
+        : mutation.task;
+      const conflict = createVersionConflict(currentVariant, incomingVariant);
+      conflictById[conflict.id] = conflict;
+    }
+
+    applied[mutation.mutationId] = { id: mutation.mutationId, appliedAt: Date.now() };
+    acked.push(mutation.mutationId);
+  });
+
+  let ackedCategoryMutationId = '';
+  if (categoryMutation) {
+    if (categoryMutation.mutationId === state.lastCategoryMutationId) {
+      ackedCategoryMutationId = categoryMutation.mutationId;
+    } else if (categoryMutation.baseVersion === positiveIntegerOrZero(state.categoriesVersion)) {
+      state.categories = categoryMutation.categories;
+      state.categoriesVersion = positiveIntegerOrZero(state.categoriesVersion) + 1;
+      state.lastCategoryMutationId = categoryMutation.mutationId;
+      ackedCategoryMutationId = categoryMutation.mutationId;
+    }
+  }
+
+  state.tasks = Object.keys(taskById).map(function(id) { return taskById[id]; });
+  state.tombstones = Object.keys(tombstoneById).map(function(id) { return tombstoneById[id]; });
+  state.conflicts = Object.keys(conflictById).map(function(id) { return conflictById[id]; });
+  state.appliedMutations = Object.keys(applied).map(function(id) { return applied[id]; })
+    .sort(function(a, b) { return a.appliedAt - b.appliedAt; })
+    .slice(-MAX_APPLIED_MUTATIONS);
+  return { state: state, ackedMutationIds: acked, ackedCategoryMutationId: ackedCategoryMutationId };
+}
+
+function deletionVariant(id, text, serverVersion, lastMutationId) {
+  return {
+    id: id,
+    text: text || 'このタスク',
+    dueDate: null,
+    category: null,
+    status: 'todo',
+    pinned: false,
+    logs: [],
+    createdAt: 0,
+    updatedAt: 0,
+    baseUpdatedAt: 0,
+    serverVersion: positiveIntegerOrZero(serverVersion),
+    lastMutationId: safeIdOrEmpty(lastMutationId),
+    deleted: true
+  };
+}
+
+function createVersionConflict(taskA, taskB) {
+  const variants = [normalizeConflictVariant(taskA), normalizeConflictVariant(taskB)];
+  const signatures = variants.map(taskContentSignature).sort();
+  const taskId = variants[0].id;
+  return {
+    id: taskId + '-' + simpleHash(signatures.join('|')),
+    taskId: taskId,
+    detectedAt: Date.now(),
+    resolvedAt: 0,
+    variants: variants
+  };
+}
+
+function normalizeConflictVariant(task) {
+  const normalized = validateTasks([task])[0];
+  normalized.deleted = !!task.deleted;
+  return normalized;
+}
+
+function jsonOutput(value) {
+  return ContentService.createTextOutput(JSON.stringify(value))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+/**
  * 初回セットアップ用。GASエディタから1回実行すると、固定Googleドキュメントへ
  * 現在のTaskData.jsonを反映する。戻り値のURLをNotebookLMへソース登録する。
  */
@@ -159,13 +372,17 @@ function doGet(e) {
 function createEmptySyncState() {
   return {
     syncVersion: SYNC_VERSION,
+    protocolVersion: PROTOCOL_VERSION,
     revision: 0,
     updatedAt: 0,
     tasks: [],
     tombstones: [],
     conflicts: [],
     categories: [],
-    categoriesUpdatedAt: 0
+    categoriesUpdatedAt: 0,
+    categoriesVersion: 0,
+    lastCategoryMutationId: '',
+    appliedMutations: []
   };
 }
 
@@ -195,6 +412,9 @@ function normalizeStoredState(parsed) {
   state.conflicts = validateConflicts(parsed.conflicts);
   state.categories = validateCategories(parsed.categories);
   state.categoriesUpdatedAt = finiteNumberOrZero(parsed.categoriesUpdatedAt);
+  state.categoriesVersion = positiveIntegerOrZero(parsed.categoriesVersion);
+  state.lastCategoryMutationId = safeIdOrEmpty(parsed.lastCategoryMutationId);
+  state.appliedMutations = validateAppliedMutations(parsed.appliedMutations);
   return mergeSyncState(createEmptySyncState(), state);
 }
 
@@ -267,7 +487,10 @@ function mergeSyncState(current, incoming) {
     categories: useIncomingCategories ? (incoming.categories || []) : (current.categories || []),
     categoriesUpdatedAt: useIncomingCategories
       ? incomingCategoriesUpdatedAt
-      : currentCategoriesUpdatedAt
+      : currentCategoriesUpdatedAt,
+    categoriesVersion: positiveIntegerOrZero(incoming.categoriesVersion || current.categoriesVersion),
+    lastCategoryMutationId: safeIdOrEmpty(incoming.lastCategoryMutationId || current.lastCategoryMutationId),
+    appliedMutations: validateAppliedMutations(incoming.appliedMutations || current.appliedMutations)
   };
 }
 
@@ -293,7 +516,7 @@ function validateTasks(tasks) {
     const logs = Array.isArray(task.logs) ? task.logs : [];
     if (logs.length > MAX_LOGS_PER_TASK) throw new Error('too many task logs');
     return {
-      id: boundedString(task.id, 100, 'task id'),
+      id: requireSafeId(task.id, 'task id'),
       text: boundedString(task.text, 500, 'task text'),
       dueDate: optionalString(task.dueDate, 40, 'due date'),
       category: optionalString(task.category, 100, 'category'),
@@ -302,7 +525,10 @@ function validateTasks(tasks) {
       logs: logs.map(function(log) { return boundedString(log, 1000, 'task log'); }),
       createdAt: finiteNumberOrZero(task.createdAt),
       updatedAt: finiteNumberOrZero(task.updatedAt) || finiteNumberOrZero(task.createdAt),
-      baseUpdatedAt: finiteNumberOrZero(task.baseUpdatedAt)
+      baseUpdatedAt: finiteNumberOrZero(task.baseUpdatedAt),
+      serverVersion: positiveIntegerOrZero(task.serverVersion),
+      lastMutationId: safeIdOrEmpty(task.lastMutationId),
+      deleted: !!task.deleted
     };
   });
 }
@@ -317,8 +543,10 @@ function validateTombstones(tombstones) {
     const deletedAt = finiteNumberOrZero(tombstone.deletedAt);
     if (!deletedAt) throw new Error('invalid deletion time');
     return {
-      id: boundedString(tombstone.id, 100, 'tombstone id'),
-      deletedAt: deletedAt
+      id: requireSafeId(tombstone.id, 'tombstone id'),
+      deletedAt: deletedAt,
+      serverVersion: positiveIntegerOrZero(tombstone.serverVersion),
+      lastMutationId: safeIdOrEmpty(tombstone.lastMutationId)
     };
   });
 }
@@ -334,7 +562,7 @@ function validateConflicts(conflicts) {
     const variants = validateTasks(conflict.variants);
     return {
       id: boundedString(conflict.id, 180, 'conflict id'),
-      taskId: boundedString(conflict.taskId, 100, 'conflict task id'),
+      taskId: requireSafeId(conflict.taskId, 'conflict task id'),
       detectedAt: finiteNumberOrZero(conflict.detectedAt),
       resolvedAt: finiteNumberOrZero(conflict.resolvedAt),
       variants: variants
@@ -345,7 +573,7 @@ function validateConflicts(conflicts) {
 function taskContentSignature(task) {
   return JSON.stringify([
     task.text || '', task.dueDate || null, task.category || null,
-    task.status || 'todo', !!task.pinned, Array.isArray(task.logs) ? task.logs : []
+    task.status || 'todo', !!task.pinned, Array.isArray(task.logs) ? task.logs : [], !!task.deleted
   ]);
 }
 
@@ -378,11 +606,75 @@ function validateCategories(categories) {
   return categories.map(function(category) {
     if (!category || typeof category !== 'object') throw new Error('invalid category');
     return {
-      id: boundedString(category.id, 100, 'category id'),
+      id: requireSafeId(category.id, 'category id'),
       name: boundedString(category.name, 100, 'category name'),
       color: optionalString(category.color, 30, 'category color')
     };
   });
+}
+
+function validateMutations(mutations) {
+  if (mutations == null) return [];
+  if (!Array.isArray(mutations) || mutations.length > MAX_MUTATIONS) throw new Error('invalid mutations');
+  return mutations.map(function(mutation) {
+    if (!mutation || typeof mutation !== 'object') throw new Error('invalid mutation');
+    const mutationId = requireSafeId(mutation.mutationId, 'mutation id');
+    const taskId = requireSafeId(mutation.taskId, 'mutation task id');
+    if (['create', 'update', 'delete'].indexOf(mutation.operation) < 0) throw new Error('invalid mutation operation');
+    const task = validateTasks([mutation.task])[0];
+    if (task.id !== taskId) throw new Error('mutation task mismatch');
+    return {
+      mutationId: mutationId,
+      taskId: taskId,
+      operation: mutation.operation,
+      baseVersion: positiveIntegerOrZero(mutation.baseVersion),
+      parentMutationId: safeIdOrEmpty(mutation.parentMutationId),
+      resolvesConflictId: mutation.resolvesConflictId ? requireSafeId(mutation.resolvesConflictId, 'resolved conflict id', 180) : '',
+      task: task,
+      createdAt: finiteNumberOrZero(mutation.createdAt)
+    };
+  });
+}
+
+function validateCategoryMutation(mutation) {
+  if (mutation == null) return null;
+  if (!mutation || typeof mutation !== 'object') throw new Error('invalid category mutation');
+  return {
+    mutationId: requireSafeId(mutation.mutationId, 'category mutation id'),
+    baseVersion: positiveIntegerOrZero(mutation.baseVersion),
+    categories: validateCategories(mutation.categories)
+  };
+}
+
+function validateResolvedConflictIds(ids) {
+  if (ids == null) return [];
+  if (!Array.isArray(ids) || ids.length > MAX_CONFLICTS) throw new Error('invalid resolved conflicts');
+  return ids.map(function(id) { return requireSafeId(id, 'resolved conflict id', 180); });
+}
+
+function validateAppliedMutations(items) {
+  if (!Array.isArray(items)) return [];
+  return items.slice(-MAX_APPLIED_MUTATIONS).map(function(item) {
+    if (!item || typeof item !== 'object') throw new Error('invalid applied mutation');
+    return { id: requireSafeId(item.id, 'applied mutation id'), appliedAt: finiteNumberOrZero(item.appliedAt) };
+  });
+}
+
+function requireSafeId(value, label, maxLength) {
+  const text = String(value || '');
+  const max = maxLength || 100;
+  if (text.length > max || !/^[A-Za-z0-9._-]+$/.test(text)) throw new Error('invalid ' + label);
+  return text;
+}
+
+function safeIdOrEmpty(value) {
+  if (value == null || value === '') return '';
+  return requireSafeId(value, 'id');
+}
+
+function positiveIntegerOrZero(value) {
+  const number = Number(value);
+  return Number.isSafeInteger(number) && number >= 0 ? number : 0;
 }
 
 function boundedString(value, maxLength, label) {

@@ -84,6 +84,13 @@ for (const requiredSyncSafety of [
     'let pushInProgress = false',
     '}, 60000);',
     'クラウドが20秒以内に応答しませんでした。ローカルデータは保持されています。',
+    "action: 'capabilities'",
+    "action: 'sync'",
+    'dbPersistLocalMutation',
+    "key: 'syncOutbox'",
+    'serverVersion',
+    'mutationId',
+    'SYNC_PROTOCOL_MISMATCH',
 ]) {
     if (indexHtml.includes(requiredSyncSafety)) {
         console.log(`OK  同期停止対策: ${requiredSyncSafety}`);
@@ -92,6 +99,10 @@ for (const requiredSyncSafety of [
         console.error(`NG  同期停止対策がありません: ${requiredSyncSafety}`);
     }
 }
+if (!indexHtml.includes("url.searchParams.set('syncToken'")) console.log('OK  同期キーをURLへ含めない');
+else { failed++; console.error('NG  同期キーがURLへ含まれています'); }
+if (indexHtml.includes("aiEndpointUrl: ''")) console.log('OK  AI未設定時は自動接続しない');
+else { failed++; console.error('NG  AI未設定時にも既定接続先へアクセスします'); }
 
 for (const requiredFeature of [
     'id="conflict-section"',

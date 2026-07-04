@@ -11,7 +11,7 @@
   ├── sw.js …… Service Worker（network-first キャッシュ / オフライン対応）
   ├── IndexedDB …… タスク・設定（APIキー含む）・豆知識キャッシュの保存先
   │
-  ├──(1) GAS Webhook (POST/GET) ──→ Google Apps Script
+  ├──(1) GAS Webhook (POST) ──→ Google Apps Script
   │                                   ├─ Google Drive: TaskData.json（同期DB）
   │                                   ├─ Google Docs: 固定IDのTaskJournal（NotebookLM用）
   │                                   └─ Google カレンダー: 期日付きタスクを登録
@@ -45,26 +45,27 @@
 
 ## 主要なデータの流れ
 
-### タスク同期（GAS）
-- push: タスク変更時に同期キー付きで`{ tasks, tombstones, conflicts, categories }`をGASへPOST
-- pull: 起動時・オンライン復帰時・アプリ再表示時・同期アイコン操作時にGET
-- 通常編集はタスクごとの`updatedAt`が新しい方を採用し、削除履歴（tombstone）は編集より優先
-- GASは`LockService`内で既存データと統合し、端末1台の配列で全体を上書きしない
-- ジャンルは`categoriesUpdatedAt`が新しい端末の一覧を採用
-- 同じ基準版から分岐した編集は、勝者だけでなく両候補を`conflicts`へ保存してアプリに表示
+### タスク同期（GAS・同期方式v3）
+- pullとpushは同期キーをURLへ出さない`text/plain`のPOSTへ統一
+- タスク変更と送信待ち箱をIndexedDBの同一トランザクションで保存し、通信失敗でも変更を失わない
+- 各変更は`mutationId`を持ち、再送されてもGASで二重適用しない
+- 各タスクの`serverVersion`と変更元の`baseVersion`で分岐を判定し、端末時計は同期の勝敗に使わない
+- GASは`LockService`内で変更を直列化し、成功した変更IDだけを端末へ返す
+- オフライン中の同一端末での連続編集は`parentMutationId`で順番を維持
+- 同じ版から別端末で分岐した編集と、削除対編集は両候補を`conflicts`へ保存してアプリに表示
+- ジャンル一覧もサーバー版番号で同期し、端末時計に依存しない
 - 競合比較AIへ送るのは候補のタイトル・予定日時・状態だけ。AIは提案のみで自動統合・削除しない
-- 旧アプリには従来のタスク配列を返し、同期形式v2のアプリには削除履歴を含む状態を返す
+- 新アプリはGASの`capabilities`応答でv3対応を確認するまで書き込まない
+- 旧アプリ向けv2は移行期間の互換用として残す
 - GASは認証成功後に件数・文字長・リクエストサイズを検証
 
 ### NotebookLM 自動更新
 1. GASがタスク変更のたびに、同じIDのGoogleドキュメント本文を上書き
-2. Windowsタスクスケジューラが15分ごとに非表示で`notebooklm-py`へ鮮度確認を実行
-3. NotebookLMが更新ありと判定したときだけ再同期を実行
-4. NotebookLMに登録済みのGoogleドキュメントソースを再同期
+2. NotebookLMへGoogleドライブから追加したソースは、NotebookLM公式機能で数分ごとに自動更新
+3. 反映が遅い場合だけNotebookLM画面の「Googleドライブと同期」を使用
 
-> NotebookLM個人版に公式の自動再同期APIはないため、手順3・4では非公式ツールを使用する。
-> 認証切れやNotebookLM側の仕様変更時は、再ログインやワークフロー修正が必要になる場合がある。
-> 固定Googleドキュメント更新後9分以上待つ実機テストでNotebookLMの自動取り込みを確認できなかったため、Windows処理は撤去していない。
+> 2026年7月時点のNotebookLM公式ヘルプでは、Driveソースは数分ごとに自動更新される。
+> Windowsの`notebooklm-py`定期タスクは非公式の予備手段であり、実アカウントで自動反映を確認後に無効化・撤去する。
 
 ### 豆知識（Wikipedia RAG）
 1. 日本語Wikipedia「M月D日」記事の記念日セクションを MediaWiki API で取得

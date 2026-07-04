@@ -34,37 +34,34 @@ GAS の `ContentService` ではレスポンスヘッダを自前で設定でき�
 9. GASエディタで関数`setupNotebookDocument`を選び、1回だけ「実行」する
 10. 実行ログに表示された固定GoogleドキュメントをNotebookLMのソースとして追加する
 
-## アプリ ↔ GAS の契約（インターフェース）
+## アプリ ↔ GAS の契約（同期方式v3）
 
-### POST（アプリ → GAS / push）
+### POST `action: capabilities`（書き込み前確認）
+旧GASへ誤って書き込まないため、新アプリは最初にv3対応を確認します。
+
+### POST `action: sync`（双方向同期）
 ```json
 {
-  "syncVersion": 2,
+  "protocolVersion": 3,
+  "action": "sync",
   "syncToken": "Script Propertiesと同じランダムキー",
-  "tasks": [ /* タスク配列 */ ],
-  "tombstones": [ /* 削除したタスクのID・削除時刻 */ ],
-  "conflicts": [ /* 同じタスクから分岐した編集候補 */ ],
-  "categories": [ /* ジャンルID・名前・色 */ ],
-  "categoriesUpdatedAt": 0
+  "mutations": [ /* mutationId・taskId・baseVersion・操作・タスク */ ],
+  "categoryMutation": null,
+  "resolvedConflictIds": []
 }
 ```
-- `TaskData.json`の既存状態とタスクID単位で統合して保存
-- 通常編集は`updatedAt`が新しい方、削除は`tombstones`を優先
-- 同じ基準版から分岐した編集は`conflicts`へ両候補を保存し、勝者だけを返して敗者を消さない
-- 別端末で追加されたタスクは、受信配列に含まれなくても保持
+- `serverVersion`と`baseVersion`で分岐を判定し、端末時計は勝敗に使わない
+- `mutationId`で同じ変更の再送を二重適用しない
+- 削除と別端末編集が重なった場合も両候補を保持
+- 成功確認済みの変更だけ端末の送信待ち箱から削除
 - 統合後の`tasks`と`categories`を固定IDのGoogleドキュメントへ反映（NotebookLM用）
-- `syncVersion: 2`の場合は統合後の状態をJSONで返す
-
-### GET（GAS → アプリ / pull）
-- クエリ`syncToken`が必要
-- `syncVersion=2`ではタスク・削除履歴・競合候補・ジャンルを含む状態を返す
-- パラメータがない旧アプリには従来どおりタスク配列だけを返す
-- 旧形式の`TaskData.json`（タスク配列）は読み取り時に自動でv2として扱う
+- 同期キーはPOST本文だけに入れ、URL・履歴へ残さない
+- GETと同期方式v2は旧アプリの移行期間だけ維持
 
 ## 複数端末同期の競合ルール
 
-- 削除したタスクIDは削除履歴に残り、古い端末から再送されても復活しない
-- 同じタスクを複数端末で編集した場合は、`updatedAt`が新しい内容を採用する
+- 同じサーバー版から分岐した編集は、端末時刻にかかわらず両方を競合欄へ残す
+- 削除と編集の競合も自動削除せず、人が選ぶまで両方を保持する
 - 端末ごとに別のタスクを追加した場合は、両方を保持する
 - アプリがオンラインへ戻った時と再表示された時にも、30秒以上空いていれば自動取得する
 
@@ -72,7 +69,5 @@ GAS の `ContentService` ではレスポンスヘッダを自前で設定でき�
 
 ## NotebookLM自動再同期
 
-Googleドキュメントの更新だけではNotebookLMへ自動反映されません。
-Windowsタスクスケジューラから`scripts/notebooklm-refresh.ps1`を2分ごとに実行し、NotebookLM側の鮮度確認後に必要な場合だけ再同期します。
-
-NotebookLM個人版には公式の再同期APIがないため、非公式の`notebooklm-py`を使用します。
+NotebookLM公式ヘルプでは、Googleドライブから追加したソースは数分ごとに自動更新されます。
+Windowsの`notebooklm-py`タスクは予備手段です。固定Googleドキュメントの更新が実アカウントへ自動反映されることを確認後、無効化・撤去してください。
