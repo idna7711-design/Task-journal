@@ -47,6 +47,10 @@
         }
     </script>
     <script src="https://unpkg.com/lucide@latest" crossorigin="anonymous"></script>
+    <script>
+        // アイコンCDNがオフライン等で読めなくても、アプリ本体の初期化は継続する。
+        window.lucide = window.lucide || { createIcons() {} };
+    </script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
         body {
@@ -347,7 +351,7 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
     </div>
 
     <!-- アプリ内確認ダイアログ（ブラウザ標準confirm()の置き換え。showConfirm()から使用） -->
-    <div id="confirm-modal" class="hidden fixed inset-0 bg-zinc-900/40 backdrop-blur-md flex items-center justify-center z-[60] p-4">
+    <div id="confirm-modal" class="hidden fixed inset-0 bg-zinc-900/40 backdrop-blur-md flex items-center justify-center z-[60] p-4" role="dialog" aria-modal="true" aria-labelledby="confirm-title" aria-describedby="confirm-message">
         <div class="bg-white rounded-[2rem] shadow-2xl w-full max-w-sm p-6 border border-white/20">
             <div class="flex items-center gap-3 mb-3">
                 <div id="confirm-icon-wrap" class="w-10 h-10 rounded-2xl bg-rose-50 flex items-center justify-center text-rose-600 shrink-0">

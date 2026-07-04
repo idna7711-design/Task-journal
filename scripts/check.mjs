@@ -127,6 +127,38 @@ for (const requiredFeature of [
 if (!indexHtml.includes('id="task-datetime"')) console.log('OK  新規追加欄に予定日時なし');
 else { failed++; console.error('NG  新規追加欄に予定日時が残っています'); }
 
+for (const requiredUxFeature of [
+    'rel="manifest" href="manifest.webmanifest"',
+    'id="confirm-modal"',
+    'function showConfirm(',
+    'function showUndoToast(',
+    'id="task-search"',
+    'function renderFocusCard(',
+    'taskjournal:theme',
+    'window.lucide = window.lucide || { createIcons() {} };',
+]) {
+    if (indexHtml.includes(requiredUxFeature)) console.log(`OK  GUI/UX刷新: ${requiredUxFeature}`);
+    else { failed++; console.error(`NG  GUI/UX機能がありません: ${requiredUxFeature}`); }
+}
+const executableHtml = indexHtml.replace(/<!--([\s\S]*?)-->/g, '').split('\n')
+    .filter(line => !/^\s*(?:\/\/|\*)/.test(line)).join('\n');
+if (!/\b(?:window\.)?confirm\s*\(/.test(executableHtml) && !/\b(?:window\.)?alert\s*\(/.test(executableHtml)) {
+    console.log('OK  ブラウザ標準のconfirm/alertを使用しない');
+} else {
+    failed++;
+    console.error('NG  ブラウザ標準のconfirm/alertが残っています');
+}
+
+for (const pwaFile of ['manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png']) {
+    try {
+        readFileSync(join(root, pwaFile));
+        console.log(`OK  PWAファイル: ${pwaFile}`);
+    } catch {
+        failed++;
+        console.error(`NG  PWAファイルがありません: ${pwaFile}`);
+    }
+}
+
 const syncCheck = spawnSync(process.execPath, [join(root, 'scripts', 'check-device-sync.mjs')], {
     encoding: 'utf8',
 });
