@@ -114,6 +114,18 @@ else { failed++; console.error('NG  同期キーがURLへ含まれています')
 if (indexHtml.includes("aiEndpointUrl: ''")) console.log('OK  AI未設定時は自動接続しない');
 else { failed++; console.error('NG  AI未設定時にも既定接続先へアクセスします'); }
 
+for (const requiredAiRecovery of [
+    "const responseText = await response.text();",
+    'result = JSON.parse(responseText);',
+    "return requestAiChat(context, payload, timeoutMs, 1);",
+    'responseContentType,',
+    'responseLength: responseText.length,',
+    'AIから一時的に読み取れない応答が返りました。',
+]) {
+    if (indexHtml.includes(requiredAiRecovery)) console.log(`OK  AI一時応答から復旧: ${requiredAiRecovery}`);
+    else { failed++; console.error(`NG  AI一時応答の復旧処理がありません: ${requiredAiRecovery}`); }
+}
+
 for (const requiredFeature of [
     'id="conflict-section"',
     'compareConflictWithAI',
