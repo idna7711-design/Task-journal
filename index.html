@@ -1,10 +1,27 @@
 <!DOCTYPE html>
 <html lang="ja"><head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>タスクジャーナル</title>
+    <!-- PWA: ホーム画面追加時のアイコン・名前・テーマ色（manifest.webmanifest と icons/ を参照） -->
+    <meta name="theme-color" id="theme-color-meta" content="#f0e8da">
+    <link rel="manifest" href="manifest.webmanifest">
+    <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="タスクジャーナル">
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
+        // ダークモードを描画前に適用する（後から適用すると一瞬白く光るため）。
+        // 設定値はUI状態としてlocalStorageに保存（タスクデータのIndexedDBとは別管理）。
+        try {
+            const savedTheme = localStorage.getItem('taskjournal:theme') || 'auto';
+            const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+            if (savedTheme === 'dark' || (savedTheme === 'auto' && prefersDark)) {
+                document.documentElement.classList.add('dark');
+            }
+        } catch { /* localStorage不可でもライト表示で継続 */ }
+
         // Terracotta Sand テーマ: CDN が動的生成するクラス(JS内で使用)にも
         // テラコッタ系の配色を適用するため、violet / indigo を上書きする。
         // (precompiled の <style> 内 RGB 値も同じ色に揃えてあるので両者が一致する)
@@ -71,7 +88,138 @@
             .task-actions { opacity: 1 !important; }
         }
     </style>
-<style>*, ::before, ::after{--tw-border-spacing-x:0;--tw-border-spacing-y:0;--tw-translate-x:0;--tw-translate-y:0;--tw-rotate:0;--tw-skew-x:0;--tw-skew-y:0;--tw-scale-x:1;--tw-scale-y:1;--tw-pan-x: ;--tw-pan-y: ;--tw-pinch-zoom: ;--tw-scroll-snap-strictness:proximity;--tw-gradient-from-position: ;--tw-gradient-via-position: ;--tw-gradient-to-position: ;--tw-ordinal: ;--tw-slashed-zero: ;--tw-numeric-figure: ;--tw-numeric-spacing: ;--tw-numeric-fraction: ;--tw-ring-inset: ;--tw-ring-offset-width:0px;--tw-ring-offset-color:#fff;--tw-ring-color:rgb(59 130 246 / 0.5);--tw-ring-offset-shadow:0 0 #0000;--tw-ring-shadow:0 0 #0000;--tw-shadow:0 0 #0000;--tw-shadow-colored:0 0 #0000;--tw-blur: ;--tw-brightness: ;--tw-contrast: ;--tw-grayscale: ;--tw-hue-rotate: ;--tw-invert: ;--tw-saturate: ;--tw-sepia: ;--tw-drop-shadow: ;--tw-backdrop-blur: ;--tw-backdrop-brightness: ;--tw-backdrop-contrast: ;--tw-backdrop-grayscale: ;--tw-backdrop-hue-rotate: ;--tw-backdrop-invert: ;--tw-backdrop-opacity: ;--tw-backdrop-saturate: ;--tw-backdrop-sepia: ;--tw-contain-size: ;--tw-contain-layout: ;--tw-contain-paint: ;--tw-contain-style: }::backdrop{--tw-border-spacing-x:0;--tw-border-spacing-y:0;--tw-translate-x:0;--tw-translate-y:0;--tw-rotate:0;--tw-skew-x:0;--tw-skew-y:0;--tw-scale-x:1;--tw-scale-y:1;--tw-pan-x: ;--tw-pan-y: ;--tw-pinch-zoom: ;--tw-scroll-snap-strictness:proximity;--tw-gradient-from-position: ;--tw-gradient-via-position: ;--tw-gradient-to-position: ;--tw-ordinal: ;--tw-slashed-zero: ;--tw-numeric-figure: ;--tw-numeric-spacing: ;--tw-numeric-fraction: ;--tw-ring-inset: ;--tw-ring-offset-width:0px;--tw-ring-offset-color:#fff;--tw-ring-color:rgb(59 130 246 / 0.5);--tw-ring-offset-shadow:0 0 #0000;--tw-ring-shadow:0 0 #0000;--tw-shadow:0 0 #0000;--tw-shadow-colored:0 0 #0000;--tw-blur: ;--tw-brightness: ;--tw-contrast: ;--tw-grayscale: ;--tw-hue-rotate: ;--tw-invert: ;--tw-saturate: ;--tw-sepia: ;--tw-drop-shadow: ;--tw-backdrop-blur: ;--tw-backdrop-brightness: ;--tw-backdrop-contrast: ;--tw-backdrop-grayscale: ;--tw-backdrop-hue-rotate: ;--tw-backdrop-invert: ;--tw-backdrop-opacity: ;--tw-backdrop-saturate: ;--tw-backdrop-sepia: ;--tw-contain-size: ;--tw-contain-layout: ;--tw-contain-paint: ;--tw-contain-style: }/* ! tailwindcss v3.4.17 | MIT License | https://tailwindcss.com */*,::after,::before{box-sizing:border-box;border-width:0;border-style:solid;border-color:#e5e7eb}::after,::before{--tw-content:''}:host,html{line-height:1.5;-webkit-text-size-adjust:100%;-moz-tab-size:4;tab-size:4;font-family:ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";font-feature-settings:normal;font-variation-settings:normal;-webkit-tap-highlight-color:transparent}body{margin:0;line-height:inherit}hr{height:0;color:inherit;border-top-width:1px}abbr:where([title]){-webkit-text-decoration:underline dotted;text-decoration:underline dotted}h1,h2,h3,h4,h5,h6{font-size:inherit;font-weight:inherit}a{color:inherit;text-decoration:inherit}b,strong{font-weight:bolder}code,kbd,pre,samp{font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;font-feature-settings:normal;font-variation-settings:normal;font-size:1em}small{font-size:80%}sub,sup{font-size:75%;line-height:0;position:relative;vertical-align:baseline}sub{bottom:-.25em}sup{top:-.5em}table{text-indent:0;border-color:inherit;border-collapse:collapse}button,input,optgroup,select,textarea{font-family:inherit;font-feature-settings:inherit;font-variation-settings:inherit;font-size:100%;font-weight:inherit;line-height:inherit;letter-spacing:inherit;color:inherit;margin:0;padding:0}button,select{text-transform:none}button,input:where([type=button]),input:where([type=reset]),input:where([type=submit]){-webkit-appearance:button;background-color:transparent;background-image:none}:-moz-focusring{outline:auto}:-moz-ui-invalid{box-shadow:none}progress{vertical-align:baseline}::-webkit-inner-spin-button,::-webkit-outer-spin-button{height:auto}[type=search]{-webkit-appearance:textfield;outline-offset:-2px}::-webkit-search-decoration{-webkit-appearance:none}::-webkit-file-upload-button{-webkit-appearance:button;font:inherit}summary{display:list-item}blockquote,dd,dl,figure,h1,h2,h3,h4,h5,h6,hr,p,pre{margin:0}fieldset{margin:0;padding:0}legend{padding:0}menu,ol,ul{list-style:none;margin:0;padding:0}dialog{padding:0}textarea{resize:vertical}input::placeholder,textarea::placeholder{opacity:1;color:#9ca3af}[role=button],button{cursor:pointer}:disabled{cursor:default}audio,canvas,embed,iframe,img,object,svg,video{display:block;vertical-align:middle}img,video{max-width:100%;height:auto}[hidden]:where(:not([hidden=until-found])){display:none}.pointer-events-none{pointer-events:none}.fixed{position:fixed}.absolute{position:absolute}.relative{position:relative}.inset-0{inset:0px}.inset-y-0{top:0px;bottom:0px}.left-4{left:1rem}.right-4{right:1rem}.top-4{top:1rem}.z-40{z-index:40}.z-50{z-index:50}.mx-1{margin-left:0.25rem;margin-right:0.25rem}.mx-auto{margin-left:auto;margin-right:auto}.-mr-2{margin-right:-0.5rem}.mb-1{margin-bottom:0.25rem}.mb-2{margin-bottom:0.5rem}.mb-4{margin-bottom:1rem}.mb-5{margin-bottom:1.25rem}.mb-6{margin-bottom:1.5rem}.mb-8{margin-bottom:2rem}.ml-1{margin-left:0.25rem}.mt-2{margin-top:0.5rem}.mt-4{margin-top:1rem}.mt-5{margin-top:1.25rem}.mt-6{margin-top:1.5rem}.mt-auto{margin-top:auto}.mb-3{margin-bottom:0.75rem}.mt-1{margin-top:0.25rem}.block{display:block}.flex{display:flex}.hidden{display:none}.h-10{height:2.5rem}.h-12{height:3rem}.h-14{height:3.5rem}.h-2{height:0.5rem}.h-3\.5{height:0.875rem}.h-4{height:1rem}.h-5{height:1.25rem}.h-7{height:1.75rem}.h-8{height:2rem}.h-full{height:100%}.h-screen{height:100vh}.h-6{height:1.5rem}.max-h-\[90vh\]{max-height:90vh}.min-h-0{min-height:0px}.min-h-\[100px\]{min-height:100px}.w-10{width:2.5rem}.w-12{width:3rem}.w-14{width:3.5rem}.w-2{width:0.5rem}.w-3\.5{width:0.875rem}.w-4{width:1rem}.w-5{width:1.25rem}.w-7{width:1.75rem}.w-full{width:100%}.w-px{width:1px}.w-6{width:1.5rem}.max-w-4xl{max-width:56rem}.max-w-\[300px\]{max-width:300px}.max-w-lg{max-width:32rem}.max-w-sm{max-width:24rem}.max-w-xl{max-width:36rem}.flex-1{flex:1 1 0%}.shrink-0{flex-shrink:0}.transform{transform:translate(var(--tw-translate-x), var(--tw-translate-y)) rotate(var(--tw-rotate)) skewX(var(--tw-skew-x)) skewY(var(--tw-skew-y)) scaleX(var(--tw-scale-x)) scaleY(var(--tw-scale-y))}@keyframes spin{to{transform:rotate(360deg)}}.animate-spin{animation:spin 1s linear infinite}.cursor-help{cursor:help}.cursor-pointer{cursor:pointer}.resize-none{resize:none}.flex-col{flex-direction:column}.items-center{align-items:center}.justify-end{justify-content:flex-end}.justify-center{justify-content:center}.justify-between{justify-content:space-between}.gap-1\.5{gap:0.375rem}.gap-2{gap:0.5rem}.gap-3{gap:0.75rem}.gap-4{gap:1rem}.gap-8{gap:2rem}.space-y-3 > :not([hidden]) ~ :not([hidden]){--tw-space-y-reverse:0;margin-top:calc(0.75rem * calc(1 - var(--tw-space-y-reverse)));margin-bottom:calc(0.75rem * var(--tw-space-y-reverse))}.overflow-hidden{overflow:hidden}.overflow-y-auto{overflow-y:auto}.truncate{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.rounded-2xl{border-radius:1rem}.rounded-\[2rem\]{border-radius:2rem}.rounded-full{border-radius:9999px}.rounded-lg{border-radius:0.5rem}.rounded-xl{border-radius:0.75rem}.rounded-\[1\.5rem\]{border-radius:1.5rem}.border{border-width:1px}.border-2{border-width:2px}.border-4{border-width:4px}.border-t{border-top-width:1px}.border-dashed{border-style:dashed}.border-transparent{border-color:transparent}.border-violet-200{--tw-border-opacity:1;border-color:rgb(240 208 184 / var(--tw-border-opacity, 1))}.border-white\/20{border-color:rgb(255 255 255 / 0.2)}.border-zinc-100{--tw-border-opacity:1;border-color:rgb(244 244 245 / var(--tw-border-opacity, 1))}.border-zinc-200{--tw-border-opacity:1;border-color:rgb(228 228 231 / var(--tw-border-opacity, 1))}.border-zinc-200\/60{border-color:rgb(228 228 231 / 0.6)}.border-t-violet-600{--tw-border-opacity:1;border-top-color:rgb(192 88 40 / var(--tw-border-opacity, 1))}.bg-amber-50{--tw-bg-opacity:1;background-color:rgb(255 251 235 / var(--tw-bg-opacity, 1))}.bg-emerald-500{--tw-bg-opacity:1;background-color:rgb(16 185 129 / var(--tw-bg-opacity, 1))}.bg-indigo-50{--tw-bg-opacity:1;background-color:rgb(253 240 228 / var(--tw-bg-opacity, 1))}.bg-violet-100{--tw-bg-opacity:1;background-color:rgb(252 232 216 / var(--tw-bg-opacity, 1))}.bg-violet-50{--tw-bg-opacity:1;background-color:rgb(255 248 242 / var(--tw-bg-opacity, 1))}.bg-violet-500{--tw-bg-opacity:1;background-color:rgb(208 106 56 / var(--tw-bg-opacity, 1))}.bg-white{--tw-bg-opacity:1;background-color:rgb(255 255 255 / var(--tw-bg-opacity, 1))}.bg-zinc-100{--tw-bg-opacity:1;background-color:rgb(244 244 245 / var(--tw-bg-opacity, 1))}.bg-zinc-100\/80{background-color:rgb(244 244 245 / 0.8)}.bg-zinc-200{--tw-bg-opacity:1;background-color:rgb(228 228 231 / var(--tw-bg-opacity, 1))}.bg-zinc-50{--tw-bg-opacity:1;background-color:rgb(250 250 250 / var(--tw-bg-opacity, 1))}.bg-zinc-50\/80{background-color:rgb(250 250 250 / 0.8)}.bg-zinc-900{--tw-bg-opacity:1;background-color:rgb(24 24 27 / var(--tw-bg-opacity, 1))}.bg-zinc-900\/40{background-color:rgb(24 24 27 / 0.4)}.bg-zinc-50\/50{background-color:rgb(250 250 250 / 0.5)}.p-2{padding:0.5rem}.p-4{padding:1rem}.p-5{padding:1.25rem}.p-8{padding:2rem}.px-1{padding-left:0.25rem;padding-right:0.25rem}.px-2{padding-left:0.5rem;padding-right:0.5rem}.px-3{padding-left:0.75rem;padding-right:0.75rem}.px-4{padding-left:1rem;padding-right:1rem}.px-5{padding-left:1.25rem;padding-right:1.25rem}.px-6{padding-left:1.5rem;padding-right:1.5rem}.py-1\.5{padding-top:0.375rem;padding-bottom:0.375rem}.py-2{padding-top:0.5rem;padding-bottom:0.5rem}.py-2\.5{padding-top:0.625rem;padding-bottom:0.625rem}.py-3{padding-top:0.75rem;padding-bottom:0.75rem}.py-3\.5{padding-top:0.875rem;padding-bottom:0.875rem}.py-4{padding-top:1rem;padding-bottom:1rem}.py-10{padding-top:2.5rem;padding-bottom:2.5rem}.py-6{padding-top:1.5rem;padding-bottom:1.5rem}.pb-4{padding-bottom:1rem}.pl-12{padding-left:3rem}.pl-3{padding-left:0.75rem}.pr-2{padding-right:0.5rem}.pr-4{padding-right:1rem}.pt-4{padding-top:1rem}.pt-8{padding-top:2rem}.text-center{text-align:center}.text-\[10px\]{font-size:10px}.text-\[11px\]{font-size:11px}.text-\[13px\]{font-size:13px}.text-lg{font-size:1.125rem;line-height:1.75rem}.text-sm{font-size:0.875rem;line-height:1.25rem}.text-xs{font-size:0.75rem;line-height:1rem}.font-bold{font-weight:700}.font-medium{font-weight:500}.uppercase{text-transform:uppercase}.leading-none{line-height:1}.leading-relaxed{line-height:1.625}.tracking-tight{letter-spacing:-0.025em}.tracking-wide{letter-spacing:0.025em}.tracking-wider{letter-spacing:0.05em}.tracking-widest{letter-spacing:0.1em}.text-amber-500{--tw-text-opacity:1;color:rgb(245 158 11 / var(--tw-text-opacity, 1))}.text-amber-600{--tw-text-opacity:1;color:rgb(217 119 6 / var(--tw-text-opacity, 1))}.text-indigo-500{--tw-text-opacity:1;color:rgb(184 90 48 / var(--tw-text-opacity, 1))}.text-violet-600{--tw-text-opacity:1;color:rgb(192 88 40 / var(--tw-text-opacity, 1))}.text-violet-700{--tw-text-opacity:1;color:rgb(168 72 30 / var(--tw-text-opacity, 1))}.text-white{--tw-text-opacity:1;color:rgb(255 255 255 / var(--tw-text-opacity, 1))}.text-zinc-300{--tw-text-opacity:1;color:rgb(212 212 216 / var(--tw-text-opacity, 1))}.text-zinc-400{--tw-text-opacity:1;color:rgb(161 161 170 / var(--tw-text-opacity, 1))}.text-zinc-500{--tw-text-opacity:1;color:rgb(113 113 122 / var(--tw-text-opacity, 1))}.text-zinc-600{--tw-text-opacity:1;color:rgb(82 82 91 / var(--tw-text-opacity, 1))}.text-zinc-700{--tw-text-opacity:1;color:rgb(63 63 70 / var(--tw-text-opacity, 1))}.text-zinc-800{--tw-text-opacity:1;color:rgb(39 39 42 / var(--tw-text-opacity, 1))}.text-zinc-900{--tw-text-opacity:1;color:rgb(24 24 27 / var(--tw-text-opacity, 1))}.text-rose-400{--tw-text-opacity:1;color:rgb(251 113 133 / var(--tw-text-opacity, 1))}.text-rose-500{--tw-text-opacity:1;color:rgb(244 63 94 / var(--tw-text-opacity, 1))}.placeholder-zinc-400::placeholder{--tw-placeholder-opacity:1;color:rgb(161 161 170 / var(--tw-placeholder-opacity, 1))}.opacity-60{opacity:0.6}.opacity-70{opacity:0.7}.shadow-2xl{--tw-shadow:0 25px 50px -12px rgb(0 0 0 / 0.25);--tw-shadow-colored:0 25px 50px -12px var(--tw-shadow-color);box-shadow:var(--tw-ring-offset-shadow, 0 0 #0000), var(--tw-ring-shadow, 0 0 #0000), var(--tw-shadow)}.shadow-inner{--tw-shadow:inset 0 2px 4px 0 rgb(0 0 0 / 0.05);--tw-shadow-colored:inset 0 2px 4px 0 var(--tw-shadow-color);box-shadow:var(--tw-ring-offset-shadow, 0 0 #0000), var(--tw-ring-shadow, 0 0 #0000), var(--tw-shadow)}.shadow-md{--tw-shadow:0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);--tw-shadow-colored:0 4px 6px -1px var(--tw-shadow-color), 0 2px 4px -2px var(--tw-shadow-color);box-shadow:var(--tw-ring-offset-shadow, 0 0 #0000), var(--tw-ring-shadow, 0 0 #0000), var(--tw-shadow)}.shadow-sm{--tw-shadow:0 1px 2px 0 rgb(0 0 0 / 0.05);--tw-shadow-colored:0 1px 2px 0 var(--tw-shadow-color);box-shadow:var(--tw-ring-offset-shadow, 0 0 #0000), var(--tw-ring-shadow, 0 0 #0000), var(--tw-shadow)}.backdrop-blur-md{--tw-backdrop-blur:blur(12px);-webkit-backdrop-filter:var(--tw-backdrop-blur) var(--tw-backdrop-brightness) var(--tw-backdrop-contrast) var(--tw-backdrop-grayscale) var(--tw-backdrop-hue-rotate) var(--tw-backdrop-invert) var(--tw-backdrop-opacity) var(--tw-backdrop-saturate) var(--tw-backdrop-sepia);backdrop-filter:var(--tw-backdrop-blur) var(--tw-backdrop-brightness) var(--tw-backdrop-contrast) var(--tw-backdrop-grayscale) var(--tw-backdrop-hue-rotate) var(--tw-backdrop-invert) var(--tw-backdrop-opacity) var(--tw-backdrop-saturate) var(--tw-backdrop-sepia)}.transition-all{transition-property:all;transition-timing-function:cubic-bezier(0.4, 0, 0.2, 1);transition-duration:150ms}.transition-colors{transition-property:color, background-color, border-color, fill, stroke, -webkit-text-decoration-color;transition-property:color, background-color, border-color, text-decoration-color, fill, stroke;transition-property:color, background-color, border-color, text-decoration-color, fill, stroke, -webkit-text-decoration-color;transition-timing-function:cubic-bezier(0.4, 0, 0.2, 1);transition-duration:150ms}.selection\:bg-violet-200 *::selection{--tw-bg-opacity:1;background-color:rgb(240 208 184 / var(--tw-bg-opacity, 1))}.selection\:text-violet-900 *::selection{--tw-text-opacity:1;color:rgb(90 44 8 / var(--tw-text-opacity, 1))}.selection\:bg-violet-200::selection{--tw-bg-opacity:1;background-color:rgb(240 208 184 / var(--tw-bg-opacity, 1))}.selection\:text-violet-900::selection{--tw-text-opacity:1;color:rgb(90 44 8 / var(--tw-text-opacity, 1))}.hover\:border-amber-200:hover{--tw-border-opacity:1;border-color:rgb(253 230 138 / var(--tw-border-opacity, 1))}.hover\:border-zinc-200:hover{--tw-border-opacity:1;border-color:rgb(228 228 231 / var(--tw-border-opacity, 1))}.hover\:bg-amber-100:hover{--tw-bg-opacity:1;background-color:rgb(254 243 199 / var(--tw-bg-opacity, 1))}.hover\:bg-amber-50:hover{--tw-bg-opacity:1;background-color:rgb(255 251 235 / var(--tw-bg-opacity, 1))}.hover\:bg-indigo-600:hover{--tw-bg-opacity:1;background-color:rgb(168 72 30 / var(--tw-bg-opacity, 1))}.hover\:bg-violet-200:hover{--tw-bg-opacity:1;background-color:rgb(240 208 184 / var(--tw-bg-opacity, 1))}.hover\:bg-violet-50:hover{--tw-bg-opacity:1;background-color:rgb(255 248 242 / var(--tw-bg-opacity, 1))}.hover\:bg-violet-600:hover{--tw-bg-opacity:1;background-color:rgb(192 88 40 / var(--tw-bg-opacity, 1))}.hover\:bg-zinc-100:hover{--tw-bg-opacity:1;background-color:rgb(244 244 245 / var(--tw-bg-opacity, 1))}.hover\:bg-zinc-50:hover{--tw-bg-opacity:1;background-color:rgb(250 250 250 / var(--tw-bg-opacity, 1))}.hover\:bg-zinc-800:hover{--tw-bg-opacity:1;background-color:rgb(39 39 42 / var(--tw-bg-opacity, 1))}.hover\:text-amber-600:hover{--tw-text-opacity:1;color:rgb(217 119 6 / var(--tw-text-opacity, 1))}.hover\:text-violet-600:hover{--tw-text-opacity:1;color:rgb(192 88 40 / var(--tw-text-opacity, 1))}.hover\:text-zinc-600:hover{--tw-text-opacity:1;color:rgb(82 82 91 / var(--tw-text-opacity, 1))}.hover\:shadow:hover{--tw-shadow:0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);--tw-shadow-colored:0 1px 3px 0 var(--tw-shadow-color), 0 1px 2px -1px var(--tw-shadow-color);box-shadow:var(--tw-ring-offset-shadow, 0 0 #0000), var(--tw-ring-shadow, 0 0 #0000), var(--tw-shadow)}.hover\:shadow-lg:hover{--tw-shadow:0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);--tw-shadow-colored:0 10px 15px -3px var(--tw-shadow-color), 0 4px 6px -4px var(--tw-shadow-color);box-shadow:var(--tw-ring-offset-shadow, 0 0 #0000), var(--tw-ring-shadow, 0 0 #0000), var(--tw-shadow)}.hover\:shadow-md:hover{--tw-shadow:0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);--tw-shadow-colored:0 4px 6px -1px var(--tw-shadow-color), 0 2px 4px -2px var(--tw-shadow-color);box-shadow:var(--tw-ring-offset-shadow, 0 0 #0000), var(--tw-ring-shadow, 0 0 #0000), var(--tw-shadow)}.focus\:border-indigo-300:focus{--tw-border-opacity:1;border-color:rgb(224 192 144 / var(--tw-border-opacity, 1))}.focus\:border-violet-300:focus{--tw-border-opacity:1;border-color:rgb(232 184 148 / var(--tw-border-opacity, 1))}.focus\:border-zinc-300:focus{--tw-border-opacity:1;border-color:rgb(212 212 216 / var(--tw-border-opacity, 1))}.focus\:bg-white:focus{--tw-bg-opacity:1;background-color:rgb(255 255 255 / var(--tw-bg-opacity, 1))}.focus\:outline-none:focus{outline:2px solid transparent;outline-offset:2px}.active\:scale-95:active{--tw-scale-x:.95;--tw-scale-y:.95;transform:translate(var(--tw-translate-x), var(--tw-translate-y)) rotate(var(--tw-rotate)) skewX(var(--tw-skew-x)) skewY(var(--tw-skew-y)) scaleX(var(--tw-scale-x)) scaleY(var(--tw-scale-y))}.group:focus-within .group-focus-within\:text-violet-500{--tw-text-opacity:1;color:rgb(208 106 56 / var(--tw-text-opacity, 1))}.group:hover .group-hover\:text-amber-500{--tw-text-opacity:1;color:rgb(245 158 11 / var(--tw-text-opacity, 1))}@media (min-width: 640px){.sm\:block{display:block}.sm\:inline{display:inline}.sm\:flex{display:flex}.sm\:flex-row{flex-direction:row}}@media (min-width: 768px){.md\:gap-4{gap:1rem}.md\:gap-6{gap:1.5rem}.md\:p-4{padding:1rem}.md\:p-6{padding:1.5rem}.md\:p-8{padding:2rem}.md\:text-xl{font-size:1.25rem;line-height:1.75rem}.md\:text-xs{font-size:0.75rem;line-height:1rem}}@media (min-width: 1024px){.lg\:p-6{padding:1.5rem}}</style></head>
+<style>*, ::before, ::after{--tw-border-spacing-x:0;--tw-border-spacing-y:0;--tw-translate-x:0;--tw-translate-y:0;--tw-rotate:0;--tw-skew-x:0;--tw-skew-y:0;--tw-scale-x:1;--tw-scale-y:1;--tw-pan-x: ;--tw-pan-y: ;--tw-pinch-zoom: ;--tw-scroll-snap-strictness:proximity;--tw-gradient-from-position: ;--tw-gradient-via-position: ;--tw-gradient-to-position: ;--tw-ordinal: ;--tw-slashed-zero: ;--tw-numeric-figure: ;--tw-numeric-spacing: ;--tw-numeric-fraction: ;--tw-ring-inset: ;--tw-ring-offset-width:0px;--tw-ring-offset-color:#fff;--tw-ring-color:rgb(59 130 246 / 0.5);--tw-ring-offset-shadow:0 0 #0000;--tw-ring-shadow:0 0 #0000;--tw-shadow:0 0 #0000;--tw-shadow-colored:0 0 #0000;--tw-blur: ;--tw-brightness: ;--tw-contrast: ;--tw-grayscale: ;--tw-hue-rotate: ;--tw-invert: ;--tw-saturate: ;--tw-sepia: ;--tw-drop-shadow: ;--tw-backdrop-blur: ;--tw-backdrop-brightness: ;--tw-backdrop-contrast: ;--tw-backdrop-grayscale: ;--tw-backdrop-hue-rotate: ;--tw-backdrop-invert: ;--tw-backdrop-opacity: ;--tw-backdrop-saturate: ;--tw-backdrop-sepia: ;--tw-contain-size: ;--tw-contain-layout: ;--tw-contain-paint: ;--tw-contain-style: }::backdrop{--tw-border-spacing-x:0;--tw-border-spacing-y:0;--tw-translate-x:0;--tw-translate-y:0;--tw-rotate:0;--tw-skew-x:0;--tw-skew-y:0;--tw-scale-x:1;--tw-scale-y:1;--tw-pan-x: ;--tw-pan-y: ;--tw-pinch-zoom: ;--tw-scroll-snap-strictness:proximity;--tw-gradient-from-position: ;--tw-gradient-via-position: ;--tw-gradient-to-position: ;--tw-ordinal: ;--tw-slashed-zero: ;--tw-numeric-figure: ;--tw-numeric-spacing: ;--tw-numeric-fraction: ;--tw-ring-inset: ;--tw-ring-offset-width:0px;--tw-ring-offset-color:#fff;--tw-ring-color:rgb(59 130 246 / 0.5);--tw-ring-offset-shadow:0 0 #0000;--tw-ring-shadow:0 0 #0000;--tw-shadow:0 0 #0000;--tw-shadow-colored:0 0 #0000;--tw-blur: ;--tw-brightness: ;--tw-contrast: ;--tw-grayscale: ;--tw-hue-rotate: ;--tw-invert: ;--tw-saturate: ;--tw-sepia: ;--tw-drop-shadow: ;--tw-backdrop-blur: ;--tw-backdrop-brightness: ;--tw-backdrop-contrast: ;--tw-backdrop-grayscale: ;--tw-backdrop-hue-rotate: ;--tw-backdrop-invert: ;--tw-backdrop-opacity: ;--tw-backdrop-saturate: ;--tw-backdrop-sepia: ;--tw-contain-size: ;--tw-contain-layout: ;--tw-contain-paint: ;--tw-contain-style: }/* ! tailwindcss v3.4.17 | MIT License | https://tailwindcss.com */*,::after,::before{box-sizing:border-box;border-width:0;border-style:solid;border-color:#e5e7eb}::after,::before{--tw-content:''}:host,html{line-height:1.5;-webkit-text-size-adjust:100%;-moz-tab-size:4;tab-size:4;font-family:ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";font-feature-settings:normal;font-variation-settings:normal;-webkit-tap-highlight-color:transparent}body{margin:0;line-height:inherit}hr{height:0;color:inherit;border-top-width:1px}abbr:where([title]){-webkit-text-decoration:underline dotted;text-decoration:underline dotted}h1,h2,h3,h4,h5,h6{font-size:inherit;font-weight:inherit}a{color:inherit;text-decoration:inherit}b,strong{font-weight:bolder}code,kbd,pre,samp{font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;font-feature-settings:normal;font-variation-settings:normal;font-size:1em}small{font-size:80%}sub,sup{font-size:75%;line-height:0;position:relative;vertical-align:baseline}sub{bottom:-.25em}sup{top:-.5em}table{text-indent:0;border-color:inherit;border-collapse:collapse}button,input,optgroup,select,textarea{font-family:inherit;font-feature-settings:inherit;font-variation-settings:inherit;font-size:100%;font-weight:inherit;line-height:inherit;letter-spacing:inherit;color:inherit;margin:0;padding:0}button,select{text-transform:none}button,input:where([type=button]),input:where([type=reset]),input:where([type=submit]){-webkit-appearance:button;background-color:transparent;background-image:none}:-moz-focusring{outline:auto}:-moz-ui-invalid{box-shadow:none}progress{vertical-align:baseline}::-webkit-inner-spin-button,::-webkit-outer-spin-button{height:auto}[type=search]{-webkit-appearance:textfield;outline-offset:-2px}::-webkit-search-decoration{-webkit-appearance:none}::-webkit-file-upload-button{-webkit-appearance:button;font:inherit}summary{display:list-item}blockquote,dd,dl,figure,h1,h2,h3,h4,h5,h6,hr,p,pre{margin:0}fieldset{margin:0;padding:0}legend{padding:0}menu,ol,ul{list-style:none;margin:0;padding:0}dialog{padding:0}textarea{resize:vertical}input::placeholder,textarea::placeholder{opacity:1;color:#9ca3af}[role=button],button{cursor:pointer}:disabled{cursor:default}audio,canvas,embed,iframe,img,object,svg,video{display:block;vertical-align:middle}img,video{max-width:100%;height:auto}[hidden]:where(:not([hidden=until-found])){display:none}.pointer-events-none{pointer-events:none}.fixed{position:fixed}.absolute{position:absolute}.relative{position:relative}.inset-0{inset:0px}.inset-y-0{top:0px;bottom:0px}.left-4{left:1rem}.right-4{right:1rem}.top-4{top:1rem}.z-40{z-index:40}.z-50{z-index:50}.mx-1{margin-left:0.25rem;margin-right:0.25rem}.mx-auto{margin-left:auto;margin-right:auto}.-mr-2{margin-right:-0.5rem}.mb-1{margin-bottom:0.25rem}.mb-2{margin-bottom:0.5rem}.mb-4{margin-bottom:1rem}.mb-5{margin-bottom:1.25rem}.mb-6{margin-bottom:1.5rem}.mb-8{margin-bottom:2rem}.ml-1{margin-left:0.25rem}.mt-2{margin-top:0.5rem}.mt-4{margin-top:1rem}.mt-5{margin-top:1.25rem}.mt-6{margin-top:1.5rem}.mt-auto{margin-top:auto}.mb-3{margin-bottom:0.75rem}.mt-1{margin-top:0.25rem}.block{display:block}.flex{display:flex}.hidden{display:none}.h-10{height:2.5rem}.h-12{height:3rem}.h-14{height:3.5rem}.h-2{height:0.5rem}.h-3\.5{height:0.875rem}.h-4{height:1rem}.h-5{height:1.25rem}.h-7{height:1.75rem}.h-8{height:2rem}.h-full{height:100%}.h-screen{height:100vh}.h-6{height:1.5rem}.max-h-\[90vh\]{max-height:90vh}.min-h-0{min-height:0px}.min-h-\[100px\]{min-height:100px}.w-10{width:2.5rem}.w-12{width:3rem}.w-14{width:3.5rem}.w-2{width:0.5rem}.w-3\.5{width:0.875rem}.w-4{width:1rem}.w-5{width:1.25rem}.w-7{width:1.75rem}.w-full{width:100%}.w-px{width:1px}.w-6{width:1.5rem}.max-w-4xl{max-width:56rem}.max-w-\[300px\]{max-width:300px}.max-w-lg{max-width:32rem}.max-w-sm{max-width:24rem}.max-w-xl{max-width:36rem}.flex-1{flex:1 1 0%}.shrink-0{flex-shrink:0}.transform{transform:translate(var(--tw-translate-x), var(--tw-translate-y)) rotate(var(--tw-rotate)) skewX(var(--tw-skew-x)) skewY(var(--tw-skew-y)) scaleX(var(--tw-scale-x)) scaleY(var(--tw-scale-y))}@keyframes spin{to{transform:rotate(360deg)}}.animate-spin{animation:spin 1s linear infinite}.cursor-help{cursor:help}.cursor-pointer{cursor:pointer}.resize-none{resize:none}.flex-col{flex-direction:column}.items-center{align-items:center}.justify-end{justify-content:flex-end}.justify-center{justify-content:center}.justify-between{justify-content:space-between}.gap-1\.5{gap:0.375rem}.gap-2{gap:0.5rem}.gap-3{gap:0.75rem}.gap-4{gap:1rem}.gap-8{gap:2rem}.space-y-3 > :not([hidden]) ~ :not([hidden]){--tw-space-y-reverse:0;margin-top:calc(0.75rem * calc(1 - var(--tw-space-y-reverse)));margin-bottom:calc(0.75rem * var(--tw-space-y-reverse))}.overflow-hidden{overflow:hidden}.overflow-y-auto{overflow-y:auto}.truncate{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.rounded-2xl{border-radius:1rem}.rounded-\[2rem\]{border-radius:2rem}.rounded-full{border-radius:9999px}.rounded-lg{border-radius:0.5rem}.rounded-xl{border-radius:0.75rem}.rounded-\[1\.5rem\]{border-radius:1.5rem}.border{border-width:1px}.border-2{border-width:2px}.border-4{border-width:4px}.border-t{border-top-width:1px}.border-dashed{border-style:dashed}.border-transparent{border-color:transparent}.border-violet-200{--tw-border-opacity:1;border-color:rgb(240 208 184 / var(--tw-border-opacity, 1))}.border-white\/20{border-color:rgb(255 255 255 / 0.2)}.border-zinc-100{--tw-border-opacity:1;border-color:rgb(244 244 245 / var(--tw-border-opacity, 1))}.border-zinc-200{--tw-border-opacity:1;border-color:rgb(228 228 231 / var(--tw-border-opacity, 1))}.border-zinc-200\/60{border-color:rgb(228 228 231 / 0.6)}.border-t-violet-600{--tw-border-opacity:1;border-top-color:rgb(192 88 40 / var(--tw-border-opacity, 1))}.bg-amber-50{--tw-bg-opacity:1;background-color:rgb(255 251 235 / var(--tw-bg-opacity, 1))}.bg-emerald-500{--tw-bg-opacity:1;background-color:rgb(16 185 129 / var(--tw-bg-opacity, 1))}.bg-indigo-50{--tw-bg-opacity:1;background-color:rgb(253 240 228 / var(--tw-bg-opacity, 1))}.bg-violet-100{--tw-bg-opacity:1;background-color:rgb(252 232 216 / var(--tw-bg-opacity, 1))}.bg-violet-50{--tw-bg-opacity:1;background-color:rgb(255 248 242 / var(--tw-bg-opacity, 1))}.bg-violet-500{--tw-bg-opacity:1;background-color:rgb(208 106 56 / var(--tw-bg-opacity, 1))}.bg-white{--tw-bg-opacity:1;background-color:rgb(255 255 255 / var(--tw-bg-opacity, 1))}.bg-zinc-100{--tw-bg-opacity:1;background-color:rgb(244 244 245 / var(--tw-bg-opacity, 1))}.bg-zinc-100\/80{background-color:rgb(244 244 245 / 0.8)}.bg-zinc-200{--tw-bg-opacity:1;background-color:rgb(228 228 231 / var(--tw-bg-opacity, 1))}.bg-zinc-50{--tw-bg-opacity:1;background-color:rgb(250 250 250 / var(--tw-bg-opacity, 1))}.bg-zinc-50\/80{background-color:rgb(250 250 250 / 0.8)}.bg-zinc-900{--tw-bg-opacity:1;background-color:rgb(24 24 27 / var(--tw-bg-opacity, 1))}.bg-zinc-900\/40{background-color:rgb(24 24 27 / 0.4)}.bg-zinc-50\/50{background-color:rgb(250 250 250 / 0.5)}.p-2{padding:0.5rem}.p-4{padding:1rem}.p-5{padding:1.25rem}.p-8{padding:2rem}.px-1{padding-left:0.25rem;padding-right:0.25rem}.px-2{padding-left:0.5rem;padding-right:0.5rem}.px-3{padding-left:0.75rem;padding-right:0.75rem}.px-4{padding-left:1rem;padding-right:1rem}.px-5{padding-left:1.25rem;padding-right:1.25rem}.px-6{padding-left:1.5rem;padding-right:1.5rem}.py-1\.5{padding-top:0.375rem;padding-bottom:0.375rem}.py-2{padding-top:0.5rem;padding-bottom:0.5rem}.py-2\.5{padding-top:0.625rem;padding-bottom:0.625rem}.py-3{padding-top:0.75rem;padding-bottom:0.75rem}.py-3\.5{padding-top:0.875rem;padding-bottom:0.875rem}.py-4{padding-top:1rem;padding-bottom:1rem}.py-10{padding-top:2.5rem;padding-bottom:2.5rem}.py-6{padding-top:1.5rem;padding-bottom:1.5rem}.pb-4{padding-bottom:1rem}.pl-12{padding-left:3rem}.pl-3{padding-left:0.75rem}.pr-2{padding-right:0.5rem}.pr-4{padding-right:1rem}.pt-4{padding-top:1rem}.pt-8{padding-top:2rem}.text-center{text-align:center}.text-\[10px\]{font-size:10px}.text-\[11px\]{font-size:11px}.text-\[13px\]{font-size:13px}.text-lg{font-size:1.125rem;line-height:1.75rem}.text-sm{font-size:0.875rem;line-height:1.25rem}.text-xs{font-size:0.75rem;line-height:1rem}.font-bold{font-weight:700}.font-medium{font-weight:500}.uppercase{text-transform:uppercase}.leading-none{line-height:1}.leading-relaxed{line-height:1.625}.tracking-tight{letter-spacing:-0.025em}.tracking-wide{letter-spacing:0.025em}.tracking-wider{letter-spacing:0.05em}.tracking-widest{letter-spacing:0.1em}.text-amber-500{--tw-text-opacity:1;color:rgb(245 158 11 / var(--tw-text-opacity, 1))}.text-amber-600{--tw-text-opacity:1;color:rgb(217 119 6 / var(--tw-text-opacity, 1))}.text-indigo-500{--tw-text-opacity:1;color:rgb(184 90 48 / var(--tw-text-opacity, 1))}.text-violet-600{--tw-text-opacity:1;color:rgb(192 88 40 / var(--tw-text-opacity, 1))}.text-violet-700{--tw-text-opacity:1;color:rgb(168 72 30 / var(--tw-text-opacity, 1))}.text-white{--tw-text-opacity:1;color:rgb(255 255 255 / var(--tw-text-opacity, 1))}.text-zinc-300{--tw-text-opacity:1;color:rgb(212 212 216 / var(--tw-text-opacity, 1))}.text-zinc-400{--tw-text-opacity:1;color:rgb(161 161 170 / var(--tw-text-opacity, 1))}.text-zinc-500{--tw-text-opacity:1;color:rgb(113 113 122 / var(--tw-text-opacity, 1))}.text-zinc-600{--tw-text-opacity:1;color:rgb(82 82 91 / var(--tw-text-opacity, 1))}.text-zinc-700{--tw-text-opacity:1;color:rgb(63 63 70 / var(--tw-text-opacity, 1))}.text-zinc-800{--tw-text-opacity:1;color:rgb(39 39 42 / var(--tw-text-opacity, 1))}.text-zinc-900{--tw-text-opacity:1;color:rgb(24 24 27 / var(--tw-text-opacity, 1))}.text-rose-400{--tw-text-opacity:1;color:rgb(251 113 133 / var(--tw-text-opacity, 1))}.text-rose-500{--tw-text-opacity:1;color:rgb(244 63 94 / var(--tw-text-opacity, 1))}.placeholder-zinc-400::placeholder{--tw-placeholder-opacity:1;color:rgb(161 161 170 / var(--tw-placeholder-opacity, 1))}.opacity-60{opacity:0.6}.opacity-70{opacity:0.7}.shadow-2xl{--tw-shadow:0 25px 50px -12px rgb(0 0 0 / 0.25);--tw-shadow-colored:0 25px 50px -12px var(--tw-shadow-color);box-shadow:var(--tw-ring-offset-shadow, 0 0 #0000), var(--tw-ring-shadow, 0 0 #0000), var(--tw-shadow)}.shadow-inner{--tw-shadow:inset 0 2px 4px 0 rgb(0 0 0 / 0.05);--tw-shadow-colored:inset 0 2px 4px 0 var(--tw-shadow-color);box-shadow:var(--tw-ring-offset-shadow, 0 0 #0000), var(--tw-ring-shadow, 0 0 #0000), var(--tw-shadow)}.shadow-md{--tw-shadow:0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);--tw-shadow-colored:0 4px 6px -1px var(--tw-shadow-color), 0 2px 4px -2px var(--tw-shadow-color);box-shadow:var(--tw-ring-offset-shadow, 0 0 #0000), var(--tw-ring-shadow, 0 0 #0000), var(--tw-shadow)}.shadow-sm{--tw-shadow:0 1px 2px 0 rgb(0 0 0 / 0.05);--tw-shadow-colored:0 1px 2px 0 var(--tw-shadow-color);box-shadow:var(--tw-ring-offset-shadow, 0 0 #0000), var(--tw-ring-shadow, 0 0 #0000), var(--tw-shadow)}.backdrop-blur-md{--tw-backdrop-blur:blur(12px);-webkit-backdrop-filter:var(--tw-backdrop-blur) var(--tw-backdrop-brightness) var(--tw-backdrop-contrast) var(--tw-backdrop-grayscale) var(--tw-backdrop-hue-rotate) var(--tw-backdrop-invert) var(--tw-backdrop-opacity) var(--tw-backdrop-saturate) var(--tw-backdrop-sepia);backdrop-filter:var(--tw-backdrop-blur) var(--tw-backdrop-brightness) var(--tw-backdrop-contrast) var(--tw-backdrop-grayscale) var(--tw-backdrop-hue-rotate) var(--tw-backdrop-invert) var(--tw-backdrop-opacity) var(--tw-backdrop-saturate) var(--tw-backdrop-sepia)}.transition-all{transition-property:all;transition-timing-function:cubic-bezier(0.4, 0, 0.2, 1);transition-duration:150ms}.transition-colors{transition-property:color, background-color, border-color, fill, stroke, -webkit-text-decoration-color;transition-property:color, background-color, border-color, text-decoration-color, fill, stroke;transition-property:color, background-color, border-color, text-decoration-color, fill, stroke, -webkit-text-decoration-color;transition-timing-function:cubic-bezier(0.4, 0, 0.2, 1);transition-duration:150ms}.selection\:bg-violet-200 *::selection{--tw-bg-opacity:1;background-color:rgb(240 208 184 / var(--tw-bg-opacity, 1))}.selection\:text-violet-900 *::selection{--tw-text-opacity:1;color:rgb(90 44 8 / var(--tw-text-opacity, 1))}.selection\:bg-violet-200::selection{--tw-bg-opacity:1;background-color:rgb(240 208 184 / var(--tw-bg-opacity, 1))}.selection\:text-violet-900::selection{--tw-text-opacity:1;color:rgb(90 44 8 / var(--tw-text-opacity, 1))}.hover\:border-amber-200:hover{--tw-border-opacity:1;border-color:rgb(253 230 138 / var(--tw-border-opacity, 1))}.hover\:border-zinc-200:hover{--tw-border-opacity:1;border-color:rgb(228 228 231 / var(--tw-border-opacity, 1))}.hover\:bg-amber-100:hover{--tw-bg-opacity:1;background-color:rgb(254 243 199 / var(--tw-bg-opacity, 1))}.hover\:bg-amber-50:hover{--tw-bg-opacity:1;background-color:rgb(255 251 235 / var(--tw-bg-opacity, 1))}.hover\:bg-indigo-600:hover{--tw-bg-opacity:1;background-color:rgb(168 72 30 / var(--tw-bg-opacity, 1))}.hover\:bg-violet-200:hover{--tw-bg-opacity:1;background-color:rgb(240 208 184 / var(--tw-bg-opacity, 1))}.hover\:bg-violet-50:hover{--tw-bg-opacity:1;background-color:rgb(255 248 242 / var(--tw-bg-opacity, 1))}.hover\:bg-violet-600:hover{--tw-bg-opacity:1;background-color:rgb(192 88 40 / var(--tw-bg-opacity, 1))}.hover\:bg-zinc-100:hover{--tw-bg-opacity:1;background-color:rgb(244 244 245 / var(--tw-bg-opacity, 1))}.hover\:bg-zinc-50:hover{--tw-bg-opacity:1;background-color:rgb(250 250 250 / var(--tw-bg-opacity, 1))}.hover\:bg-zinc-800:hover{--tw-bg-opacity:1;background-color:rgb(39 39 42 / var(--tw-bg-opacity, 1))}.hover\:text-amber-600:hover{--tw-text-opacity:1;color:rgb(217 119 6 / var(--tw-text-opacity, 1))}.hover\:text-violet-600:hover{--tw-text-opacity:1;color:rgb(192 88 40 / var(--tw-text-opacity, 1))}.hover\:text-zinc-600:hover{--tw-text-opacity:1;color:rgb(82 82 91 / var(--tw-text-opacity, 1))}.hover\:shadow:hover{--tw-shadow:0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);--tw-shadow-colored:0 1px 3px 0 var(--tw-shadow-color), 0 1px 2px -1px var(--tw-shadow-color);box-shadow:var(--tw-ring-offset-shadow, 0 0 #0000), var(--tw-ring-shadow, 0 0 #0000), var(--tw-shadow)}.hover\:shadow-lg:hover{--tw-shadow:0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);--tw-shadow-colored:0 10px 15px -3px var(--tw-shadow-color), 0 4px 6px -4px var(--tw-shadow-color);box-shadow:var(--tw-ring-offset-shadow, 0 0 #0000), var(--tw-ring-shadow, 0 0 #0000), var(--tw-shadow)}.hover\:shadow-md:hover{--tw-shadow:0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);--tw-shadow-colored:0 4px 6px -1px var(--tw-shadow-color), 0 2px 4px -2px var(--tw-shadow-color);box-shadow:var(--tw-ring-offset-shadow, 0 0 #0000), var(--tw-ring-shadow, 0 0 #0000), var(--tw-shadow)}.focus\:border-indigo-300:focus{--tw-border-opacity:1;border-color:rgb(224 192 144 / var(--tw-border-opacity, 1))}.focus\:border-violet-300:focus{--tw-border-opacity:1;border-color:rgb(232 184 148 / var(--tw-border-opacity, 1))}.focus\:border-zinc-300:focus{--tw-border-opacity:1;border-color:rgb(212 212 216 / var(--tw-border-opacity, 1))}.focus\:bg-white:focus{--tw-bg-opacity:1;background-color:rgb(255 255 255 / var(--tw-bg-opacity, 1))}.focus\:outline-none:focus{outline:2px solid transparent;outline-offset:2px}.active\:scale-95:active{--tw-scale-x:.95;--tw-scale-y:.95;transform:translate(var(--tw-translate-x), var(--tw-translate-y)) rotate(var(--tw-rotate)) skewX(var(--tw-skew-x)) skewY(var(--tw-skew-y)) scaleX(var(--tw-scale-x)) scaleY(var(--tw-scale-y))}.group:focus-within .group-focus-within\:text-violet-500{--tw-text-opacity:1;color:rgb(208 106 56 / var(--tw-text-opacity, 1))}.group:hover .group-hover\:text-amber-500{--tw-text-opacity:1;color:rgb(245 158 11 / var(--tw-text-opacity, 1))}@media (min-width: 640px){.sm\:block{display:block}.sm\:inline{display:inline}.sm\:flex{display:flex}.sm\:flex-row{flex-direction:row}}@media (min-width: 768px){.md\:gap-4{gap:1rem}.md\:gap-6{gap:1.5rem}.md\:p-4{padding:1rem}.md\:p-6{padding:1.5rem}.md\:p-8{padding:2rem}.md\:text-xl{font-size:1.25rem;line-height:1.75rem}.md\:text-xs{font-size:0.75rem;line-height:1rem}}@media (min-width: 1024px){.lg\:p-6{padding:1.5rem}}</style>
+<style>
+/* ===== UX強化スタイル（precompiled CSS の後に置き、上書きを効かせる） ===== */
+
+/* iPhoneノッチ・下部バー対応: 端末のセーフエリア分だけ余白を足す（非対応端末では0） */
+body {
+    margin: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+/* トーストもセーフエリアの内側に出す */
+.app-toast { top: calc(1rem + env(safe-area-inset-top)); }
+
+/* キーボード操作時だけ見えるフォーカスリング（マウス操作では出ない） */
+:focus-visible { outline: 2px solid #c05828; outline-offset: 2px; border-radius: 6px; }
+
+/* 確認ダイアログは他のどのモーダル(z-50)より前面に出す。
+   CDNの動的クラス生成(z-[60]等)に依存しないよう、ここで明示する。 */
+#confirm-modal { z-index: 70; }
+
+/* タスク完了時の退場アニメーション */
+.task-exit {
+    animation: taskExit 0.22s cubic-bezier(0.4, 0, 1, 1) forwards;
+}
+@keyframes taskExit {
+    to { opacity: 0; transform: translateX(24px) scale(0.97); }
+}
+
+/* スケルトンローディング（起動直後のプレースホルダー） */
+.skeleton-card {
+    border-radius: 1rem;
+    border: 1px solid rgba(228, 228, 231, 0.6);
+    background: #fff;
+    padding: 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+}
+.skeleton-line {
+    height: 0.8rem;
+    border-radius: 9999px;
+    background: #ece4d9;
+    animation: skeletonPulse 1.4s ease-in-out infinite;
+}
+@keyframes skeletonPulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.45; }
+}
+
+/* スワイプ操作中のカード（transformはJSが直接設定） */
+.task-card.swiping { transition: none; }
+.task-card.swipe-reset { transition: transform 0.18s ease-out; }
+
+/* アニメーションが苦手な人のOS設定を尊重する */
+@media (prefers-reduced-motion: reduce) {
+    *, ::before, ::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+    }
+}
+
+/* ===== ダークモード（html.dark 配下で主要ユーティリティを上書き） =====
+   Tailwindのdark:クラスを全要素へ付け直す代わりに、使用中の主要クラスを
+   ダーク配色（テラコッタの焦げ茶系）で上書きする方式。差分が小さく安全。 */
+html.dark body { background-color: #1c1613; color: #e8e0d6; }
+html.dark ::-webkit-scrollbar-thumb { background: #4a3f35; }
+html.dark ::-webkit-scrollbar-thumb:hover { background: #5f5245; }
+html.dark :focus-visible { outline-color: #e0946a; }
+
+html.dark .bg-white { background-color: #262019 !important; }
+html.dark .bg-white\/70 { background-color: rgba(38, 32, 25, 0.7) !important; }
+html.dark .bg-zinc-50 { background-color: #2e2620 !important; }
+html.dark .bg-zinc-50\/50 { background-color: rgba(46, 38, 32, 0.5) !important; }
+html.dark .bg-zinc-50\/80 { background-color: rgba(46, 38, 32, 0.8) !important; }
+html.dark .bg-zinc-100 { background-color: #332a22 !important; }
+html.dark .bg-zinc-100\/80 { background-color: rgba(28, 22, 19, 0.85) !important; }
+html.dark .bg-zinc-200 { background-color: #3d332a !important; }
+html.dark .hover\:bg-zinc-50:hover { background-color: #2e2620 !important; }
+html.dark .hover\:bg-zinc-100:hover { background-color: #332a22 !important; }
+html.dark .hover\:bg-zinc-200:hover { background-color: #3d332a !important; }
+html.dark .focus\:bg-white:focus { background-color: #2b241d !important; }
+
+html.dark .text-zinc-900 { color: #f3ece4 !important; }
+html.dark .text-zinc-800 { color: #e8e0d6 !important; }
+html.dark .text-zinc-700 { color: #d8ccbf !important; }
+html.dark .text-zinc-600 { color: #c2b4a4 !important; }
+html.dark .text-zinc-500 { color: #a49685 !important; }
+html.dark .text-zinc-400 { color: #8a7d6e !important; }
+html.dark .text-zinc-300 { color: #6a5f53 !important; }
+html.dark .hover\:text-zinc-600:hover { color: #d8ccbf !important; }
+
+html.dark .border-zinc-100 { border-color: #332a22 !important; }
+html.dark .border-zinc-200 { border-color: #3d332a !important; }
+html.dark .border-zinc-200\/60 { border-color: rgba(61, 51, 42, 0.6) !important; }
+html.dark .hover\:border-zinc-200:hover { border-color: #4a3f35 !important; }
+html.dark .border-white\/20 { border-color: rgba(61, 51, 42, 0.5) !important; }
+
+html.dark .bg-violet-50 { background-color: #33231a !important; }
+html.dark .bg-violet-50\/30 { background-color: rgba(51, 35, 26, 0.4) !important; }
+html.dark .bg-violet-50\/60 { background-color: rgba(51, 35, 26, 0.6) !important; }
+html.dark .bg-violet-100 { background-color: #3f2b1f !important; }
+html.dark .hover\:bg-violet-50:hover { background-color: #33231a !important; }
+html.dark .hover\:bg-violet-100:hover { background-color: #3f2b1f !important; }
+html.dark .hover\:bg-violet-200:hover { background-color: #4d3526 !important; }
+html.dark .text-violet-600 { color: #e0946a !important; }
+html.dark .text-violet-700 { color: #e8a37e !important; }
+html.dark .hover\:text-violet-600:hover { color: #e0946a !important; }
+html.dark .border-violet-100 { border-color: #4a3225 !important; }
+html.dark .border-violet-200 { border-color: #59402e !important; }
+
+html.dark .bg-amber-50 { background-color: #33290f !important; }
+html.dark .hover\:bg-amber-50:hover { background-color: #33290f !important; }
+html.dark .hover\:bg-amber-100:hover { background-color: #423512 !important; }
+html.dark .hover\:border-amber-200:hover { border-color: #5c4a1a !important; }
+html.dark .text-amber-600 { color: #e5b555 !important; }
+html.dark .bg-amber-100 { background-color: #423512 !important; }
+html.dark .text-amber-800 { color: #ecc878 !important; }
+html.dark .border-amber-100 { border-color: #4a3c1a !important; }
+
+html.dark .bg-indigo-50 { background-color: #33241a !important; }
+html.dark .bg-blue-50 { background-color: #16283d !important; }
+html.dark .text-blue-600 { color: #7eb3f0 !important; }
+html.dark .border-blue-100 { border-color: #24405e !important; }
+html.dark .hover\:bg-blue-50:hover { background-color: #16283d !important; }
+html.dark .bg-rose-50 { background-color: #3d1a20 !important; }
+html.dark .hover\:bg-rose-50:hover { background-color: #3d1a20 !important; }
+html.dark .bg-emerald-50 { background-color: #14322a !important; }
+html.dark .border-emerald-100 { border-color: #1f4a3e !important; }
+
+html.dark .skeleton-card { background: #262019; border-color: rgba(61, 51, 42, 0.6); }
+html.dark .skeleton-line { background: #382e26; }
+html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; }
+</style></head>
 <body class="text-zinc-800 min-h-screen flex flex-col selection:bg-violet-200 selection:text-violet-900 p-2 md:p-4 lg:p-6">
 
     <div class="max-w-4xl w-full mx-auto flex flex-col gap-3 md:gap-6 relative">
@@ -127,8 +275,18 @@
                 </form>
             </div>
 
+            <!-- 今日のフォーカス（今日期日・期限切れ・進行中のタスクを要約。renderで動的生成） -->
+            <section id="focus-card" class="hidden bg-white rounded-2xl md:rounded-[2rem] px-4 py-3 md:px-6 md:py-4 shadow-sm border border-zinc-200/60 shrink-0">
+                <div class="flex items-center gap-2 mb-2">
+                    <i data-lucide="target" class="w-4 h-4 text-violet-600 shrink-0"></i>
+                    <h3 class="text-xs font-bold text-zinc-800 tracking-wide">今日のフォーカス</h3>
+                    <span id="focus-count" class="shrink-0 inline-flex items-center justify-center min-w-[1.25rem] h-5 px-1.5 rounded-full bg-violet-100 text-violet-700 text-[11px] font-bold">0</span>
+                </div>
+                <ul id="focus-list" class="space-y-1"></ul>
+            </section>
+
             <div class="bg-white rounded-2xl md:rounded-[2rem] p-4 md:p-8 shadow-sm border border-zinc-200/60 flex flex-col gap-5 md:gap-8">
-                
+
                 <div>
                     <div class="flex items-center justify-between mb-4 md:mb-5 px-1 gap-2">
                         <div class="flex items-center gap-3 min-w-0">
@@ -145,16 +303,21 @@
                             </button>
                         </div>
                     </div>
+                    <!-- タスク検索（本文・メモを部分一致で絞り込み） -->
+                    <div class="relative mb-3">
+                        <div class="absolute inset-y-0 left-3 flex items-center pointer-events-none">
+                            <i data-lucide="search" class="w-4 h-4 text-zinc-300"></i>
+                        </div>
+                        <input type="search" id="task-search" placeholder="タスクを検索（本文・メモ）" autocomplete="off" class="w-full bg-zinc-50 border-2 border-zinc-100 rounded-xl pl-10 pr-4 py-2 text-xs font-medium text-zinc-800 placeholder-zinc-400 focus:outline-none focus:border-violet-300 focus:bg-white transition-all">
+                    </div>
                     <!-- ジャンル絞り込み（renderで動的生成） -->
                     <div id="genre-filter" class="flex flex-wrap items-center gap-2 mb-4"></div>
+                    <!-- 起動直後はスケルトンを表示し、初回render()で実データに置き換わる -->
                     <div id="active-task-list" class="space-y-3">
-                    <div class="flex flex-col items-center justify-center py-10 px-4 text-center border-2 border-dashed border-zinc-200 rounded-[1.5rem] bg-zinc-50/50">
-                        <div class="w-12 h-12 bg-white rounded-2xl shadow-sm border border-zinc-100 flex items-center justify-center mb-3">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="coffee" aria-hidden="true" class="lucide lucide-coffee w-6 h-6 text-zinc-300"><path d="M10 2v2"></path><path d="M14 2v2"></path><path d="M16 8a1 1 0 0 1 1 1v8a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4V9a1 1 0 0 1 1-1h14a4 4 0 1 1 0 8h-1"></path><path d="M6 2v2"></path></svg>
-                        </div>
-                        <p class="text-sm font-bold text-zinc-400">タスク完了！</p>
-                        <p class="text-xs text-zinc-400 mt-1">上のフォームから新しいタスクを追加してください。</p>
-                    </div></div>
+                        <div class="skeleton-card"><div class="skeleton-line" style="width:55%"></div><div class="skeleton-line" style="width:30%"></div></div>
+                        <div class="skeleton-card"><div class="skeleton-line" style="width:70%"></div><div class="skeleton-line" style="width:40%"></div></div>
+                        <div class="skeleton-card"><div class="skeleton-line" style="width:45%"></div><div class="skeleton-line" style="width:25%"></div></div>
+                    </div>
                 </div>
 
                 <section id="conflict-section" class="hidden pt-6 border-t border-amber-100">
@@ -181,6 +344,23 @@
 
             </div>
         </main>
+    </div>
+
+    <!-- アプリ内確認ダイアログ（ブラウザ標準confirm()の置き換え。showConfirm()から使用） -->
+    <div id="confirm-modal" class="hidden fixed inset-0 bg-zinc-900/40 backdrop-blur-md flex items-center justify-center z-[60] p-4">
+        <div class="bg-white rounded-[2rem] shadow-2xl w-full max-w-sm p-6 border border-white/20">
+            <div class="flex items-center gap-3 mb-3">
+                <div id="confirm-icon-wrap" class="w-10 h-10 rounded-2xl bg-rose-50 flex items-center justify-center text-rose-600 shrink-0">
+                    <i data-lucide="alert-triangle" class="w-5 h-5"></i>
+                </div>
+                <h3 id="confirm-title" class="font-bold text-zinc-900 text-base"></h3>
+            </div>
+            <p id="confirm-message" class="text-xs text-zinc-500 leading-relaxed whitespace-pre-line mb-5"></p>
+            <div class="flex justify-end gap-2">
+                <button id="confirm-cancel-btn" type="button" class="px-4 py-2.5 text-sm font-bold text-zinc-500 hover:bg-zinc-100 rounded-xl transition-colors">キャンセル</button>
+                <button id="confirm-ok-btn" type="button" class="px-5 py-2.5 text-sm font-bold bg-rose-600 text-white hover:bg-rose-700 rounded-xl transition-all shadow-md active:scale-95"></button>
+            </div>
+        </div>
     </div>
 
     <div id="memo-modal" class="hidden fixed inset-0 bg-zinc-900/40 backdrop-blur-md flex items-center justify-center z-50 p-4">
@@ -392,6 +572,23 @@
                 <hr class="border-zinc-100 my-6">
 
                 <div class="flex items-center gap-3 mb-4">
+                    <div class="w-10 h-10 rounded-2xl bg-zinc-100 flex items-center justify-center text-zinc-600">
+                        <i data-lucide="moon-star" class="w-5 h-5"></i>
+                    </div>
+                    <h3 class="font-bold text-zinc-900 text-lg">表示テーマ</h3>
+                </div>
+                <p class="text-xs text-zinc-500 mb-4 leading-relaxed">
+                    「自動」は端末のライト/ダーク設定に合わせて切り替わります。選択はこの端末にだけ保存されます。
+                </p>
+                <div id="theme-choice" class="flex gap-2 mb-6">
+                    <button type="button" onclick="setThemePreference('auto')" data-theme-value="auto" class="flex-1 flex items-center justify-center gap-1.5 text-xs font-bold border-2 border-zinc-100 bg-zinc-50 text-zinc-600 px-3 py-2.5 rounded-xl transition-all active:scale-95"><i data-lucide="monitor" class="w-4 h-4"></i>自動</button>
+                    <button type="button" onclick="setThemePreference('light')" data-theme-value="light" class="flex-1 flex items-center justify-center gap-1.5 text-xs font-bold border-2 border-zinc-100 bg-zinc-50 text-zinc-600 px-3 py-2.5 rounded-xl transition-all active:scale-95"><i data-lucide="sun" class="w-4 h-4"></i>ライト</button>
+                    <button type="button" onclick="setThemePreference('dark')" data-theme-value="dark" class="flex-1 flex items-center justify-center gap-1.5 text-xs font-bold border-2 border-zinc-100 bg-zinc-50 text-zinc-600 px-3 py-2.5 rounded-xl transition-all active:scale-95"><i data-lucide="moon" class="w-4 h-4"></i>ダーク</button>
+                </div>
+
+                <hr class="border-zinc-100 my-6">
+
+                <div class="flex items-center gap-3 mb-4">
                     <div class="w-10 h-10 rounded-2xl bg-rose-50 flex items-center justify-center text-rose-600">
                         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="bug" aria-hidden="true" class="lucide lucide-bug w-5 h-5"><path d="m8 2 1.88 1.88"></path><path d="M14.12 3.88 16 2"></path><path d="M9 7.13v-1a3.003 3.003 0 1 1 6 0v1"></path><path d="M12 20c-3.3 0-6-2.7-6-6v-3a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v3c0 3.3-2.7 6-6 6"></path><path d="M12 20v-9"></path><path d="M6.53 9C4.6 8.8 3 7.1 3 5"></path><path d="M6 13H2"></path><path d="M3 21c0-2.1 1.7-3.9 3.8-4"></path><path d="M20.97 5c0 2.1-1.6 3.8-3.5 4"></path><path d="M22 13h-4"></path><path d="M17.2 17c2.1.1 3.8 1.9 3.8 4"></path></svg>
                     </div>
@@ -442,6 +639,12 @@
         const COMPLETED_COLLAPSE_KEY = 'taskjournal:completedCollapsed';
         let completedCollapsed = false;
         try { completedCollapsed = localStorage.getItem(COMPLETED_COLLAPSE_KEY) === 'true'; } catch { /* 保存不可でも開閉は使える */ }
+        // 表示テーマ（auto/light/dark）。UI状態なのでlocalStorageに保存。
+        const THEME_KEY = 'taskjournal:theme';
+        let themePreference = 'auto';
+        try { themePreference = localStorage.getItem(THEME_KEY) || 'auto'; } catch { /* 保存不可なら常にauto */ }
+        // タスク検索クエリ（永続化しない。ページを開き直すとリセット）
+        let searchQuery = '';
         let syncTimeout = null;
         let pushInProgress = false;
         let pushQueued = false;
@@ -1215,7 +1418,7 @@
             const toast = document.createElement('div');
             const bgClass = type === 'error' ? 'bg-rose-100 border-rose-200 text-rose-800' : 'bg-emerald-100 border-emerald-200 text-emerald-800';
             const icon = type === 'error' ? '<i data-lucide="alert-triangle" class="w-5 h-5 text-rose-600 shrink-0"></i>' : '<i data-lucide="check-circle" class="w-5 h-5 text-emerald-600 shrink-0"></i>';
-            toast.className = `fixed top-4 right-4 left-4 sm:left-auto sm:w-96 ${bgClass} border p-4 rounded-2xl shadow-xl text-sm font-medium z-[100] transition-all duration-300 transform -translate-y-full opacity-0 flex items-start gap-3`;
+            toast.className = `app-toast fixed top-4 right-4 left-4 sm:left-auto sm:w-96 ${bgClass} border p-4 rounded-2xl shadow-xl text-sm font-medium z-[100] transition-all duration-300 transform -translate-y-full opacity-0 flex items-start gap-3`;
             toast.innerHTML = `${icon}<div class="toast-message"></div>`;
             const messageElement = toast.querySelector('.toast-message');
             if (allowTrustedHtml) messageElement.innerHTML = String(message);
@@ -1229,6 +1432,82 @@
             }, 6000);
             // エラートースト表示時は、デバッグログをクラウドへ自動アップロード
             if (type === 'error') reportDebug('toast: ' + String(message).replace(/<[^>]*>/g, ' ').slice(0, 200));
+        };
+
+        // 「元に戻す」ボタン付きトースト。5秒たつか、ボタンを押すと消える。
+        function showUndoToast(message, onUndo) {
+            const toast = document.createElement('div');
+            toast.className = 'app-toast fixed top-4 right-4 left-4 sm:left-auto sm:w-96 bg-zinc-900 border border-zinc-700 text-white p-4 rounded-2xl shadow-xl text-sm font-medium z-[100] transition-all duration-300 transform -translate-y-full opacity-0 flex items-center gap-3';
+            const label = document.createElement('div');
+            label.className = 'flex-1 min-w-0 truncate';
+            label.textContent = String(message);
+            const undoBtn = document.createElement('button');
+            undoBtn.type = 'button';
+            undoBtn.className = 'shrink-0 text-xs font-bold text-amber-300 hover:text-amber-200 px-3 py-1.5 rounded-lg border border-zinc-600 hover:border-amber-300 transition-colors active:scale-95';
+            undoBtn.textContent = '元に戻す';
+            toast.appendChild(label);
+            toast.appendChild(undoBtn);
+            document.body.appendChild(toast);
+            requestAnimationFrame(() => toast.classList.remove('-translate-y-full', 'opacity-0'));
+            const dismiss = () => {
+                toast.classList.add('-translate-y-full', 'opacity-0');
+                setTimeout(() => toast.remove(), 300);
+            };
+            const timer = setTimeout(dismiss, 5000);
+            undoBtn.addEventListener('click', () => {
+                clearTimeout(timer);
+                dismiss();
+                onUndo();
+            });
+        }
+
+        // ---- アプリ内確認ダイアログ（confirm()の置き換え） ----
+        // 使い方: const ok = await showConfirm({ title, message, confirmLabel });
+        let confirmResolve = null;
+        function showConfirm({ title, message, confirmLabel = '削除する' }) {
+            return new Promise((resolve) => {
+                // 既に開いていたら前の呼び出しをキャンセル扱いにする
+                if (confirmResolve) confirmResolve(false);
+                confirmResolve = resolve;
+                document.getElementById('confirm-title').textContent = String(title || '確認');
+                document.getElementById('confirm-message').textContent = String(message || '');
+                document.getElementById('confirm-ok-btn').textContent = String(confirmLabel);
+                document.getElementById('confirm-modal').classList.remove('hidden');
+                lucide.createIcons();
+                document.getElementById('confirm-cancel-btn').focus();
+            });
+        }
+        function settleConfirm(result) {
+            document.getElementById('confirm-modal').classList.add('hidden');
+            if (confirmResolve) { confirmResolve(result); confirmResolve = null; }
+        }
+
+        // ---- 表示テーマ（auto/light/dark） ----
+        function effectiveThemeIsDark() {
+            if (themePreference === 'dark') return true;
+            if (themePreference === 'light') return false;
+            return !!(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+        }
+        function applyThemePreference() {
+            const dark = effectiveThemeIsDark();
+            document.documentElement.classList.toggle('dark', dark);
+            const meta = document.getElementById('theme-color-meta');
+            if (meta) meta.setAttribute('content', dark ? '#1c1613' : '#f0e8da');
+            // 設定画面の選択状態を更新
+            document.querySelectorAll('#theme-choice [data-theme-value]').forEach(btn => {
+                const active = btn.getAttribute('data-theme-value') === themePreference;
+                btn.classList.toggle('border-violet-300', active);
+                btn.classList.toggle('text-violet-700', active);
+                btn.classList.toggle('bg-violet-50', active);
+                btn.classList.toggle('border-zinc-100', !active);
+                btn.classList.toggle('bg-zinc-50', !active);
+                btn.classList.toggle('text-zinc-600', !active);
+            });
+        }
+        window.setThemePreference = (pref) => {
+            themePreference = ['auto', 'light', 'dark'].includes(pref) ? pref : 'auto';
+            try { localStorage.setItem(THEME_KEY, themePreference); } catch { /* 保存不可でも今回の表示には反映 */ }
+            applyThemePreference();
         };
 
         window.downloadHTML = () => {
@@ -1337,10 +1616,10 @@
         }
 
         window.classifyTasks = async () => {
-            if (!settings.aiEndpointUrl) { alert('設定からローカルAIのエンドポイントを登録してください。'); return; }
+            if (!settings.aiEndpointUrl) { showToast('設定からローカルAIのエンドポイントを登録してください。'); return; }
             try { aiAuthHeaders(); } catch (e) {
                 if (e.message === 'API_KEY_NON_ASCII') {
-                    alert('APIキーに使えない文字が含まれています。\n（全角文字やスマートクォート等が混入している可能性があります）\n設定画面でAPIキーを半角で入力し直してください。');
+                    showToast('APIキーに使えない文字が含まれています（全角文字やスマートクォート等）。設定画面でAPIキーを半角で入力し直してください。');
                     return;
                 }
             }
@@ -1692,6 +1971,15 @@
             if (!t) return;
             const newStatus = t.status === 'done' ? 'todo' : 'done';
             const logMsg = newStatus === 'done' ? '完了しました' : '未完了に戻しました';
+            // 完了時は軽い振動（対応端末のみ）とカードの退場アニメーションを添える
+            if (newStatus === 'done') {
+                if (navigator.vibrate) { try { navigator.vibrate(10); } catch { /* 非対応でも続行 */ } }
+                const card = document.querySelector(`[data-task-id="${id}"]`);
+                if (card) {
+                    card.classList.add('task-exit');
+                    await new Promise(resolve => setTimeout(resolve, 200));
+                }
+            }
             t.status = newStatus;
             t.logs = [...(t.logs || []), `${getTimeString()} ${logMsg}`];
             t.updatedAt = now();
@@ -1738,15 +2026,40 @@
             triggerDriveSync();
         };
 
+        // 削除は確認ダイアログを出さず「即削除＋5秒間だけ元に戻せる」方式。
+        // 誤操作してもトーストの「元に戻す」で復元できる（Gmail等と同じUX）。
         window.deleteTask = async (id) => {
-            if (!confirm('タスクを削除しますか？')) return;
             const task = tasks.find(x => x.id === id);
             if (!task) return;
             tasks = tasks.filter(x => x.id !== id);
             await dbPersistLocalMutation(task, 'delete');
             render();
             triggerDriveSync();
+            const snapshot = { ...task, logs: [...(task.logs || [])] };
+            showUndoToast(`「${snapshot.text}」を削除しました`, () => undoDeleteTask(snapshot));
         };
+
+        // 削除の取り消し。同期の墓標(tombstone)が旧IDに残るため、
+        // 同じIDで復活させると次回同期で再び消えてしまう。新しいIDの
+        // 新規タスクとして作り直すことで、全端末で安全に復元される。
+        async function undoDeleteTask(original) {
+            const restored = normalizeTask({
+                ...original,
+                id: uid(),
+                serverVersion: 0,
+                baseUpdatedAt: 0,
+                lastMutationId: '',
+                deleted: false,
+                logs: [...(original.logs || []), `${getTimeString()} ↩ 削除を取り消しました`],
+                updatedAt: now()
+            });
+            tasks.push(restored);
+            await dbPersistLocalMutation(restored, 'create');
+            sortTasks();
+            render();
+            triggerDriveSync();
+            showToast('タスクを元に戻しました。', 'success');
+        }
 
         function formatToGoogleCalendarDate(datetimeLocalStr) {
             if (!datetimeLocalStr) return '';
@@ -1966,9 +2279,10 @@
             if (!g) return;
             const used = tasks.filter(t => t.category === id).length;
             const msg = used > 0
-                ? `ジャンル「${g.name}」を削除しますか？\nこのジャンルが付いた${used}件のタスクは未分類に戻ります。`
-                : `ジャンル「${g.name}」を削除しますか？`;
-            if (!confirm(msg)) return;
+                ? `このジャンルが付いた${used}件のタスクは未分類に戻ります。`
+                : 'この操作はあとから取り消せません。';
+            const ok = await showConfirm({ title: `ジャンル「${g.name}」を削除しますか？`, message: msg, confirmLabel: '削除する' });
+            if (!ok) return;
             settings.categories = settings.categories.filter(x => x.id !== id);
             if (used > 0) {
                 for (const t of tasks.filter(t => t.category === id)) {
@@ -2177,6 +2491,7 @@
             const isDoing = task.status === 'doing';
             const safeText = escapeHtml(task.text);
 
+            // data-task-id は完了アニメーション・スワイプ操作がカードを特定するために使う
             const baseClass = "task-card p-3 md:p-4 rounded-2xl border transition-all flex flex-col gap-2 md:gap-3 task-enter relative overflow-hidden group bg-white z-0";
             let stateClass = "border-zinc-200 hover:border-violet-300";
             let checkIcon = `<div class="custom-checkbox w-6 h-6 rounded-full border-2 border-zinc-300 group-hover:border-emerald-400 bg-zinc-50 flex items-center justify-center text-emerald-500 cursor-pointer shrink-0" onclick="toggleStatus('${task.id}')" title="クリックで完了にする"><i data-lucide="check" class="w-4 h-4 opacity-0 group-hover:opacity-50 transition-opacity"></i></div>`;
@@ -2211,7 +2526,7 @@
             }
 
             return `
-                <div class="${baseClass} ${stateClass}">
+                <div class="${baseClass} ${stateClass}" data-task-id="${task.id}">
                     ${task.pinned ? '<div class="absolute left-0 top-0 bottom-0 w-1" style="background:#f59e0b"></div>' : (isDoing ? '<div class="absolute left-0 top-0 bottom-0 w-1 bg-violet-500"></div>' : '')}
                     <div class="flex items-start gap-3 w-full relative z-10">
                         <div class="mt-0.5">${checkIcon}</div>
@@ -2321,6 +2636,49 @@
             applyCompletedSectionState();
         };
 
+        // 検索クエリ（本文・メモの部分一致）にタスクが一致するか
+        function matchesSearch(t) {
+            if (!searchQuery) return true;
+            if (String(t.text || '').toLowerCase().includes(searchQuery)) return true;
+            return (t.logs || []).some(l => String(l).toLowerCase().includes(searchQuery));
+        }
+
+        // 「今日のフォーカス」カード: 進行中＋今日期日＋期限切れの未完了タスクを要約表示
+        function renderFocusCard() {
+            const card = document.getElementById('focus-card');
+            const list = document.getElementById('focus-list');
+            const countEl = document.getElementById('focus-count');
+            if (!card || !list) return;
+            const d = new Date();
+            const pad = n => String(n).padStart(2, '0');
+            const todayKey = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+            const focusTasks = tasks.filter(t => {
+                if (!t || t.status === 'done') return false;
+                if (t.status === 'doing') return true;
+                if (!t.dueDate) return false;
+                const dueKey = String(t.dueDate).slice(0, 10);
+                return dueKey <= todayKey; // 今日期日＋期限切れ
+            }).slice(0, 5);
+            if (focusTasks.length === 0) {
+                card.classList.add('hidden');
+                return;
+            }
+            card.classList.remove('hidden');
+            if (countEl) countEl.textContent = focusTasks.length;
+            list.innerHTML = focusTasks.map(t => {
+                let chip;
+                if (t.status === 'doing') {
+                    chip = '<span class="shrink-0 text-[10px] font-bold text-violet-700 bg-violet-100 px-1.5 py-0.5 rounded-md">進行中</span>';
+                } else {
+                    const dueKey = String(t.dueDate).slice(0, 10);
+                    chip = dueKey < todayKey
+                        ? '<span class="shrink-0 text-[10px] font-bold text-rose-500 bg-rose-50 px-1.5 py-0.5 rounded-md">期限切れ</span>'
+                        : '<span class="shrink-0 text-[10px] font-bold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded-md">今日</span>';
+                }
+                return `<li class="flex items-center gap-2 text-xs text-zinc-600"><span class="w-1.5 h-1.5 rounded-full bg-violet-500 shrink-0"></span><span class="flex-1 min-w-0 truncate font-medium">${escapeHtml(t.text)}</span>${chip}</li>`;
+            }).join('');
+        }
+
         function render() {
             const activeList = document.getElementById('active-task-list');
             const completedList = document.getElementById('completed-task-list');
@@ -2329,10 +2687,13 @@
 
             renderGenreFilter();
             renderConflicts();
+            renderFocusCard();
 
-            const isFiltered = activeGenreFilters.size > 0;
-            const activeTasks = tasks.filter(t => t.status !== 'done' && matchesGenreFilter(t));
-            const doneTasks = tasks.filter(t => t.status === 'done' && matchesGenreFilter(t));
+            const isSearching = !!searchQuery;
+            const isFiltered = activeGenreFilters.size > 0 || isSearching;
+            const visible = t => matchesGenreFilter(t) && matchesSearch(t);
+            const activeTasks = tasks.filter(t => t.status !== 'done' && visible(t));
+            const doneTasks = tasks.filter(t => t.status === 'done' && visible(t));
 
             // 見出しの件数バッジ（表示中の件数）
             const acEl = document.getElementById('active-count');
@@ -2341,13 +2702,15 @@
             if (ccEl) ccEl.textContent = doneTasks.length;
 
             if (activeTasks.length === 0) {
-                const msg = isFiltered
-                    ? { title: 'このジャンルのタスクはありません', sub: '別のジャンルや「すべて」を選んでください。' }
-                    : { title: 'タスク完了！', sub: '上のフォームから新しいタスクを追加してください。' };
+                const msg = isSearching
+                    ? { title: '検索に一致するタスクはありません', sub: 'キーワードを変えるか、検索欄を空にしてください。' }
+                    : isFiltered
+                        ? { title: 'このジャンルのタスクはありません', sub: '別のジャンルや「すべて」を選んでください。' }
+                        : { title: 'タスク完了！', sub: '上のフォームから新しいタスクを追加してください。' };
                 activeList.innerHTML = `
                     <div class="flex flex-col items-center justify-center py-10 px-4 text-center border-2 border-dashed border-zinc-200 rounded-[1.5rem] bg-zinc-50/50">
                         <div class="w-12 h-12 bg-white rounded-2xl shadow-sm border border-zinc-100 flex items-center justify-center mb-3">
-                            <i data-lucide="${isFiltered ? 'filter' : 'coffee'}" class="w-6 h-6 text-zinc-300"></i>
+                            <i data-lucide="${isFiltered ? (isSearching ? 'search' : 'filter') : 'coffee'}" class="w-6 h-6 text-zinc-300"></i>
                         </div>
                         <p class="text-sm font-bold text-zinc-400">${msg.title}</p>
                         <p class="text-xs text-zinc-400 mt-1">${msg.sub}</p>
@@ -2357,7 +2720,7 @@
             }
 
             if (doneTasks.length === 0) {
-                completedList.innerHTML = `<div class="text-xs font-medium text-zinc-400 py-6 text-center">${isFiltered ? 'このジャンルの完了タスクはありません。' : '完了したタスクはまだありません。'}</div>`;
+                completedList.innerHTML = `<div class="text-xs font-medium text-zinc-400 py-6 text-center">${isFiltered ? '条件に一致する完了タスクはありません。' : '完了したタスクはまだありません。'}</div>`;
             } else {
                 doneTasks.forEach(task => { completedList.innerHTML += createTaskHTML(task); });
             }
@@ -2384,6 +2747,88 @@
             document.getElementById('genre-modal').addEventListener('click', (e) => { if (e.target.id === 'genre-modal') closeGenreModal(); });
             document.getElementById('genre-picker-modal').addEventListener('click', (e) => { if (e.target.id === 'genre-picker-modal') closeGenrePicker(); });
             document.getElementById('sync-status').addEventListener('click', () => { if (isSyncConfigured()) pullFromCloud(true); });
+
+            // 確認ダイアログ（OK/キャンセル/背景クリック）
+            document.getElementById('confirm-ok-btn').addEventListener('click', () => settleConfirm(true));
+            document.getElementById('confirm-cancel-btn').addEventListener('click', () => settleConfirm(false));
+            document.getElementById('confirm-modal').addEventListener('click', (e) => { if (e.target.id === 'confirm-modal') settleConfirm(false); });
+
+            // タスク検索（入力のたびに絞り込み）
+            document.getElementById('task-search').addEventListener('input', (e) => {
+                searchQuery = String(e.target.value || '').trim().toLowerCase();
+                render();
+            });
+
+            // 表示テーマの適用と、OS設定変更（自動モード時）への追従
+            applyThemePreference();
+            if (window.matchMedia) {
+                window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+                    if (themePreference === 'auto') applyThemePreference();
+                });
+            }
+
+            // キーボードショートカット: n=新規タスク / ＝検索 / Esc=閉じる
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape') {
+                    // 確認ダイアログ最優先。次に開いているモーダルを閉じる
+                    if (!document.getElementById('confirm-modal').classList.contains('hidden')) { settleConfirm(false); return; }
+                    for (const id of ['memo-modal', 'schedule-modal', 'settings-modal', 'trivia-modal', 'debug-modal', 'genre-picker-modal', 'genre-modal']) {
+                        const modal = document.getElementById(id);
+                        if (modal && !modal.classList.contains('hidden')) { modal.classList.add('hidden'); return; }
+                    }
+                    if (document.activeElement && typeof document.activeElement.blur === 'function') document.activeElement.blur();
+                    return;
+                }
+                const tag = (e.target.tagName || '').toLowerCase();
+                if (tag === 'input' || tag === 'textarea' || e.target.isContentEditable) return;
+                if (e.metaKey || e.ctrlKey || e.altKey) return;
+                if (e.key === 'n') { e.preventDefault(); document.getElementById('task-input').focus(); }
+                else if (e.key === '/') { e.preventDefault(); document.getElementById('task-search').focus(); }
+            });
+
+            // スワイプ操作（タッチ端末）: 右スワイプ=完了/未完了の切替、左スワイプ=削除（元に戻すトースト付き）
+            const attachSwipeHandlers = (container) => {
+                let startX = 0, startY = 0, card = null, taskId = '', swiping = false;
+                container.addEventListener('touchstart', (e) => {
+                    const target = e.target.closest('[data-task-id]');
+                    // ボタン類の上から始まったタッチはスワイプ扱いしない（誤発火防止）
+                    if (!target || e.target.closest('button') || e.target.closest('input')) { card = null; return; }
+                    card = target;
+                    taskId = target.getAttribute('data-task-id');
+                    startX = e.touches[0].clientX;
+                    startY = e.touches[0].clientY;
+                    swiping = false;
+                }, { passive: true });
+                container.addEventListener('touchmove', (e) => {
+                    if (!card) return;
+                    const dx = e.touches[0].clientX - startX;
+                    const dy = e.touches[0].clientY - startY;
+                    if (!swiping && Math.abs(dx) > 12 && Math.abs(dx) > Math.abs(dy) * 1.5) swiping = true;
+                    if (swiping) {
+                        card.classList.add('swiping');
+                        card.style.transform = `translateX(${dx}px)`;
+                        card.style.opacity = String(Math.max(0.4, 1 - Math.abs(dx) / 300));
+                    }
+                }, { passive: true });
+                container.addEventListener('touchend', (e) => {
+                    if (!card) return;
+                    const dx = e.changedTouches[0].clientX - startX;
+                    const finished = swiping && Math.abs(dx) > 80;
+                    if (finished && dx > 0) {
+                        toggleStatus(taskId);
+                    } else if (finished && dx < 0) {
+                        deleteTask(taskId);
+                    } else if (swiping) {
+                        card.classList.remove('swiping');
+                        card.classList.add('swipe-reset');
+                        card.style.transform = '';
+                        card.style.opacity = '';
+                    }
+                    card = null; swiping = false;
+                }, { passive: true });
+            };
+            attachSwipeHandlers(document.getElementById('active-task-list'));
+            attachSwipeHandlers(document.getElementById('completed-task-list'));
             window.addEventListener('online', refreshFromCloudIfStale);
             document.addEventListener('visibilitychange', () => {
                 if (document.visibilityState === 'visible') refreshFromCloudIfStale();
