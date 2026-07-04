@@ -120,6 +120,12 @@ for (const requiredFeature of [
     'resolveConflict',
     'タスクのタイトル',
     '予定日時（任意）',
+    'id="schedule-created-input"',
+    'id="schedule-logs-editor"',
+    'id="schedule-device-label"',
+    'createdDeviceName',
+    'id="sync-progress-panel"',
+    'setSyncProgress(45,',
 ]) {
     if (indexHtml.includes(requiredFeature)) console.log(`OK  競合・編集機能: ${requiredFeature}`);
     else { failed++; console.error(`NG  競合・編集機能がありません: ${requiredFeature}`); }

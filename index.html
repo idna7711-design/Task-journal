@@ -78,7 +78,22 @@
         
         <div id="loading-overlay" class="fixed inset-0 bg-zinc-100/80 backdrop-blur-md z-40 flex flex-col items-center justify-center gap-4 hidden">
             <div class="w-12 h-12 border-4 border-violet-200 border-t-violet-600 rounded-full animate-spin"></div>
-            <span class="text-sm font-bold text-zinc-600 tracking-wide">データを同期中...</span>
+            <span id="sync-overlay-label" class="text-sm font-bold text-zinc-600 tracking-wide">同期の準備中...</span>
+            <div class="w-full max-w-[300px] h-2 bg-zinc-200 rounded-full overflow-hidden">
+                <div id="sync-overlay-bar" class="h-full bg-violet-500 transition-all" style="width: 0%"></div>
+            </div>
+            <span id="sync-overlay-percent" class="text-xs font-bold text-violet-700">0%</span>
+        </div>
+
+        <div id="sync-progress-panel" class="hidden fixed right-4 bottom-4 z-40 w-full max-w-[300px] bg-white border border-violet-200 rounded-2xl p-4 shadow-lg" role="status" aria-live="polite">
+            <div class="flex justify-between gap-3 mb-2">
+                <span id="sync-progress-label" class="text-xs font-bold text-zinc-700">同期の準備中...</span>
+                <span id="sync-progress-percent" class="text-xs font-bold text-violet-700">0%</span>
+            </div>
+            <div class="w-full h-2 bg-zinc-200 rounded-full overflow-hidden">
+                <div id="sync-progress-bar" class="h-full bg-violet-500 transition-all" style="width: 0%"></div>
+            </div>
+            <p class="text-[10px] text-zinc-400 mt-2">進捗は完了した処理段階を示す目安です。操作は続けられます。</p>
         </div>
 
         <header class="bg-white rounded-2xl md:rounded-[2rem] px-4 py-3 md:px-6 md:py-4 flex justify-between items-center shadow-sm border border-zinc-200/60 shrink-0">
@@ -206,7 +221,7 @@
 
     <!-- タスク編集・カレンダー追加モーダル -->
     <div id="schedule-modal" class="hidden fixed inset-0 bg-zinc-900/40 backdrop-blur-md flex items-center justify-center z-50 p-4">
-        <div class="bg-white rounded-[2rem] shadow-2xl w-full max-w-lg p-6 md:p-8 overflow-hidden transform transition-all border border-white/20">
+        <div class="bg-white rounded-[2rem] shadow-2xl w-full max-w-lg p-6 md:p-8 overflow-y-auto max-h-[90vh] transform transition-all border border-white/20">
             <div class="flex items-center gap-3 mb-6">
                 <div class="w-10 h-10 rounded-2xl bg-blue-50 flex items-center justify-center text-blue-500">
                     <i data-lucide="calendar-plus" class="w-5 h-5"></i>
@@ -221,7 +236,19 @@
             <input type="text" id="schedule-title-input" autocomplete="off" class="w-full bg-zinc-50 border-2 border-zinc-100 rounded-2xl p-3 text-sm focus:outline-none focus:border-violet-300 focus:bg-white mb-4 shadow-inner transition-colors text-zinc-800" placeholder="タスクのタイトル">
 
             <label class="block text-xs font-bold text-zinc-400 uppercase tracking-wider mb-2 ml-1">予定日時（任意）</label>
-            <input type="datetime-local" id="schedule-datetime-input" class="w-full bg-zinc-50 border-2 border-zinc-100 rounded-2xl p-3 text-sm focus:outline-none focus:border-violet-300 focus:bg-white mb-6 shadow-inner transition-colors text-zinc-700">
+            <input type="datetime-local" id="schedule-datetime-input" class="w-full bg-zinc-50 border-2 border-zinc-100 rounded-2xl p-3 text-sm focus:outline-none focus:border-violet-300 focus:bg-white mb-4 shadow-inner transition-colors text-zinc-700">
+
+            <label class="block text-xs font-bold text-zinc-400 uppercase tracking-wider mb-2 ml-1">追加日時</label>
+            <input type="datetime-local" id="schedule-created-input" class="w-full bg-zinc-50 border-2 border-zinc-100 rounded-2xl p-3 text-sm focus:outline-none focus:border-violet-300 focus:bg-white mb-4 shadow-inner transition-colors text-zinc-700">
+
+            <label class="block text-xs font-bold text-zinc-400 uppercase tracking-wider mb-2 ml-1">追加元デバイス</label>
+            <div id="schedule-device-label" class="w-full bg-zinc-50 border border-zinc-200 rounded-2xl p-3 text-sm text-zinc-600 mb-4">記録なし</div>
+
+            <div class="flex items-center justify-between gap-3 mb-2 ml-1">
+                <label class="text-xs font-bold text-zinc-400 uppercase tracking-wider">メモ・履歴</label>
+                <button type="button" onclick="addTaskLogEditor()" class="text-xs font-bold text-violet-700 hover:bg-violet-50 rounded-lg px-2 py-1">＋ 1件追加</button>
+            </div>
+            <div id="schedule-logs-editor" class="space-y-3 mb-6"></div>
 
             <div class="flex flex-col sm:flex-row sm:justify-end gap-2 sm:gap-3">
                 <button onclick="closeScheduleModal()" class="px-5 py-3 text-sm font-bold text-zinc-500 hover:bg-zinc-100 rounded-2xl transition-colors">キャンセル</button>
@@ -434,10 +461,13 @@
             categories: null, // ジャンル一覧（人間が管理）。初期化時に既定値を入れる
             categoriesUpdatedAt: 0,
             categoriesServerVersion: 0,
-            categoriesMutationId: ''
+            categoriesMutationId: '',
+            deviceId: '',
+            deviceName: ''
         };
         let currentTaskIdForMemo = null;
         let currentTaskIdForSchedule = null;
+        let editingTaskLogs = [];
         let activeGenreFilters = new Set(); // 空=すべて。要素は ジャンルID または '__none__'(未分類)
         const COMPLETED_COLLAPSE_KEY = 'taskjournal:completedCollapsed';
         let completedCollapsed = false;
@@ -450,6 +480,7 @@
         let syncRetryAttempt = 0;
         let syncRetryTimer = null;
         let lastCloudPullAt = 0;
+        let syncProgressHideTimer = null;
         let db = null;
 
         // ---- Debug logging ----
@@ -864,6 +895,8 @@
                 pinned: !!t.pinned,
                 logs: Array.isArray(t.logs) ? t.logs : [],
                 createdAt: t.createdAt || Date.now(),
+                createdDeviceId: typeof t.createdDeviceId === 'string' ? t.createdDeviceId : '',
+                createdDeviceName: typeof t.createdDeviceName === 'string' ? t.createdDeviceName : '',
                 updatedAt,
                 baseUpdatedAt: Number.isFinite(t.baseUpdatedAt) ? t.baseUpdatedAt : 0,
                 serverVersion: Number.isFinite(t.serverVersion) ? t.serverVersion : 0,
@@ -1077,8 +1110,11 @@
         }
 
         async function runSyncV3() {
+            setSyncProgress(10, '同期の準備中...');
             await ensureSyncV3();
+            setSyncProgress(25, 'サーバーの同期方式を確認しました');
             const submitted = syncOutbox.map(item => ({ ...item, task: { ...item.task } }));
+            setSyncProgress(45, submitted.length ? `${submitted.length}件の変更を送信中...` : 'クラウドの最新データを取得中...');
             const result = await postSyncRequest({
                 action: 'sync',
                 mutations: submitted,
@@ -1089,12 +1125,16 @@
                 } : null,
                 resolvedConflictIds: taskConflicts.filter(item => item.resolvedAt).map(item => item.id)
             }, 60000);
+            setSyncProgress(70, '受信したデータを確認中...');
             result.submittedCategoryMutationId = settings.categoriesMutationId || '';
             await applySyncV3Result(result, submitted.map(item => item.mutationId));
+            setSyncProgress(90, 'この端末へ保存中...');
             lastCloudPullAt = Date.now();
             syncRetryAttempt = 0;
             clearTimeout(syncRetryTimer);
             updateSyncStatus('success');
+            setSyncProgress(100, '同期が完了しました');
+            scheduleSyncProgressHide(1500);
         }
 
         function scheduleSyncRetry(error) {
@@ -1121,6 +1161,8 @@
                 } catch (error) {
                     console.error('Drive sync error', error);
                     updateSyncStatus('error');
+                    setSyncProgress(100, '同期できませんでした。自動で再試行します');
+                    scheduleSyncProgressHide(5000);
                     scheduleSyncRetry(error);
                 } finally {
                     pushInProgress = false;
@@ -1155,6 +1197,8 @@
             } catch (e) {
                 console.error('Pull error', e);
                 updateSyncStatus('error');
+                setSyncProgress(100, '同期できませんでした。ローカルデータは保持されています');
+                scheduleSyncProgressHide(5000);
                 if (showOverlay) {
                     window.showToast(syncErrorMessage(e), 'error');
                 }
@@ -1172,6 +1216,33 @@
         }
 
         // ---- Sync status indicator ----
+        function setSyncProgress(percent, label) {
+            clearTimeout(syncProgressHideTimer);
+            const safePercent = Math.max(0, Math.min(100, Math.round(Number(percent) || 0)));
+            const panel = document.getElementById('sync-progress-panel');
+            if (panel) panel.classList.remove('hidden');
+            for (const id of ['sync-progress-bar', 'sync-overlay-bar']) {
+                const bar = document.getElementById(id);
+                if (bar) bar.style.width = safePercent + '%';
+            }
+            for (const id of ['sync-progress-percent', 'sync-overlay-percent']) {
+                const el = document.getElementById(id);
+                if (el) el.textContent = safePercent + '%';
+            }
+            for (const id of ['sync-progress-label', 'sync-overlay-label']) {
+                const el = document.getElementById(id);
+                if (el) el.textContent = label;
+            }
+        }
+
+        function scheduleSyncProgressHide(delay) {
+            clearTimeout(syncProgressHideTimer);
+            syncProgressHideTimer = setTimeout(() => {
+                const panel = document.getElementById('sync-progress-panel');
+                if (panel) panel.classList.add('hidden');
+            }, delay);
+        }
+
         function updateSyncStatus(status) {
             const el = document.getElementById('sync-status');
             if (!el) return;
@@ -1646,6 +1717,19 @@
         };
 
         // ---- Task actions ----
+        function detectDeviceName() {
+            const ua = navigator.userAgent || '';
+            const isIPad = /iPad/i.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+            const device = isIPad ? 'iPad' : /iPhone/i.test(ua) ? 'iPhone' : /Android/i.test(ua) ? 'Android' : /Windows/i.test(ua) ? 'Windows PC' : /Mac/i.test(ua) ? 'Mac' : '端末';
+            const browser = /Edg/i.test(ua) ? 'Edge' : /CriOS|Chrome/i.test(ua) ? 'Chrome' : /Safari/i.test(ua) ? 'Safari' : 'ブラウザ';
+            return `${device} / ${browser}`;
+        }
+
+        function ensureDeviceIdentity() {
+            if (!settings.deviceId) settings.deviceId = uid();
+            if (!settings.deviceName) settings.deviceName = `${detectDeviceName()} (${settings.deviceId.slice(0, 4).toUpperCase()})`;
+        }
+
         window.addTask = async (e) => {
             e.preventDefault();
             const input = document.getElementById('task-input');
@@ -1661,6 +1745,8 @@
                 pinned: false,
                 logs: [],
                 createdAt: now(),
+                createdDeviceId: settings.deviceId,
+                createdDeviceName: settings.deviceName,
                 updatedAt: now(),
                 baseUpdatedAt: 0,
                 serverVersion: 0,
@@ -1775,7 +1861,59 @@
             return url;
         }
 
-        // タスク編集モーダル：タイトルと予定日時をまとめて変更する
+        function toDateTimeLocalValue(timestamp) {
+            if (!timestamp) return '';
+            const d = new Date(timestamp);
+            if (Number.isNaN(d.getTime())) return '';
+            const pad = value => String(value).padStart(2, '0');
+            return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+        }
+
+        function renderTaskLogEditor() {
+            const container = document.getElementById('schedule-logs-editor');
+            container.innerHTML = '';
+            if (!editingTaskLogs.length) {
+                const empty = document.createElement('p');
+                empty.className = 'text-xs text-zinc-400 bg-zinc-50 rounded-xl p-3';
+                empty.textContent = 'メモ・履歴はありません。';
+                container.appendChild(empty);
+                return;
+            }
+            editingTaskLogs.forEach((log, index) => {
+                const row = document.createElement('div');
+                row.className = 'flex items-start gap-2';
+                const textarea = document.createElement('textarea');
+                textarea.rows = 2;
+                textarea.maxLength = 1000;
+                textarea.className = 'flex-1 bg-zinc-50 border-2 border-zinc-100 rounded-xl p-3 text-xs focus:outline-none focus:border-violet-300 focus:bg-white resize-none text-zinc-700';
+                textarea.value = log;
+                textarea.addEventListener('input', () => { editingTaskLogs[index] = textarea.value; });
+                const remove = document.createElement('button');
+                remove.type = 'button';
+                remove.className = 'p-2 text-zinc-400 hover:text-rose-500 hover:bg-rose-50 rounded-lg';
+                remove.title = 'この記録を削除';
+                remove.textContent = '削除';
+                remove.addEventListener('click', () => {
+                    editingTaskLogs.splice(index, 1);
+                    renderTaskLogEditor();
+                });
+                row.append(textarea, remove);
+                container.appendChild(row);
+            });
+        }
+
+        window.addTaskLogEditor = () => {
+            if (editingTaskLogs.length >= 200) {
+                window.showToast('メモ・履歴は200件までです。', 'error');
+                return;
+            }
+            editingTaskLogs.push('');
+            renderTaskLogEditor();
+            const inputs = document.querySelectorAll('#schedule-logs-editor textarea');
+            if (inputs.length) inputs[inputs.length - 1].focus();
+        };
+
+        // タスク編集モーダル：タイトル、日時、履歴をまとめて変更する
         window.openScheduleModal = (id) => {
             const task = tasks.find(t => t.id === id);
             if (!task) return;
@@ -1783,6 +1921,10 @@
             document.getElementById('schedule-task-name').textContent = task.text;
             document.getElementById('schedule-title-input').value = task.text;
             document.getElementById('schedule-datetime-input').value = task.dueDate || '';
+            document.getElementById('schedule-created-input').value = toDateTimeLocalValue(task.createdAt);
+            document.getElementById('schedule-device-label').textContent = task.createdDeviceName || '記録なし（機能追加前のタスク）';
+            editingTaskLogs = Array.isArray(task.logs) ? [...task.logs] : [];
+            renderTaskLogEditor();
             document.getElementById('schedule-modal').classList.remove('hidden');
             lucide.createIcons();
             setTimeout(() => document.getElementById('schedule-title-input').focus(), 50);
@@ -1795,13 +1937,26 @@
             const t = tasks.find(x => x.id === currentTaskIdForSchedule);
             if (!t) return;
             const dt = document.getElementById('schedule-datetime-input').value;
+            const createdValue = document.getElementById('schedule-created-input').value;
             const evTitle = document.getElementById('schedule-title-input').value.trim();
             if (!evTitle) {
                 window.showToast('タスクのタイトルを入力してください。', 'error');
                 return;
             }
+            const createdAt = new Date(createdValue).getTime();
+            if (!createdValue || !Number.isFinite(createdAt)) {
+                window.showToast('追加日時を正しく入力してください。', 'error');
+                return;
+            }
+            const logs = editingTaskLogs.map(log => String(log).trim()).filter(Boolean);
+            if (logs.length > 200 || logs.some(log => log.length > 1000)) {
+                window.showToast('メモ・履歴は200件まで、1件1000文字までです。', 'error');
+                return;
+            }
             t.text = evTitle;
             t.dueDate = dt || null;
+            t.createdAt = createdAt;
+            t.logs = logs;
             t.updatedAt = now();
             await dbPersistLocalMutation(t, 'update');
             sortTasks();
@@ -2240,7 +2395,7 @@
                         <button onclick="unstartTask('${task.id}')" class="p-2 text-zinc-400 hover:text-violet-600 hover:bg-violet-50 rounded-lg transition-colors" title="開始前に戻す">
                             <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
                         </button>` : ''}
-                        <button onclick="openScheduleModal('${task.id}')" class="p-2 text-zinc-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title="タイトルと予定日時を編集">
+                        <button onclick="openScheduleModal('${task.id}')" class="p-2 text-zinc-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title="タイトル・日時・メモ・追加元を確認／編集">
                             <i data-lucide="pencil" class="w-4 h-4"></i>
                         </button>
                         <button onclick="openMemoModal('${task.id}')" class="p-2 text-zinc-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors" title="メモを追加">
@@ -2410,6 +2565,8 @@
                     settings.categoriesUpdatedAt = Number(cfg.categoriesUpdatedAt) || 0;
                     settings.categoriesServerVersion = Number(cfg.categoriesServerVersion) || 0;
                     settings.categoriesMutationId = typeof cfg.categoriesMutationId === 'string' ? cfg.categoriesMutationId : '';
+                    settings.deviceId = typeof cfg.deviceId === 'string' ? cfg.deviceId : '';
+                    settings.deviceName = typeof cfg.deviceName === 'string' ? cfg.deviceName : '';
                     if (Array.isArray(cfg.categories) && !settings.categoriesServerVersion && !settings.categoriesMutationId) {
                         settings.categoriesMutationId = uid();
                         shouldPersistConfig = true;
@@ -2421,6 +2578,10 @@
                     settings.categoriesMutationId = uid();
                     shouldPersistConfig = true;
                 }
+                const previousDeviceId = settings.deviceId;
+                const previousDeviceName = settings.deviceName;
+                ensureDeviceIdentity();
+                if (settings.deviceId !== previousDeviceId || settings.deviceName !== previousDeviceName) shouldPersistConfig = true;
                 if (shouldPersistConfig) await persistConfig();
                 document.getElementById('webhook-input').value = settings.webhookUrl;
                 document.getElementById('sync-token-input').value = settings.syncToken;
