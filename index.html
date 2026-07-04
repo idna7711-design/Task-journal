@@ -817,7 +817,7 @@
         }
         async function ensureSyncV3() {
             if (syncCapabilityVerified) return;
-            const result = await postSyncRequest({ action: 'capabilities' });
+            const result = await postSyncRequest({ action: 'capabilities' }, 60000);
             if (!result.capabilities || !result.capabilities.mutationSync) {
                 const error = new Error('SYNC_PROTOCOL_MISMATCH');
                 error.code = 'SYNC_PROTOCOL_MISMATCH';
@@ -833,7 +833,7 @@
                 return '同期キーが一致しません。設定を確認してください。ローカルデータは保持されています。';
             }
             return error && error.name === 'AbortError'
-                ? 'クラウドが20秒以内に応答しませんでした。ローカルデータは保持されています。'
+                ? 'クラウドの応答に時間がかかっています。ローカルデータは保持されているため、そのまま操作できます。通信状態が安定すると自動で再試行します。'
                 : 'クラウド同期に失敗しました。通信状態と同期設定を確認してください。';
         }
         function getTimeString() {

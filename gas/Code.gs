@@ -152,12 +152,15 @@ function handleMutationSync(data) {
     const folder = DriveApp.getFolderById(FOLDER_ID);
     const state = normalizeProtocol3State(readSyncState(folder));
     const result = applyMutations(state, mutations, categoryMutation, resolvedConflictIds);
-    result.state.revision = finiteNumberOrZero(state.revision) + 1;
-    result.state.updatedAt = Date.now();
-    upsertFile(folder, JSON_FILE_NAME, JSON.stringify(result.state));
+    const hasChanges = mutations.length > 0 || !!categoryMutation || resolvedConflictIds.length > 0;
+    if (hasChanges) {
+      result.state.revision = finiteNumberOrZero(state.revision) + 1;
+      result.state.updatedAt = Date.now();
+      upsertFile(folder, JSON_FILE_NAME, JSON.stringify(result.state));
 
-    const doc = getNotebookDocument();
-    renderNotebookDocument(doc, result.state.tasks, result.state.categories);
+      const doc = getNotebookDocument();
+      renderNotebookDocument(doc, result.state.tasks, result.state.categories);
+    }
 
     return jsonOutput({
       protocolVersion: PROTOCOL_VERSION,
