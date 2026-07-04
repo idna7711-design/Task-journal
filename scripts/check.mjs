@@ -83,7 +83,7 @@ for (const requiredSyncSafety of [
     'let pullPromise = null',
     'let pushInProgress = false',
     '}, 60000);',
-    'クラウドが20秒以内に応答しませんでした。ローカルデータは保持されています。',
+    'クラウドの応答に時間がかかっています。ローカルデータは保持されているため、そのまま操作できます。',
     "action: 'capabilities'",
     "action: 'sync'",
     'dbPersistLocalMutation',
@@ -99,6 +99,16 @@ for (const requiredSyncSafety of [
         console.error(`NG  同期停止対策がありません: ${requiredSyncSafety}`);
     }
 }
+const gasCode = readFileSync(join(root, 'gas', 'Code.gs'), 'utf8');
+for (const lightweightPullSafety of [
+    'const hasChanges = mutations.length > 0 || !!categoryMutation || resolvedConflictIds.length > 0;',
+    'if (hasChanges) {',
+]) {
+    if (gasCode.includes(lightweightPullSafety)) console.log(`OK  変更なし同期を軽量化: ${lightweightPullSafety}`);
+    else { failed++; console.error(`NG  変更なし同期の軽量化がありません: ${lightweightPullSafety}`); }
+}
+if (indexHtml.includes("postSyncRequest({ action: 'capabilities' }, 60000)")) console.log('OK  同期能力確認は60秒待機');
+else { failed++; console.error('NG  同期能力確認の待機時間が不足しています'); }
 if (!indexHtml.includes("url.searchParams.set('syncToken'")) console.log('OK  同期キーをURLへ含めない');
 else { failed++; console.error('NG  同期キーがURLへ含まれています'); }
 if (indexHtml.includes("aiEndpointUrl: ''")) console.log('OK  AI未設定時は自動接続しない');
