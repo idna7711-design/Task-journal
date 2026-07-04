@@ -10,8 +10,15 @@
  * 注意: タスクや設定(APIキー等)は IndexedDB に保存されており、このキャッシュとは無関係。
  *       キャッシュを消してもユーザーデータは消えない。
  */
-const CACHE = 'taskjournal-cache-v3';
-const CORE_ASSETS = ['./', './index.html'];
+const CACHE = 'taskjournal-cache-v4';
+const CORE_ASSETS = [
+    './',
+    './index.html',
+    './manifest.webmanifest',
+    './icons/icon-192.png',
+    './icons/icon-512.png',
+    './icons/apple-touch-icon.png',
+];
 
 self.addEventListener('install', (event) => {
     // 新しい SW を即時有効化（更新がすぐ効くように）

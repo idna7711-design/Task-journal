@@ -1,0 +1,16 @@
+{
+    "name": "タスクジャーナル",
+    "short_name": "タスク",
+    "description": "タスク管理＋自動同期＋ローカルAI連携のWebアプリ",
+    "lang": "ja",
+    "start_url": "./",
+    "scope": "./",
+    "display": "standalone",
+    "background_color": "#f0e8da",
+    "theme_color": "#f0e8da",
+    "icons": [
+        { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+        { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+        { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+    ]
+}
