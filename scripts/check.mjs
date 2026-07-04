@@ -134,6 +134,8 @@ for (const requiredFeature of [
     '予定日時（任意）',
     'id="schedule-created-input"',
     'id="schedule-logs-editor"',
+    'parseTaskLogEntry',
+    'serializeTaskLogEntry',
     'id="schedule-device-label"',
     'createdDeviceName',
     'id="sync-progress-panel"',
@@ -154,10 +156,17 @@ for (const requiredUxFeature of [
     'function renderFocusCard(',
     'taskjournal:theme',
     'window.lucide = window.lucide || { createIcons() {} };',
+    'id="sync-connection-test-btn"',
+    'id="ai-connection-test-btn"',
+    'function safeConnectionError(',
 ]) {
     if (indexHtml.includes(requiredUxFeature)) console.log(`OK  GUI/UX刷新: ${requiredUxFeature}`);
     else { failed++; console.error(`NG  GUI/UX機能がありません: ${requiredUxFeature}`); }
 }
+if (!indexHtml.includes('id="trivia-bar"') && !indexHtml.includes('id="trivia-modal"')) console.log('OK  豆知識UIを撤去');
+else { failed++; console.error('NG  豆知識UIが残っています'); }
+if (indexHtml.includes('src="icons/icon-192.png"')) console.log('OK  ヘッダーに選定アイコンを表示');
+else { failed++; console.error('NG  ヘッダーに選定アイコンがありません'); }
 const executableHtml = indexHtml.replace(/<!--([\s\S]*?)-->/g, '').split('\n')
     .filter(line => !/^\s*(?:\/\/|\*)/.test(line)).join('\n');
 if (!/\b(?:window\.)?confirm\s*\(/.test(executableHtml) && !/\b(?:window\.)?alert\s*\(/.test(executableHtml)) {
@@ -175,6 +184,13 @@ for (const pwaFile of ['manifest.webmanifest', 'icons/icon-192.png', 'icons/icon
         failed++;
         console.error(`NG  PWAファイルがありません: ${pwaFile}`);
     }
+}
+for (const [iconFile, expectedSize] of [['icons/icon-192.png', 192], ['icons/icon-512.png', 512], ['icons/apple-touch-icon.png', 180]]) {
+    const png = readFileSync(join(root, iconFile));
+    const width = png.readUInt32BE(16);
+    const height = png.readUInt32BE(20);
+    if (width === expectedSize && height === expectedSize) console.log(`OK  アイコン寸法: ${iconFile} (${width}x${height})`);
+    else { failed++; console.error(`NG  アイコン寸法が不正です: ${iconFile} (${width}x${height})`); }
 }
 
 const syncCheck = spawnSync(process.execPath, [join(root, 'scripts', 'check-device-sync.mjs')], {

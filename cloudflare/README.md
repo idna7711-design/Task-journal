@@ -55,7 +55,7 @@ TaskJournal の **Pages版（HTTPS）** から、Cloudflare 経由でローカ�
 - **Model Name**: `google/gemma-4-e4b`
 - **API Key**: `GEMMA_API_KEYS` に登録したキーのいずれか（アプリ専用キー推奨）
 
-保存後、AI自動分類・豆知識が Pages版からも動きます。
+保存後、AI自動分類が Pages版からも動きます。
 
 ## CORS疎通の確認（任意）
 

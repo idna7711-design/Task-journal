@@ -11,7 +11,6 @@
 - ☁️ Google Drive 自動同期（GAS Webhook 経由・複数端末OK）
 - 📚 固定Googleドキュメント経由のNotebookLM自動更新（非表示のWindowsタスクで最大15分ごと）
 - 🤖 ローカルAI（LM Studio / Gemma）によるタスク自動分類
-- 💡 「今日は何の日」豆知識（Wikipedia を根拠にAIが生成・出典リンク付き）
 - 🐛 エラー時のデバッグログ自動クラウド保存（`debug/` へ自動コミット）
 - 📱 PWA対応（インターネットにつながらないときでも、一度開いたアプリを起動できます）
 
@@ -27,7 +26,6 @@
 ブラウザ(index.html) ─┬─ GAS ──────── Google Drive / カレンダー（同期）
                       ├─ Cloudflare Worker ── LM Studio/Gemma（AI）
                       ├─ Cloudflare Worker ── GitHub debug/（エラーログ）
-                      └─ Wikipedia API（豆知識の根拠）
 ```
 
 詳細: [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md)

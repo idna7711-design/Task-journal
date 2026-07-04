@@ -250,9 +250,7 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
 
         <header class="bg-white rounded-2xl md:rounded-[2rem] px-4 py-3 md:px-6 md:py-4 flex justify-between items-center shadow-sm border border-zinc-200/60 shrink-0">
             <div class="flex items-center gap-3">
-                <div class="w-10 h-10 rounded-2xl bg-violet-100 flex items-center justify-center text-violet-600">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="sparkles" aria-hidden="true" class="lucide lucide-sparkles w-5 h-5"><path d="M11.017 2.814a1 1 0 0 1 1.966 0l1.051 5.558a2 2 0 0 0 1.594 1.594l5.558 1.051a1 1 0 0 1 0 1.966l-5.558 1.051a2 2 0 0 0-1.594 1.594l-1.051 5.558a1 1 0 0 1-1.966 0l-1.051-5.558a2 2 0 0 0-1.594-1.594l-5.558-1.051a1 1 0 0 1 0-1.966l5.558-1.051a2 2 0 0 0 1.594-1.594z"></path><path d="M20 2v4"></path><path d="M22 4h-4"></path><circle cx="4" cy="20" r="2"></circle></svg>
-                </div>
+                <img src="icons/icon-192.png" alt="" class="w-10 h-10 rounded-2xl shadow-sm" aria-hidden="true">
                 <div>
                     <h1 class="text-lg md:text-xl font-bold text-zinc-900 tracking-tight leading-none mb-1">タスクジャーナル</h1>
                     <p class="hidden sm:block text-[10px] md:text-xs font-medium text-zinc-400 uppercase tracking-widest">NotebookLM＆Googleカレンダー共有</p>
@@ -270,13 +268,6 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
         </header>
 
         <main class="flex flex-col gap-3 md:gap-6">
-
-            <!-- 今日は何の日（クリックで詳細） -->
-            <button id="trivia-bar" onclick="showTrivia()" class="shrink-0 w-full flex items-center gap-2 bg-white/70 hover:bg-amber-50 border border-zinc-200/60 hover:border-amber-200 px-4 py-2.5 rounded-2xl shadow-sm transition-all active:scale-[0.99] group text-left">
-                <i data-lucide="lightbulb" class="w-4 h-4 shrink-0 text-amber-500"></i>
-                <span id="trivia-headline" class="flex-1 min-w-0 truncate text-sm font-medium text-zinc-600">本日の豆知識を読み込み中...</span>
-                <i data-lucide="chevron-right" class="w-4 h-4 shrink-0 text-zinc-300 group-hover:text-amber-500 transition-colors"></i>
-            </button>
 
             <div class="bg-white rounded-2xl md:rounded-[2rem] p-3 md:p-6 shadow-sm border border-zinc-200/60 shrink-0">
                 <form id="task-form">
@@ -442,24 +433,6 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
         </div>
     </div>
 
-    <div id="trivia-modal" class="fixed inset-0 bg-zinc-900/40 backdrop-blur-md flex items-center justify-center z-50 p-4 hidden">
-        <div class="bg-white rounded-[2rem] shadow-2xl w-full max-w-sm p-8 overflow-hidden transform transition-all border border-white/20 relative">
-            <button onclick="closeTriviaModal()" class="absolute top-4 right-4 p-2 text-zinc-400 hover:text-zinc-600 hover:bg-zinc-100 rounded-full transition-colors">
-                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="x" aria-hidden="true" class="lucide lucide-x w-5 h-5"><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></svg>
-            </button>
-            <div class="flex flex-col items-center text-center gap-3 mb-4 mt-2">
-                <div class="w-14 h-14 rounded-2xl bg-amber-50 flex items-center justify-center text-amber-500 shadow-inner">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="lightbulb" aria-hidden="true" class="lucide lucide-lightbulb w-7 h-7"><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5"></path><path d="M9 18h6"></path><path d="M10 22h4"></path></svg>
-                </div>
-                <h3 class="font-bold text-zinc-900 text-lg" id="trivia-title">5月27日の豆知識</h3>
-            </div>
-            <div id="trivia-content" class="text-[13px] text-zinc-700 font-medium leading-relaxed min-h-[100px] flex items-center justify-center bg-zinc-50/80 rounded-2xl p-5 border border-zinc-100 shadow-sm text-center"><div class="text-zinc-400 text-xs text-center">豆知識を読み込みます。</div></div>
-            <button onclick="showTrivia(true)" class="mt-5 w-full py-2.5 text-xs font-bold text-amber-600 bg-amber-50 hover:bg-amber-100 rounded-xl transition-colors flex items-center justify-center gap-2">
-                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="refresh-cw" aria-hidden="true" class="lucide lucide-refresh-cw w-3.5 h-3.5"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"></path><path d="M21 3v5h-5"></path><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"></path><path d="M8 16H3v5"></path></svg> 別の豆知識を聞く
-            </button>
-        </div>
-    </div>
-
     <!-- デバッグログモーダル -->
     <div id="debug-modal" class="hidden fixed inset-0 bg-zinc-900/40 backdrop-blur-md flex items-center justify-center z-50 p-4">
         <div class="bg-white rounded-[2rem] shadow-2xl w-full max-w-2xl p-6 sm:p-8 flex flex-col max-h-[90vh]">
@@ -562,6 +535,10 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
                     <label class="block text-xs font-bold text-zinc-400 uppercase tracking-wider mb-2 ml-1">同期キー</label>
                     <input type="password" id="sync-token-input" class="w-full bg-zinc-50 border-2 border-zinc-100 rounded-2xl p-4 text-sm focus:outline-none focus:border-zinc-300 focus:bg-white transition-colors" placeholder="GASのScript Propertiesに登録したキー" autocomplete="off">
                     <p class="text-[11px] text-zinc-400 mt-2 ml-1 leading-relaxed">キーはこの端末のIndexedDBにだけ保存され、GitHubやデバッグログには送信されません。</p>
+                    <button type="button" id="sync-connection-test-btn" onclick="testSyncConnection()" class="mt-3 w-full flex items-center justify-center gap-2 text-xs font-bold bg-white border-2 border-zinc-200 text-zinc-700 hover:bg-zinc-50 px-4 py-3 rounded-2xl transition-all active:scale-95">
+                        <i data-lucide="plug-zap" class="w-4 h-4"></i> 同期APIの接続テスト
+                    </button>
+                    <p id="sync-connection-test-result" class="hidden text-xs font-bold mt-2 ml-1" role="status" aria-live="polite"></p>
                 </div>
 
                 <hr class="border-zinc-100 mb-6">
@@ -570,10 +547,10 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
                     <div class="w-10 h-10 rounded-2xl bg-violet-50 flex items-center justify-center text-violet-600">
                         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="bot" aria-hidden="true" class="lucide lucide-bot w-5 h-5"><path d="M12 8V4H8"></path><rect width="16" height="12" x="4" y="8" rx="2"></rect><path d="M2 14h2"></path><path d="M20 14h2"></path><path d="M15 13v2"></path><path d="M9 13v2"></path></svg>
                     </div>
-                    <h3 class="font-bold text-zinc-900 text-lg">ローカルAI 自動分類・豆知識</h3>
+                    <h3 class="font-bold text-zinc-900 text-lg">ローカルAI 自動分類</h3>
                 </div>
                 <p class="text-xs text-zinc-500 mb-6 leading-relaxed">
-                    LM StudioなどのOpenAI互換APIを使用して、タスクの自動グループ化や、日付クリック時の豆知識生成機能を利用できます。
+                    LM StudioなどのOpenAI互換APIを使用して、タスクの自動グループ化を利用できます。
                 </p>
 
                 <div class="mb-4">
@@ -588,6 +565,10 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
                     <label class="block text-xs font-bold text-zinc-400 uppercase tracking-wider mb-2 ml-1">API Key (任意 / Bearer)</label>
                     <input type="password" id="ai-apikey-input" class="w-full bg-zinc-50 border-2 border-zinc-100 rounded-2xl p-4 text-sm focus:outline-none focus:border-zinc-300 focus:bg-white transition-colors" placeholder="Cloudflare等のプロキシ利用時のみ入力 (空欄ならローカル直結)" autocomplete="off">
                     <p class="text-[11px] text-zinc-400 mt-2 ml-1 leading-relaxed">HTTPSのプロキシ経由(例: <code class="text-zinc-500">https://api.example.com/v1/chat/completions</code>)ならPages版からも利用できます。キーはこの端末のローカルDBにのみ保存されます。</p>
+                    <button type="button" id="ai-connection-test-btn" onclick="testAiConnection()" class="mt-3 w-full flex items-center justify-center gap-2 text-xs font-bold bg-white border-2 border-zinc-200 text-zinc-700 hover:bg-zinc-50 px-4 py-3 rounded-2xl transition-all active:scale-95">
+                        <i data-lucide="plug-zap" class="w-4 h-4"></i> AI APIの接続テスト
+                    </button>
+                    <p id="ai-connection-test-result" class="hidden text-xs font-bold mt-2 ml-1" role="status" aria-live="polite"></p>
                 </div>
 
                 <div class="mt-6 p-4 bg-zinc-50 border border-zinc-200 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-4">
@@ -1766,221 +1747,6 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
             triggerDriveSync();
         };
 
-        // ===== 今日は何の日（豆知識） =====
-        let todaysTrivia = null; // { title, detail }
-        const TRIVIA_DAYS = ['日', '月', '火', '水', '木', '金', '土'];
-
-        function pad2(n) { return String(n).padStart(2, '0'); }
-        function triviaDateKey(d) { return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`; }
-        function formatDateJP(d) { return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日 (${TRIVIA_DAYS[d.getDay()]})`; }
-
-        async function getCachedTrivia(key) {
-            try { return (await dbGetMeta('trivia:' + key)) || null; } catch { return null; }
-        }
-
-        // 日本語Wikipediaの「M月D日」記事から「記念日」セクションを取得（CORS対応・APIキー不要）
-        // 戻り値: { text: 抜粋(プロンプト用), links: [{label, target, url}] (個別記事への出典用) }
-        async function fetchWikipediaAnniversaries(month, day) {
-            const page = `${month}月${day}日`;
-            const api = `https://ja.wikipedia.org/w/api.php?action=parse&page=${encodeURIComponent(page)}&prop=wikitext&format=json&redirects=1&origin=*`;
-            const res = await fetch(api);
-            if (!res.ok) throw new Error('wiki fetch failed');
-            const data = await res.json();
-            const wikitext = (data && data.parse && data.parse.wikitext && data.parse.wikitext['*']) || '';
-            if (!wikitext) return { text: '', links: [] };
-            // 「記念日」セクション（次の見出し level-2 まで）を抽出
-            let m = wikitext.match(/==\s*記念日[\s\S]*?(?=\n==[^=])/);
-            if (!m) m = wikitext.match(/==\s*記念日[\s\S]*/);
-            const rawSection = m ? m[0] : '';
-            // 各記念日（箇条書き行）の先頭リンク＝個別記事とみなして出典候補を収集
-            const links = [];
-            rawSection.split('\n').forEach(line => {
-                const t = line.trim();
-                if (!t.startsWith('*')) return;
-                const lt = t.match(/\[\[([^\[\]|#]+)(?:\|([^\[\]]+))?\]\]/);
-                if (!lt) return;
-                const target = lt[1].trim();
-                if (/^(ファイル|画像|File|Image|Category|カテゴリ|Wikipedia|Help|Template|Portal):/i.test(target)) return;
-                const label = (lt[2] || lt[1]).trim();
-                links.push({ label, target, url: `https://ja.wikipedia.org/wiki/${encodeURIComponent(target.replace(/ /g, '_'))}` });
-            });
-            // wiki記法を軽くクリーニングしてプロンプト用テキストに
-            const text = rawSection
-                .replace(/<ref[^>]*>[\s\S]*?<\/ref>/g, '')
-                .replace(/<ref[^>]*\/>/g, '')
-                .replace(/\{\{[^{}]*\}\}/g, '')
-                .replace(/\[\[(?:[^\[\]|]*\|)?([^\[\]]+)\]\]/g, '$1')
-                .replace(/'''?/g, '')
-                .replace(/\n{2,}/g, '\n')
-                .trim()
-                .slice(0, 3500);
-            return { text, links };
-        }
-
-        // モデルが選んだ記念日名(name)に最も近い個別記事URLを返す。無ければ fallback。
-        function pickSourceUrl(links, name, fallbackUrl) {
-            if (!links || !links.length || !name) return fallbackUrl;
-            const norm = s => String(s).replace(/[\s　「」『』"'（）()]/g, '').toLowerCase();
-            const n = norm(name);
-            if (!n) return fallbackUrl;
-            let best = links.find(l => norm(l.label) === n || norm(l.target) === n);
-            if (!best) best = links.find(l => { const ll = norm(l.label); return ll && (ll.includes(n) || n.includes(ll)); });
-            return best ? best.url : fallbackUrl;
-        }
-
-        // Gemma(ローカルAI)に「●●の日」と解説を作らせる。Wikipediaの記念日セクションを根拠に渡す(RAG)。
-        async function generateTrivia(d) {
-            if (!settings.aiEndpointUrl) throw new Error('NO_AI');
-            const month = d.getMonth() + 1, day = d.getDate();
-            const wikiUrl = `https://ja.wikipedia.org/wiki/${encodeURIComponent(`${month}月${day}日`)}`;
-
-            // まずWikipediaから根拠テキスト＋個別記事リンクを取得（失敗してもモデル単独で続行）
-            let ground = { text: '', links: [] };
-            try { ground = await fetchWikipediaAnniversaries(month, day); } catch (e) { ground = { text: '', links: [] }; }
-            const context = ground.text;
-
-            const messages = context
-                ? [
-                    { role: 'system', content: 'あなたは丁寧な編集者です。与えられたWikipedia「記念日」セクションの抜粋【だけ】を根拠に、日本でよく知られた記念日を1つ選び、その制定理由・由来を中心に解説します。抜粋に書かれていない事実を創作してはいけません。JSONのみで出力: {"title":"●●の日","name":"抜粋に出てくるその記念日の名称をそのまま(例: ドラえもんの日)","detail":"制定理由・由来を中心に120〜180文字程度で","source":"与える出典URLをそのまま"}。titleは「〜の日」など短い見出し(全角12文字程度まで)。JSON以外は出力しないこと。' },
-                    { role: 'user', content: `日付: ${month}月${day}日\n出典URL: ${wikiUrl}\n\n--- Wikipedia「記念日」セクション抜粋 ---\n${context}` }
-                ]
-                : [
-                    { role: 'system', content: 'あなたは日本の「今日は何の日」に詳しい雑学王です。指定された日付の記念日を1つ選び、制定された理由・由来を中心にJSONのみで返答してください。形式: {"title":"●●の日","detail":"制定理由を中心に120〜180文字程度で","source":""}。不確かなURLは出さず source は空文字にすること。JSON以外は出力しないこと。' },
-                    { role: 'user', content: `${month}月${day}日の記念日とその制定理由をJSONで。` }
-                ];
-
-            const { content: raw } = await requestAiChat('generateTrivia', {
-                model: settings.aiModelName || 'local-model',
-                temperature: context ? 0.4 : 0.8,
-                messages
-            }, 60000);
-            let obj;
-            try { const mm = raw.match(/\{[\s\S]*\}/); obj = JSON.parse(mm ? mm[0] : raw); } catch { obj = null; }
-            const title = (obj && obj.title ? String(obj.title) : '今日の豆知識').slice(0, 40);
-            const detail = (obj && obj.detail ? String(obj.detail) : String(raw)).trim();
-            // 出典は実在URLを優先：根拠ありなら選んだ記念日の個別記事へ辿る（無ければ日付ページ）。
-            // 根拠なしのときはモデルが http(s) を返した場合のみ採用。
-            let source = '';
-            if (context) {
-                const name = (obj && (obj.name || obj.title)) ? String(obj.name || obj.title) : '';
-                source = pickSourceUrl(ground.links, name, wikiUrl);
-            } else if (obj && obj.source && /^https?:\/\//i.test(String(obj.source))) {
-                source = String(obj.source).trim();
-            }
-            return { title, detail, source, grounded: !!context };
-        }
-
-        function refreshTriviaDisplay() {
-            const el = document.getElementById('trivia-headline');
-            if (!el) return;
-            const dateStr = formatDateJP(new Date());
-            el.textContent = todaysTrivia && todaysTrivia.title
-                ? `${dateStr}　${todaysTrivia.title}`
-                : `${dateStr}　今日は何の日？`;
-        }
-
-        // 今日の分をキャッシュ確認→無ければ生成してキャッシュ。表示も更新。
-        async function ensureTodaysTrivia(force) {
-            const d = new Date();
-            const key = triviaDateKey(d);
-            if (!force) {
-                const cached = await getCachedTrivia(key);
-                if (cached) {
-                    // 新形式（RAG導入後）は grounded フラグを持つ。旧形式は表示しつつ裏で作り直す。
-                    const legacy = !('grounded' in cached);
-                    todaysTrivia = cached; refreshTriviaDisplay();
-                    if (!legacy) return cached;
-                    // legacy はフォールスルーして再生成へ（失敗時は旧データのまま表示）
-                }
-            }
-            if (!settings.aiEndpointUrl) { refreshTriviaDisplay(); return null; }
-            try {
-                const t = await generateTrivia(d);
-                await dbPutMeta({ key: 'trivia:' + key, ...t, generatedAt: Date.now() });
-                todaysTrivia = t; refreshTriviaDisplay(); return t;
-            } catch (e) {
-                lastAiError = e;
-                console.error('Trivia gen error', aiErrorForLog(e));
-                reportDebug('trivia: ' + aiErrorMessage(e));
-                refreshTriviaDisplay();
-                return null;
-            }
-        }
-
-        // 翌日分を前もって生成しておく（日付が変わる前の先読み）
-        async function pregenerateNextDayTrivia() {
-            const d = new Date(); d.setDate(d.getDate() + 1);
-            const key = triviaDateKey(d);
-            if (await getCachedTrivia(key)) return;
-            if (!settings.aiEndpointUrl) return;
-            try {
-                const t = await generateTrivia(d);
-                await dbPutMeta({ key: 'trivia:' + key, ...t, generatedAt: Date.now() });
-            } catch (e) { /* 失敗しても翌日アクセス時に生成される */ }
-        }
-
-        let triviaPreTimer = null, triviaMidnightTimer = null;
-        // 日付が変わる15分前に翌日分を先読み、変わった瞬間に表示を更新して再スケジュール
-        function scheduleTriviaPrep() {
-            if (triviaPreTimer) clearTimeout(triviaPreTimer);
-            if (triviaMidnightTimer) clearTimeout(triviaMidnightTimer);
-            const now = new Date();
-            const midnight = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 5, 0);
-            const msToMidnight = midnight - now;
-            const preMs = Math.max(0, msToMidnight - 15 * 60 * 1000);
-            triviaPreTimer = setTimeout(() => { pregenerateNextDayTrivia(); }, preMs);
-            triviaMidnightTimer = setTimeout(() => {
-                ensureTodaysTrivia();       // 先読み済みなら即ヒット
-                refreshTriviaDisplay();
-                scheduleTriviaPrep();       // 翌日分を再スケジュール
-            }, msToMidnight);
-        }
-
-        // force=true で再生成（「別の豆知識を聞く」）。通常はキャッシュを表示。
-        window.showTrivia = async (force) => {
-            const modal = document.getElementById('trivia-modal');
-            const content = document.getElementById('trivia-content');
-            const title = document.getElementById('trivia-title');
-            const d = new Date();
-            const month = d.getMonth() + 1, day = d.getDate();
-            modal.classList.remove('hidden');
-
-            const showResult = (t) => {
-                title.innerText = t && t.title ? `${month}月${day}日 ${t.title}` : `${month}月${day}日の豆知識`;
-                const safeUrl = (t.source && /^https?:\/\//i.test(t.source)) ? t.source : '';
-                const label = t.grounded ? '出典(Wikipedia)' : '出典';
-                const link = safeUrl
-                    ? `<div class="mt-3 pt-3 border-t border-zinc-200 text-[10px] text-zinc-400 text-left w-full"><div class="mb-0.5">${label}</div><a href="${escapeHtml(safeUrl)}" target="_blank" rel="noopener noreferrer" class="underline hover:text-amber-600 break-all">${escapeHtml(safeUrl)}</a></div>`
-                    : '';
-                content.innerHTML = `<div class="flex flex-col items-center w-full"><span class="text-zinc-700 font-medium text-center">${escapeHtml(t.detail)}</span>${link}</div>`;
-            };
-
-            if (!force && todaysTrivia && todaysTrivia.detail) { showResult(todaysTrivia); return; }
-
-            title.innerText = `${month}月${day}日の豆知識`;
-            content.innerHTML = `<div class="flex flex-col items-center gap-2"><i data-lucide="loader-2" class="w-5 h-5 animate-spin text-amber-500"></i><span class="text-xs text-zinc-400">AIに聞いています...</span></div>`;
-            lucide.createIcons();
-
-            if (!settings.aiEndpointUrl) {
-                content.innerHTML = `<div class="text-rose-500 text-xs text-center">設定からローカルAIのエンドポイントを登録してください。</div>`;
-                return;
-            }
-            try {
-                const t = await generateTrivia(d);
-                await dbPutMeta({ key: 'trivia:' + triviaDateKey(d), ...t, generatedAt: Date.now() });
-                todaysTrivia = t; refreshTriviaDisplay(); showResult(t);
-            } catch (e) {
-                lastAiError = e;
-                console.error('Trivia Error:', aiErrorForLog(e));
-                const msg = e.message === 'API_KEY_NON_ASCII'
-                    ? 'APIキーに使えない文字が含まれています。<br>設定画面で半角で入力し直してください。'
-                    : escapeHtml(aiErrorMessage(e));
-                content.innerHTML = `<div class="text-rose-500 text-xs text-center"><i data-lucide="alert-triangle" class="w-4 h-4 mx-auto mb-1 text-rose-400"></i>${msg}</div>`;
-                lucide.createIcons();
-                reportDebug('trivia: ' + aiErrorMessage(e));
-            }
-        };
-        window.closeTriviaModal = () => document.getElementById('trivia-modal').classList.add('hidden');
 
         // ---- Debug modal ----
         window.openDebugModal = () => {
@@ -2199,6 +1965,18 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
             return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
         }
 
+        function parseTaskLogEntry(log) {
+            const value = String(log || '');
+            const match = value.match(/^\[(\d{1,2}:\d{2})\]\s*([\s\S]*)$/);
+            return match ? { time: match[1].padStart(5, '0'), text: match[2] } : { time: '', text: value };
+        }
+
+        function serializeTaskLogEntry(entry) {
+            const text = String(entry && entry.text || '').trim();
+            const time = String(entry && entry.time || '').trim();
+            return time ? `[${time}] ${text}` : text;
+        }
+
         function renderTaskLogEditor() {
             const container = document.getElementById('schedule-logs-editor');
             container.innerHTML = '';
@@ -2211,13 +1989,20 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
             }
             editingTaskLogs.forEach((log, index) => {
                 const row = document.createElement('div');
-                row.className = 'flex items-start gap-2';
+                row.className = 'flex flex-col sm:flex-row items-start gap-2 bg-zinc-50 border border-zinc-100 rounded-xl p-2';
+                const timeInput = document.createElement('input');
+                timeInput.type = 'time';
+                timeInput.className = 'w-full sm:w-auto bg-white border-2 border-zinc-100 rounded-lg px-2 py-2 text-xs focus:outline-none focus:border-violet-300 text-zinc-700';
+                timeInput.value = log.time || '';
+                timeInput.setAttribute('aria-label', `履歴${index + 1}の時刻`);
+                timeInput.addEventListener('input', () => { editingTaskLogs[index].time = timeInput.value; });
                 const textarea = document.createElement('textarea');
                 textarea.rows = 2;
-                textarea.maxLength = 1000;
+                textarea.maxLength = 990;
                 textarea.className = 'flex-1 bg-zinc-50 border-2 border-zinc-100 rounded-xl p-3 text-xs focus:outline-none focus:border-violet-300 focus:bg-white resize-none text-zinc-700';
-                textarea.value = log;
-                textarea.addEventListener('input', () => { editingTaskLogs[index] = textarea.value; });
+                textarea.value = log.text || '';
+                textarea.setAttribute('aria-label', `履歴${index + 1}の内容`);
+                textarea.addEventListener('input', () => { editingTaskLogs[index].text = textarea.value; });
                 const remove = document.createElement('button');
                 remove.type = 'button';
                 remove.className = 'p-2 text-zinc-400 hover:text-rose-500 hover:bg-rose-50 rounded-lg';
@@ -2227,7 +2012,7 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
                     editingTaskLogs.splice(index, 1);
                     renderTaskLogEditor();
                 });
-                row.append(textarea, remove);
+                row.append(timeInput, textarea, remove);
                 container.appendChild(row);
             });
         }
@@ -2237,7 +2022,7 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
                 window.showToast('メモ・履歴は200件までです。', 'error');
                 return;
             }
-            editingTaskLogs.push('');
+            editingTaskLogs.push({ time: getTimeString().slice(1, 6), text: '' });
             renderTaskLogEditor();
             const inputs = document.querySelectorAll('#schedule-logs-editor textarea');
             if (inputs.length) inputs[inputs.length - 1].focus();
@@ -2253,7 +2038,7 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
             document.getElementById('schedule-datetime-input').value = task.dueDate || '';
             document.getElementById('schedule-created-input').value = toDateTimeLocalValue(task.createdAt);
             document.getElementById('schedule-device-label').textContent = task.createdDeviceName || '記録なし（機能追加前のタスク）';
-            editingTaskLogs = Array.isArray(task.logs) ? [...task.logs] : [];
+            editingTaskLogs = Array.isArray(task.logs) ? task.logs.map(parseTaskLogEntry) : [];
             renderTaskLogEditor();
             document.getElementById('schedule-modal').classList.remove('hidden');
             lucide.createIcons();
@@ -2278,7 +2063,7 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
                 window.showToast('追加日時を正しく入力してください。', 'error');
                 return;
             }
-            const logs = editingTaskLogs.map(log => String(log).trim()).filter(Boolean);
+            const logs = editingTaskLogs.map(serializeTaskLogEntry).filter(Boolean);
             if (logs.length > 200 || logs.some(log => log.length > 1000)) {
                 window.showToast('メモ・履歴は200件まで、1件1000文字までです。', 'error');
                 return;
@@ -2331,6 +2116,119 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
         window.openSettingsModal = () => document.getElementById('settings-modal').classList.remove('hidden');
         window.closeSettingsModal = () => document.getElementById('settings-modal').classList.add('hidden');
 
+        function setConnectionTestState(kind, state, message) {
+            const button = document.getElementById(`${kind}-connection-test-btn`);
+            const result = document.getElementById(`${kind}-connection-test-result`);
+            if (!button || !result) return;
+            button.disabled = state === 'testing';
+            button.classList.toggle('opacity-60', state === 'testing');
+            result.classList.remove('hidden', 'text-emerald-600', 'text-rose-500', 'text-zinc-500');
+            result.classList.add(state === 'success' ? 'text-emerald-600' : state === 'error' ? 'text-rose-500' : 'text-zinc-500');
+            result.textContent = message;
+        }
+
+        function safeConnectionError(kind, endpoint, error) {
+            let host = '', path = '';
+            try {
+                const url = new URL(endpoint);
+                host = url.host;
+                path = url.pathname;
+            } catch { /* 不正URLは空欄で記録 */ }
+            const details = {
+                kind,
+                time: new Date().toISOString(),
+                online: navigator.onLine,
+                endpointHost: host,
+                endpointPath: path,
+                errorName: error && error.name ? error.name : 'Error',
+                errorCode: error && error.code ? error.code : '',
+                status: error && Number(error.status) ? Number(error.status) : null,
+                message: error && error.message ? String(error.message).slice(0, 300) : String(error).slice(0, 300),
+            };
+            console.error('Connection test failed', details);
+            reportDebug(`connection-test: ${kind} failed`, JSON.stringify(details));
+            return details;
+        }
+
+        function validHttpEndpoint(value, label) {
+            let url;
+            try { url = new URL(value); } catch { throw new Error(`${label}のURL形式が正しくありません`); }
+            if (!['http:', 'https:'].includes(url.protocol)) throw new Error(`${label}はhttpまたはhttpsで入力してください`);
+            return url.toString();
+        }
+
+        window.testSyncConnection = async () => {
+            const endpointInput = document.getElementById('webhook-input').value.trim();
+            const token = document.getElementById('sync-token-input').value.trim();
+            setConnectionTestState('sync', 'testing', '同期APIへ接続しています...');
+            try {
+                const endpoint = validHttpEndpoint(endpointInput, 'GAS Webhook');
+                if (!token) throw new Error('同期キーを入力してください');
+                const response = await fetchWithTimeout(endpoint, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                    body: JSON.stringify({ protocolVersion: 3, action: 'capabilities', syncToken: token }),
+                }, 20000);
+                const responseText = await response.text();
+                let data = null;
+                try { data = JSON.parse(responseText); } catch { /* 下で形式エラーにする */ }
+                if (!response.ok) {
+                    const error = new Error(`同期APIがHTTP ${response.status}を返しました`);
+                    error.status = response.status;
+                    throw error;
+                }
+                if (!data || data.protocolVersion !== 3 || !data.capabilities || !data.capabilities.mutationSync) {
+                    const error = new Error('同期APIの応答形式またはバージョンが一致しません');
+                    error.code = 'SYNC_PROTOCOL_MISMATCH';
+                    throw error;
+                }
+                setConnectionTestState('sync', 'success', '接続成功：同期APIと同期キーを確認できました。');
+            } catch (error) {
+                safeConnectionError('sync', endpointInput, error);
+                setConnectionTestState('sync', 'error', `接続失敗：${error.message || error}`);
+            }
+        };
+
+        window.testAiConnection = async () => {
+            const endpointInput = document.getElementById('ai-endpoint-input').value.trim();
+            const model = document.getElementById('ai-model-input').value.trim() || 'local-model';
+            const apiKey = document.getElementById('ai-apikey-input').value.trim();
+            setConnectionTestState('ai', 'testing', 'AI APIへ接続しています...');
+            try {
+                const endpoint = validHttpEndpoint(endpointInput, 'AI Endpoint');
+                if ([...apiKey].some(char => char.charCodeAt(0) > 255)) throw new Error('APIキーに全角文字など使用できない文字が含まれています');
+                const response = await fetchWithTimeout(endpoint, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey || 'dummy'}` },
+                    body: JSON.stringify({
+                        model,
+                        temperature: 0,
+                        max_tokens: 8,
+                        messages: [{ role: 'user', content: 'Reply only: OK' }],
+                    }),
+                }, 45000);
+                const responseText = await response.text();
+                let data = null;
+                try { data = JSON.parse(responseText); } catch { /* 下で形式エラーにする */ }
+                if (!response.ok) {
+                    const error = new Error(`AI APIがHTTP ${response.status}を返しました`);
+                    error.status = response.status;
+                    throw error;
+                }
+                const content = data && data.choices && data.choices[0] && data.choices[0].message
+                    ? String(data.choices[0].message.content || '').trim() : '';
+                if (!content) {
+                    const error = new Error('AI APIは応答しましたが、回答本文が空でした');
+                    error.code = 'AI_EMPTY_CONTENT';
+                    throw error;
+                }
+                setConnectionTestState('ai', 'success', '接続成功：AI APIから回答を受信しました。');
+            } catch (error) {
+                safeConnectionError('ai', endpointInput, error);
+                setConnectionTestState('ai', 'error', `接続失敗：${error.message || error}`);
+            }
+        };
+
         window.saveSettings = async () => {
             settings.webhookUrl = document.getElementById('webhook-input').value.trim();
             settings.syncToken = document.getElementById('sync-token-input').value.trim();
@@ -2343,11 +2241,6 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
             if (isSyncConfigured()) {
                 await pullFromCloud(true);
                 triggerDriveSync();
-            }
-            // AIエンドポイント設定後、今日の豆知識を用意して見出しを更新
-            if (settings.aiEndpointUrl) {
-                ensureTodaysTrivia();
-                scheduleTriviaPrep();
             }
         };
 
@@ -2902,9 +2795,6 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
 
         // ---- Init ----
         document.addEventListener('DOMContentLoaded', async () => {
-            // 日付（＋豆知識見出し）をまず表示
-            refreshTriviaDisplay();
-
             // settings-modal は静的HTMLに hidden が無いため初期状態で閉じる
             document.getElementById('settings-modal').classList.add('hidden');
 
@@ -2914,7 +2804,6 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
             document.getElementById('memo-modal').addEventListener('click', (e) => { if (e.target.id === 'memo-modal') closeMemoModal(); });
             document.getElementById('schedule-modal').addEventListener('click', (e) => { if (e.target.id === 'schedule-modal') closeScheduleModal(); });
             document.getElementById('settings-modal').addEventListener('click', (e) => { if (e.target.id === 'settings-modal') closeSettingsModal(); });
-            document.getElementById('trivia-modal').addEventListener('click', (e) => { if (e.target.id === 'trivia-modal') closeTriviaModal(); });
             document.getElementById('debug-modal').addEventListener('click', (e) => { if (e.target.id === 'debug-modal') closeDebugModal(); });
             document.getElementById('genre-modal').addEventListener('click', (e) => { if (e.target.id === 'genre-modal') closeGenreModal(); });
             document.getElementById('genre-picker-modal').addEventListener('click', (e) => { if (e.target.id === 'genre-picker-modal') closeGenrePicker(); });
@@ -2944,7 +2833,7 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
                 if (e.key === 'Escape') {
                     // 確認ダイアログ最優先。次に開いているモーダルを閉じる
                     if (!document.getElementById('confirm-modal').classList.contains('hidden')) { settleConfirm(false); return; }
-                    for (const id of ['memo-modal', 'schedule-modal', 'settings-modal', 'trivia-modal', 'debug-modal', 'genre-picker-modal', 'genre-modal']) {
+                    for (const id of ['memo-modal', 'schedule-modal', 'settings-modal', 'debug-modal', 'genre-picker-modal', 'genre-modal']) {
                         const modal = document.getElementById(id);
                         if (modal && !modal.classList.contains('hidden')) { modal.classList.add('hidden'); return; }
                     }
@@ -3070,11 +2959,6 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
                     pullFromCloud(false);
                 }
 
-                // 今日の豆知識をキャッシュ確認→無ければ生成。日付が変わる前の先読みも開始。
-                if (settings.aiEndpointUrl) {
-                    ensureTodaysTrivia();
-                    scheduleTriviaPrep();
-                }
             } catch (err) {
                 console.error('Init error', err);
                 window.showToast('ローカルDB(IndexedDB)の初期化に失敗しました。プライベートブラウズ等では利用できない場合があります。', 'error');

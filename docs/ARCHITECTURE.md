@@ -9,7 +9,7 @@
 [利用者のブラウザ]
   index.html（アプリ本体・GitHub Pages で配信）
   ├── sw.js …… Service Worker（network-first キャッシュ / オフライン対応）
-  ├── IndexedDB …… タスク・設定（APIキー含む）・豆知識キャッシュの保存先
+  ├── IndexedDB …… タスク・設定（APIキー含む）の保存先
   │
   ├──(1) GAS Webhook (POST) ──→ Google Apps Script
   │                                   ├─ Google Drive: TaskData.json（同期DB）
@@ -24,9 +24,6 @@
   ├──(3) https://api.edaaiapps.com/v1/debug-log
   │        └→ 同じ Worker → GitHub Contents API
   │             └→ この repo の debug/ にエラーログを自動コミット
-  │
-  └──(4) https://ja.wikipedia.org/w/api.php
-           …… 豆知識のRAG根拠（「M月D日」記事の記念日セクション）。キー不要
 ```
 
 ## 外部サービスと secrets の所在（オーナー管理）
@@ -70,13 +67,8 @@
 > 2026年7月時点のNotebookLM公式ヘルプでは、Driveソースは数分ごとに自動更新される。
 > Windowsの`notebooklm-py`定期タスクは非公式の予備手段であり、実アカウントで自動反映を確認後に無効化・撤去する。
 
-### 豆知識（Wikipedia RAG）
-1. 日本語Wikipedia「M月D日」記事の記念日セクションを MediaWiki API で取得
-2. 抜粋を根拠として Gemma に渡し、制定理由中心に要約（JSON）
-3. 出典は選ばれた記念日の個別記事URL（無ければ日付ページ）。1日1件キャッシュ＋翌日分の先読みあり
-
 ### デバッグログ
 - console / 未捕捉エラーをリングバッファ（400件）に常時記録
-- エラートースト・豆知識エラー・未捕捉エラー時に `/v1/debug-log` へ自動送信（15秒に1回まで）
+- エラートースト・接続テスト失敗・未捕捉エラー時に `/v1/debug-log` へ自動送信（15秒に1回まで）
 - Worker が `debug/<timestamp>.md` としてコミット → 「エラー出たから見て」で AI が読める
 - 手動操作: 設定 → デバッグ → コピー / .md ダウンロード / クラウド送信

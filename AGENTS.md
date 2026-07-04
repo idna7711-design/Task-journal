@@ -31,14 +31,13 @@
 1. **`index.html` 1枚構成を維持する。** ビルドツール・npm 依存・ファイル分割を導入しない（オーナーが管理できなくなるため）。
 2. **UI文言・コードコメント・コミットメッセージは日本語。**
 3. **秘密情報（APIキー・トークン類）をリポジトリやクライアントJSに絶対に書かない。** secrets は Cloudflare Worker の環境変数と、各端末のブラウザ IndexedDB にだけ存在する（詳細は `docs/ARCHITECTURE.md`）。
-4. ユーザーデータ（タスク・設定・豆知識キャッシュ）は **IndexedDB** に保存されている。保存形式を変えるときは既存データを壊さない移行処理を入れる。
+4. ユーザーデータ（タスク・設定）は **IndexedDB** に保存されている。保存形式を変えるときは既存データを壊さない移行処理を入れる。
 5. 動的に HTML を組み立てるときはユーザー由来文字列に必ず `escapeHtml()` を通す（XSS対策）。
 6. Tailwind は CDN 読み込み。ジャンルバッジの色は意図的にインラインスタイル（`GENRE_PALETTE`）で描画している（動的クラス名はパージで消えるため）。
 7. ブラウザから直接呼ぶ外部API:
    - GAS Webhook（タスク同期。POST は `text/plain` で preflight 回避）
    - Worker `/v1/chat/completions`（AI。OpenAI互換）
    - Worker `/v1/debug-log`（エラーログ送信）
-   - 日本語Wikipedia MediaWiki API（豆知識のRAG根拠。キー不要・`origin=*`）
 
 ## 動作確認
 
