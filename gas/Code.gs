@@ -527,6 +527,8 @@ function validateTasks(tasks) {
       pinned: !!task.pinned,
       logs: logs.map(function(log) { return boundedString(log, 1000, 'task log'); }),
       createdAt: finiteNumberOrZero(task.createdAt),
+      createdDeviceId: safeIdOrEmpty(task.createdDeviceId),
+      createdDeviceName: optionalString(task.createdDeviceName, 80, 'created device name'),
       updatedAt: finiteNumberOrZero(task.updatedAt) || finiteNumberOrZero(task.createdAt),
       baseUpdatedAt: finiteNumberOrZero(task.baseUpdatedAt),
       serverVersion: positiveIntegerOrZero(task.serverVersion),

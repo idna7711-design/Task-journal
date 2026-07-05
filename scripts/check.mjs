@@ -114,18 +114,84 @@ else { failed++; console.error('NG  同期キーがURLへ含まれています')
 if (indexHtml.includes("aiEndpointUrl: ''")) console.log('OK  AI未設定時は自動接続しない');
 else { failed++; console.error('NG  AI未設定時にも既定接続先へアクセスします'); }
 
+for (const requiredAiRecovery of [
+    "const responseText = await response.text();",
+    'result = JSON.parse(responseText);',
+    "return requestAiChat(context, payload, timeoutMs, 1);",
+    'responseContentType,',
+    'responseLength: responseText.length,',
+    'AIから一時的に読み取れない応答が返りました。',
+]) {
+    if (indexHtml.includes(requiredAiRecovery)) console.log(`OK  AI一時応答から復旧: ${requiredAiRecovery}`);
+    else { failed++; console.error(`NG  AI一時応答の復旧処理がありません: ${requiredAiRecovery}`); }
+}
+
 for (const requiredFeature of [
     'id="conflict-section"',
     'compareConflictWithAI',
     'resolveConflict',
     'タスクのタイトル',
     '予定日時（任意）',
+    'id="schedule-created-input"',
+    'id="schedule-logs-editor"',
+    'parseTaskLogEntry',
+    'serializeTaskLogEntry',
+    'id="schedule-device-label"',
+    'createdDeviceName',
+    'id="sync-progress-panel"',
+    'setSyncProgress(45,',
 ]) {
     if (indexHtml.includes(requiredFeature)) console.log(`OK  競合・編集機能: ${requiredFeature}`);
     else { failed++; console.error(`NG  競合・編集機能がありません: ${requiredFeature}`); }
 }
 if (!indexHtml.includes('id="task-datetime"')) console.log('OK  新規追加欄に予定日時なし');
 else { failed++; console.error('NG  新規追加欄に予定日時が残っています'); }
+
+for (const requiredUxFeature of [
+    'rel="manifest" href="manifest.webmanifest"',
+    'id="confirm-modal"',
+    'function showConfirm(',
+    'function showUndoToast(',
+    'id="task-search"',
+    'function renderFocusCard(',
+    'taskjournal:theme',
+    'window.lucide = window.lucide || { createIcons() {} };',
+    'id="sync-connection-test-btn"',
+    'id="ai-connection-test-btn"',
+    'function safeConnectionError(',
+]) {
+    if (indexHtml.includes(requiredUxFeature)) console.log(`OK  GUI/UX刷新: ${requiredUxFeature}`);
+    else { failed++; console.error(`NG  GUI/UX機能がありません: ${requiredUxFeature}`); }
+}
+if (!indexHtml.includes('id="trivia-bar"') && !indexHtml.includes('id="trivia-modal"')) console.log('OK  豆知識UIを撤去');
+else { failed++; console.error('NG  豆知識UIが残っています'); }
+if (indexHtml.includes('src="icons/icon-192.png"')) console.log('OK  ヘッダーに選定アイコンを表示');
+else { failed++; console.error('NG  ヘッダーに選定アイコンがありません'); }
+const executableHtml = indexHtml.replace(/<!--([\s\S]*?)-->/g, '').split('\n')
+    .filter(line => !/^\s*(?:\/\/|\*)/.test(line)).join('\n');
+if (!/\b(?:window\.)?confirm\s*\(/.test(executableHtml) && !/\b(?:window\.)?alert\s*\(/.test(executableHtml)) {
+    console.log('OK  ブラウザ標準のconfirm/alertを使用しない');
+} else {
+    failed++;
+    console.error('NG  ブラウザ標準のconfirm/alertが残っています');
+}
+
+for (const pwaFile of ['manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png']) {
+    try {
+        readFileSync(join(root, pwaFile));
+        console.log(`OK  PWAファイル: ${pwaFile}`);
+    } catch {
+        failed++;
+        console.error(`NG  PWAファイルがありません: ${pwaFile}`);
+    }
+}
+for (const [iconFile, expectedSize] of [['icons/icon-192.png', 192], ['icons/icon-512.png', 512], ['icons/apple-touch-icon.png', 180]]) {
+    const png = readFileSync(join(root, iconFile));
+    const width = png.readUInt32BE(16);
+    const height = png.readUInt32BE(20);
+    if (width === expectedSize && height === expectedSize) console.log(`OK  アイコン寸法: ${iconFile} (${width}x${height})`);
+    else { failed++; console.error(`NG  アイコン寸法が不正です: ${iconFile} (${width}x${height})`); }
+}
 
 const syncCheck = spawnSync(process.execPath, [join(root, 'scripts', 'check-device-sync.mjs')], {
     encoding: 'utf8',

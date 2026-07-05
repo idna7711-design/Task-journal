@@ -169,6 +169,8 @@ try {
         extractFunction(htmlSource, 'normalizeConflicts'),
         extractFunction(htmlSource, 'normalizeTombstones'),
         extractFunction(htmlSource, 'mergeTaskCollections'),
+        extractFunction(htmlSource, 'parseTaskLogEntry'),
+        extractFunction(htmlSource, 'serializeTaskLogEntry'),
     ].join('\n');
     const clientScenarios = String.raw`
       const local = [
@@ -188,6 +190,11 @@ try {
         [{ id: 'same', text: '編集', createdAt: 1, updatedAt: 20, baseUpdatedAt: 10 }], [], [], []
       );
       if (sequential.conflicts.length !== 0) throw new Error('端末側で順次編集が競合になる');
+      const parsedLog = parseTaskLogEntry('[16:54] Amazonで見つけた');
+      if (parsedLog.time !== '16:54' || parsedLog.text !== 'Amazonで見つけた') throw new Error('履歴の時刻と本文を分離できない');
+      parsedLog.time = '17:20';
+      parsedLog.text = '内容を編集';
+      if (serializeTaskLogEntry(parsedLog) !== '[17:20] 内容を編集') throw new Error('編集した履歴を互換形式へ戻せない');
     `;
     vm.runInNewContext(`${clientFunctions}\n${clientScenarios}`, {
         crypto: { randomUUID: () => 'test-id' },

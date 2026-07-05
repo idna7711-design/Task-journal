@@ -16,6 +16,8 @@
 | --- | --- |
 | `index.html` | **アプリ本体（これ1枚）**。HTML / CSS(Tailwind CDN) / JS が全部入り。ほぼ全ての変更はこのファイルに対して行う |
 | `sw.js` | Service Worker。network-first キャッシュ（通常リロードで最新が反映される） |
+| `manifest.webmanifest` | PWAマニフェスト（ホーム画面追加時の名前・アイコン・テーマ色） |
+| `icons/*.png` | PWA・apple-touch用アイコン（スクリプト生成のフラットアイコン。手で編集しない） |
 | `cloudflare/worker-openai-proxy.js` | Cloudflare Worker のコード。AIプロキシ＋デバッグログ受け口。**デプロイは手動**（オーナーがダッシュボードに貼って Deploy） |
 | `cloudflare/*.md` | Worker・AI接続まわりの運用ドキュメント |
 | `gas/Code.gs` | Google Apps Script（Drive同期・カレンダー連携）。**デプロイは手動** |
@@ -29,14 +31,13 @@
 1. **`index.html` 1枚構成を維持する。** ビルドツール・npm 依存・ファイル分割を導入しない（オーナーが管理できなくなるため）。
 2. **UI文言・コードコメント・コミットメッセージは日本語。**
 3. **秘密情報（APIキー・トークン類）をリポジトリやクライアントJSに絶対に書かない。** secrets は Cloudflare Worker の環境変数と、各端末のブラウザ IndexedDB にだけ存在する（詳細は `docs/ARCHITECTURE.md`）。
-4. ユーザーデータ（タスク・設定・豆知識キャッシュ）は **IndexedDB** に保存されている。保存形式を変えるときは既存データを壊さない移行処理を入れる。
+4. ユーザーデータ（タスク・設定）は **IndexedDB** に保存されている。保存形式を変えるときは既存データを壊さない移行処理を入れる。
 5. 動的に HTML を組み立てるときはユーザー由来文字列に必ず `escapeHtml()` を通す（XSS対策）。
 6. Tailwind は CDN 読み込み。ジャンルバッジの色は意図的にインラインスタイル（`GENRE_PALETTE`）で描画している（動的クラス名はパージで消えるため）。
 7. ブラウザから直接呼ぶ外部API:
    - GAS Webhook（タスク同期。POST は `text/plain` で preflight 回避）
    - Worker `/v1/chat/completions`（AI。OpenAI互換）
    - Worker `/v1/debug-log`（エラーログ送信）
-   - 日本語Wikipedia MediaWiki API（豆知識のRAG根拠。キー不要・`origin=*`）
 
 ## 動作確認
 
