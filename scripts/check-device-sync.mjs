@@ -191,10 +191,15 @@ try {
       );
       if (sequential.conflicts.length !== 0) throw new Error('端末側で順次編集が競合になる');
       const parsedLog = parseTaskLogEntry('[16:54] Amazonで見つけた');
-      if (parsedLog.time !== '16:54' || parsedLog.text !== 'Amazonで見つけた') throw new Error('履歴の時刻と本文を分離できない');
+      if (parsedLog.date !== '' || parsedLog.time !== '16:54' || parsedLog.text !== 'Amazonで見つけた') throw new Error('旧履歴の時刻と本文を分離できない');
       parsedLog.time = '17:20';
       parsedLog.text = '内容を編集';
       if (serializeTaskLogEntry(parsedLog) !== '[17:20] 内容を編集') throw new Error('編集した履歴を互換形式へ戻せない');
+      const datedLog = parseTaskLogEntry('[2026-07-05 09:30] 日付付きの記録');
+      if (datedLog.date !== '2026-07-05' || datedLog.time !== '09:30' || datedLog.text !== '日付付きの記録') throw new Error('履歴の日付・時刻・本文を分離できない');
+      datedLog.date = '2026-07-06';
+      datedLog.time = '10:45';
+      if (serializeTaskLogEntry(datedLog) !== '[2026-07-06 10:45] 日付付きの記録') throw new Error('日付付き履歴を保存できない');
     `;
     vm.runInNewContext(`${clientFunctions}\n${clientScenarios}`, {
         crypto: { randomUUID: () => 'test-id' },
