@@ -169,9 +169,35 @@ async function handleDebugLog(request, env, cors) {
     return json({ error: { message: 'GitHub fetch failed: ' + e.message } }, 502, cors);
   }
   if (!ghRes.ok) {
-    return json({ error: { message: 'GitHub commit failed', status: ghRes.status, detail: ghJson && ghJson.message } }, 502, cors);
+    const code = classifyGitHubWriteError(ghRes.status);
+    return json({
+      error: {
+        message: debugUploadErrorMessage(code),
+        code,
+        status: ghRes.status,
+      },
+    }, 502, cors);
   }
   return json({ ok: true, path, html_url: ghJson && ghJson.content && ghJson.content.html_url }, 200, cors);
+}
+
+function classifyGitHubWriteError(status) {
+  if (status === 401 || status === 403) return 'GITHUB_AUTH_FAILED';
+  if (status === 409) return 'GITHUB_CONFLICT';
+  if (status === 422) return 'GITHUB_REQUEST_REJECTED';
+  if (status === 429) return 'GITHUB_RATE_LIMITED';
+  return 'GITHUB_WRITE_FAILED';
+}
+
+function debugUploadErrorMessage(code) {
+  const messages = {
+    GITHUB_AUTH_FAILED: 'GitHubトークンの期限または書き込み権限を確認してください',
+    GITHUB_CONFLICT: 'GitHub側で一時的な競合が発生しました',
+    GITHUB_REQUEST_REJECTED: 'GitHubがログファイルの作成要求を拒否しました',
+    GITHUB_RATE_LIMITED: 'GitHubの利用上限に達しました。時間を置いて再試行してください',
+    GITHUB_WRITE_FAILED: 'GitHubへのログ保存に失敗しました',
+  };
+  return messages[code] || messages.GITHUB_WRITE_FAILED;
 }
 
 function buildDebugMarkdown(p, now) {

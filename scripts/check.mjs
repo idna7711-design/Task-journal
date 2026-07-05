@@ -107,6 +107,40 @@ for (const lightweightPullSafety of [
     if (gasCode.includes(lightweightPullSafety)) console.log(`OK  変更なし同期を軽量化: ${lightweightPullSafety}`);
     else { failed++; console.error(`NG  変更なし同期の軽量化がありません: ${lightweightPullSafety}`); }
 }
+for (const requiredLockFix of [
+    'function refreshNotebookDocumentSafely()',
+    'const documentLock = LockService.getUserLock();',
+    'if (hasChanges) refreshNotebookDocumentSafely();',
+    "console.error('Notebook document refresh failed:",
+]) {
+    if (gasCode.includes(requiredLockFix)) console.log(`OK  GASロック短縮: ${requiredLockFix}`);
+    else { failed++; console.error(`NG  GASロック短縮がありません: ${requiredLockFix}`); }
+}
+const mutationSyncSource = gasCode.slice(
+    gasCode.indexOf('function handleMutationSync'),
+    gasCode.indexOf('function normalizeProtocol3State')
+);
+if (mutationSyncSource.indexOf('if (lock.hasLock()) lock.releaseLock();') < mutationSyncSource.indexOf('refreshNotebookDocumentSafely();')) {
+    console.log('OK  Googleドキュメント更新は同期ロック解放後');
+} else {
+    failed++;
+    console.error('NG  Googleドキュメント更新が同期ロック内に残っています');
+}
+const workerCode = readFileSync(join(root, 'cloudflare', 'worker-openai-proxy.js'), 'utf8');
+for (const requiredDebugDiagnosis of [
+    'function classifyGitHubWriteError(status)',
+    "'GITHUB_AUTH_FAILED'",
+    "'GITHUB_RATE_LIMITED'",
+]) {
+    if (workerCode.includes(requiredDebugDiagnosis)) console.log(`OK  デバッグ送信診断: ${requiredDebugDiagnosis}`);
+    else { failed++; console.error(`NG  デバッグ送信診断がありません: ${requiredDebugDiagnosis}`); }
+}
+if (indexHtml.includes("console.error('Debug upload failed'") && indexHtml.includes('result.error.code')) {
+    console.log('OK  デバッグ送信失敗の安全な詳細を端末へ表示');
+} else {
+    failed++;
+    console.error('NG  デバッグ送信失敗の詳細が端末に残りません');
+}
 if (indexHtml.includes("postSyncRequest({ action: 'capabilities' }, 60000)")) console.log('OK  同期能力確認は60秒待機');
 else { failed++; console.error('NG  同期能力確認の待機時間が不足しています'); }
 if (!indexHtml.includes("url.searchParams.set('syncToken'")) console.log('OK  同期キーをURLへ含めない');

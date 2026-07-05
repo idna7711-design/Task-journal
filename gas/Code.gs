@@ -85,6 +85,7 @@ function doPost(e) {
   const usesSyncV2 = Number(data.syncVersion) === SYNC_VERSION;
   const lock = LockService.getScriptLock();
   let mergedState;
+  let stateSaved = false;
   try {
     lock.waitLock(30000);
     const folder = DriveApp.getFolderById(FOLDER_ID);
@@ -105,10 +106,7 @@ function doPost(e) {
     mergedState.revision = finiteNumberOrZero(currentState.revision) + 1;
     mergedState.updatedAt = Date.now();
     upsertFile(folder, JSON_FILE_NAME, JSON.stringify(mergedState));
-
-    // 2. NotebookLMが参照する固定IDのGoogleドキュメントを更新
-    const doc = getNotebookDocument();
-    renderNotebookDocument(doc, mergedState.tasks, mergedState.categories);
+    stateSaved = true;
   } catch (err) {
     console.error('TaskJournal sync failed: ' + (err && err.stack ? err.stack : err));
     return ContentService.createTextOutput(
@@ -117,6 +115,10 @@ function doPost(e) {
   } finally {
     if (lock.hasLock()) lock.releaseLock();
   }
+
+  // Googleドキュメント全体の更新は重いため、同期状態を守るScriptLockの外で行う。
+  // 失敗してもJSON同期は成功済みなので、端末の変更を送信待ちへ戻さない。
+  if (stateSaved) refreshNotebookDocumentSafely();
 
   // ※ カレンダー登録はアプリの「カレンダーに追加」ボタン押下時のみ行う。
   //    日時設定のたびに自動登録すると、ボタン押下分と合わせて二重に予定が入るため、
@@ -147,37 +149,67 @@ function handleMutationSync(data) {
   }
 
   const lock = LockService.getScriptLock();
+  let result;
+  const hasChanges = mutations.length > 0 || !!categoryMutation || resolvedConflictIds.length > 0;
   try {
     lock.waitLock(30000);
     const folder = DriveApp.getFolderById(FOLDER_ID);
     const state = normalizeProtocol3State(readSyncState(folder));
-    const result = applyMutations(state, mutations, categoryMutation, resolvedConflictIds);
-    const hasChanges = mutations.length > 0 || !!categoryMutation || resolvedConflictIds.length > 0;
+    result = applyMutations(state, mutations, categoryMutation, resolvedConflictIds);
     if (hasChanges) {
       result.state.revision = finiteNumberOrZero(state.revision) + 1;
       result.state.updatedAt = Date.now();
       upsertFile(folder, JSON_FILE_NAME, JSON.stringify(result.state));
-
-      const doc = getNotebookDocument();
-      renderNotebookDocument(doc, result.state.tasks, result.state.categories);
     }
-
-    return jsonOutput({
-      protocolVersion: PROTOCOL_VERSION,
-      revision: result.state.revision,
-      tasks: result.state.tasks,
-      tombstones: result.state.tombstones,
-      conflicts: result.state.conflicts,
-      categories: result.state.categories,
-      categoriesVersion: result.state.categoriesVersion,
-      ackedMutationIds: result.ackedMutationIds,
-      ackedCategoryMutationId: result.ackedCategoryMutationId
-    });
   } catch (err) {
     console.error('TaskJournal mutation sync failed: ' + (err && err.stack ? err.stack : err));
     return jsonOutput({ protocolVersion: PROTOCOL_VERSION, error: err && err.message ? err.message : 'sync failed' });
   } finally {
     if (lock.hasLock()) lock.releaseLock();
+  }
+
+  // NotebookLM用ドキュメントは別ロックで直列化し、直前に最新JSONを読み直す。
+  // ドキュメント更新失敗は同期済みタスクを巻き戻さず、次回変更時に再試行する。
+  if (hasChanges) refreshNotebookDocumentSafely();
+
+  return jsonOutput({
+    protocolVersion: PROTOCOL_VERSION,
+    revision: result.state.revision,
+    tasks: result.state.tasks,
+    tombstones: result.state.tombstones,
+    conflicts: result.state.conflicts,
+    categories: result.state.categories,
+    categoriesVersion: result.state.categoriesVersion,
+    ackedMutationIds: result.ackedMutationIds,
+    ackedCategoryMutationId: result.ackedCategoryMutationId
+  });
+}
+
+/**
+ * NotebookLM用Googleドキュメントを最新JSONから再生成する。
+ * ScriptLockはJSONの読取中だけ保持し、DocumentAppの重い処理とは分離する。
+ */
+function refreshNotebookDocumentSafely() {
+  const documentLock = LockService.getUserLock();
+  const stateLock = LockService.getScriptLock();
+  let latestState;
+  try {
+    documentLock.waitLock(30000);
+    try {
+      stateLock.waitLock(10000);
+      const folder = DriveApp.getFolderById(FOLDER_ID);
+      latestState = readSyncState(folder);
+    } finally {
+      if (stateLock.hasLock()) stateLock.releaseLock();
+    }
+    const doc = getNotebookDocument();
+    renderNotebookDocument(doc, latestState.tasks, latestState.categories);
+    return true;
+  } catch (err) {
+    console.error('Notebook document refresh failed: ' + (err && err.stack ? err.stack : err));
+    return false;
+  } finally {
+    if (documentLock.hasLock()) documentLock.releaseLock();
   }
 }
 
