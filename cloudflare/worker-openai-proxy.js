@@ -149,6 +149,8 @@ async function handleDebugLog(request, env, cors) {
   const apiUrl = `https://api.github.com/repos/${repo}/contents/${path.split('/').map(encodeURIComponent).join('/')}`;
 
   let ghRes, ghJson;
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 15000);
   try {
     ghRes = await fetch(apiUrl, {
       method: 'PUT',
@@ -163,10 +165,16 @@ async function handleDebugLog(request, env, cors) {
         content: b64utf8(md),
         branch,
       }),
+      signal: controller.signal,
     });
     ghJson = await ghRes.json().catch(() => ({}));
   } catch (e) {
-    return json({ error: { message: 'GitHub fetch failed: ' + e.message } }, 502, cors);
+    if (e && e.name === 'AbortError') {
+      return json({ error: { message: debugUploadErrorMessage('GITHUB_TIMEOUT'), code: 'GITHUB_TIMEOUT' } }, 504, cors);
+    }
+    return json({ error: { message: 'GitHubへの接続に失敗しました', code: 'GITHUB_FETCH_FAILED' } }, 502, cors);
+  } finally {
+    clearTimeout(timeoutId);
   }
   if (!ghRes.ok) {
     const code = classifyGitHubWriteError(ghRes.status);
@@ -195,6 +203,7 @@ function debugUploadErrorMessage(code) {
     GITHUB_CONFLICT: 'GitHub側で一時的な競合が発生しました',
     GITHUB_REQUEST_REJECTED: 'GitHubがログファイルの作成要求を拒否しました',
     GITHUB_RATE_LIMITED: 'GitHubの利用上限に達しました。時間を置いて再試行してください',
+    GITHUB_TIMEOUT: 'GitHubへの接続が15秒以内に完了しませんでした',
     GITHUB_WRITE_FAILED: 'GitHubへのログ保存に失敗しました',
   };
   return messages[code] || messages.GITHUB_WRITE_FAILED;
