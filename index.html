@@ -750,7 +750,22 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
         async function uploadDebugLog(reason, message) {
             const url = debugLogUrl();
             if (!url) throw new Error('NO_ENDPOINT');
-            const res = await fetch(url, { method: 'POST', headers: aiAuthHeaders(), body: JSON.stringify(buildDebugPayload(reason, message)) });
+            let res;
+            try {
+                res = await fetchWithTimeout(url, {
+                    method: 'POST',
+                    headers: aiAuthHeaders(),
+                    body: JSON.stringify(buildDebugPayload(reason, message))
+                }, 20000);
+            } catch (error) {
+                if (error && error.name === 'AbortError') {
+                    console.error('Debug upload timed out', { code: 'DEBUG_UPLOAD_TIMEOUT', timeoutMs: 20000 });
+                    const timeoutError = new Error('クラウドへの送信が20秒以内に完了しませんでした（DEBUG_UPLOAD_TIMEOUT）');
+                    timeoutError.code = 'DEBUG_UPLOAD_TIMEOUT';
+                    throw timeoutError;
+                }
+                throw error;
+            }
             const responseText = await res.text();
             let result = {};
             try { result = responseText ? JSON.parse(responseText) : {}; } catch { /* 非JSONは状態コードだけ使う */ }
