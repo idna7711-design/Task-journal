@@ -413,15 +413,16 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
             <label class="block text-xs font-bold text-zinc-400 uppercase tracking-wider mb-2 ml-1">予定日時（任意）</label>
             <input type="datetime-local" id="schedule-datetime-input" class="w-full bg-zinc-50 border-2 border-zinc-100 rounded-2xl p-3 text-sm focus:outline-none focus:border-violet-300 focus:bg-white mb-4 shadow-inner transition-colors text-zinc-700">
 
-            <label class="block text-xs font-bold text-zinc-400 uppercase tracking-wider mb-2 ml-1">追加日時</label>
-            <input type="datetime-local" id="schedule-created-input" class="w-full bg-zinc-50 border-2 border-zinc-100 rounded-2xl p-3 text-sm focus:outline-none focus:border-violet-300 focus:bg-white mb-4 shadow-inner transition-colors text-zinc-700">
-
             <label class="block text-xs font-bold text-zinc-400 uppercase tracking-wider mb-2 ml-1">追加元デバイス</label>
             <div id="schedule-device-label" class="w-full bg-zinc-50 border border-zinc-200 rounded-2xl p-3 text-sm text-zinc-600 mb-4">記録なし</div>
 
             <div class="flex items-center justify-between gap-3 mb-2 ml-1">
                 <label class="text-xs font-bold text-zinc-400 uppercase tracking-wider">メモ・履歴</label>
                 <button type="button" onclick="addTaskLogEditor()" class="text-xs font-bold text-violet-700 hover:bg-violet-50 rounded-lg px-2 py-1">＋ 1件追加</button>
+            </div>
+            <div class="bg-violet-50 border border-violet-100 rounded-xl p-3 mb-3">
+                <label for="schedule-created-input" class="block text-xs font-bold text-violet-700 mb-2">追加日時（最初の記録）</label>
+                <input type="datetime-local" id="schedule-created-input" class="w-full bg-white border-2 border-violet-100 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-violet-300 text-zinc-700">
             </div>
             <div id="schedule-logs-editor" class="space-y-3 mb-6"></div>
 
@@ -1967,13 +1968,19 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
 
         function parseTaskLogEntry(log) {
             const value = String(log || '');
-            const match = value.match(/^\[(\d{1,2}:\d{2})\]\s*([\s\S]*)$/);
-            return match ? { time: match[1].padStart(5, '0'), text: match[2] } : { time: '', text: value };
+            const datedMatch = value.match(/^\[(\d{4}-\d{2}-\d{2})\s+(\d{1,2}:\d{2})\]\s*([\s\S]*)$/);
+            if (datedMatch) return { date: datedMatch[1], time: datedMatch[2].padStart(5, '0'), text: datedMatch[3] };
+            const timeMatch = value.match(/^\[(\d{1,2}:\d{2})\]\s*([\s\S]*)$/);
+            return timeMatch
+                ? { date: '', time: timeMatch[1].padStart(5, '0'), text: timeMatch[2] }
+                : { date: '', time: '', text: value };
         }
 
         function serializeTaskLogEntry(entry) {
             const text = String(entry && entry.text || '').trim();
+            const date = String(entry && entry.date || '').trim();
             const time = String(entry && entry.time || '').trim();
+            if (date && time) return `[${date} ${time}] ${text}`;
             return time ? `[${time}] ${text}` : text;
         }
 
@@ -1990,6 +1997,12 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
             editingTaskLogs.forEach((log, index) => {
                 const row = document.createElement('div');
                 row.className = 'flex flex-col sm:flex-row items-start gap-2 bg-zinc-50 border border-zinc-100 rounded-xl p-2';
+                const dateInput = document.createElement('input');
+                dateInput.type = 'date';
+                dateInput.className = 'w-full sm:w-auto bg-white border-2 border-zinc-100 rounded-lg px-2 py-2 text-xs focus:outline-none focus:border-violet-300 text-zinc-700';
+                dateInput.value = log.date || '';
+                dateInput.setAttribute('aria-label', `履歴${index + 1}の日付`);
+                dateInput.addEventListener('input', () => { editingTaskLogs[index].date = dateInput.value; });
                 const timeInput = document.createElement('input');
                 timeInput.type = 'time';
                 timeInput.className = 'w-full sm:w-auto bg-white border-2 border-zinc-100 rounded-lg px-2 py-2 text-xs focus:outline-none focus:border-violet-300 text-zinc-700';
@@ -2012,7 +2025,7 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
                     editingTaskLogs.splice(index, 1);
                     renderTaskLogEditor();
                 });
-                row.append(timeInput, textarea, remove);
+                row.append(dateInput, timeInput, textarea, remove);
                 container.appendChild(row);
             });
         }
@@ -2022,7 +2035,13 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
                 window.showToast('メモ・履歴は200件までです。', 'error');
                 return;
             }
-            editingTaskLogs.push({ time: getTimeString().slice(1, 6), text: '' });
+            const current = new Date();
+            const pad = value => String(value).padStart(2, '0');
+            editingTaskLogs.push({
+                date: `${current.getFullYear()}-${pad(current.getMonth() + 1)}-${pad(current.getDate())}`,
+                time: `${pad(current.getHours())}:${pad(current.getMinutes())}`,
+                text: ''
+            });
             renderTaskLogEditor();
             const inputs = document.querySelectorAll('#schedule-logs-editor textarea');
             if (inputs.length) inputs[inputs.length - 1].focus();
