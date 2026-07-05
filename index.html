@@ -751,8 +751,21 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
             const url = debugLogUrl();
             if (!url) throw new Error('NO_ENDPOINT');
             const res = await fetch(url, { method: 'POST', headers: aiAuthHeaders(), body: JSON.stringify(buildDebugPayload(reason, message)) });
-            if (!res.ok) throw new Error('UPLOAD_FAILED_' + res.status);
-            return await res.json().catch(() => ({}));
+            const responseText = await res.text();
+            let result = {};
+            try { result = responseText ? JSON.parse(responseText) : {}; } catch { /* 非JSONは状態コードだけ使う */ }
+            if (!res.ok) {
+                const safeCode = result && result.error && result.error.code ? String(result.error.code) : `HTTP_${res.status}`;
+                const safeMessage = result && result.error && result.error.message
+                    ? String(result.error.message).slice(0, 200)
+                    : 'デバッグログの送信先がエラーを返しました';
+                const error = new Error(`${safeMessage}（${safeCode}）`);
+                error.code = safeCode;
+                error.status = res.status;
+                console.error('Debug upload failed', { code: safeCode, status: res.status, message: safeMessage });
+                throw error;
+            }
+            return result;
         }
 
         // エラー発生時の自動レポート。多重送信・連投を抑制する。
