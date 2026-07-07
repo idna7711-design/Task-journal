@@ -53,10 +53,25 @@ function doPost(e) {
   if (!isAuthorized(data.syncToken || queryToken)) {
     return ContentService.createTextOutput('Unauthorized');
   }
+  const requestId = safeRequestId(data.requestId);
+  const requestStartedAt = Date.now();
+  console.log(JSON.stringify({
+    event: 'taskjournal_request_started',
+    requestId: requestId,
+    action: String(data.action || 'legacy').slice(0, 30),
+    attempt: positiveIntegerOrZero(data.attempt)
+  }));
 
   if (data.action === 'capabilities') {
+    console.log(JSON.stringify({
+      event: 'taskjournal_request_completed',
+      requestId: requestId,
+      action: 'capabilities',
+      elapsedMs: Date.now() - requestStartedAt
+    }));
     return jsonOutput({
       protocolVersion: PROTOCOL_VERSION,
+      requestId: requestId,
       capabilities: { mutationSync: true, conflictPreservation: true, postOnlyToken: true }
     });
   }
@@ -137,6 +152,8 @@ function doPost(e) {
  * 送信済みmutationIdは再送されても二重適用せず、分岐は両候補を競合として保持する。
  */
 function handleMutationSync(data) {
+  const requestId = safeRequestId(data.requestId);
+  const requestStartedAt = Date.now();
   let mutations;
   let categoryMutation;
   let resolvedConflictIds;
@@ -145,7 +162,8 @@ function handleMutationSync(data) {
     categoryMutation = validateCategoryMutation(data.categoryMutation);
     resolvedConflictIds = validateResolvedConflictIds(data.resolvedConflictIds);
   } catch (err) {
-    return jsonOutput({ protocolVersion: PROTOCOL_VERSION, error: 'Invalid request: ' + err.message });
+    console.error(JSON.stringify({ event: 'taskjournal_request_failed', requestId: requestId, stage: 'validation', error: err.message }));
+    return jsonOutput({ protocolVersion: PROTOCOL_VERSION, requestId: requestId, error: 'Invalid request: ' + err.message });
   }
 
   const lock = LockService.getScriptLock();
@@ -162,8 +180,14 @@ function handleMutationSync(data) {
       upsertFile(folder, JSON_FILE_NAME, JSON.stringify(result.state));
     }
   } catch (err) {
-    console.error('TaskJournal mutation sync failed: ' + (err && err.stack ? err.stack : err));
-    return jsonOutput({ protocolVersion: PROTOCOL_VERSION, error: err && err.message ? err.message : 'sync failed' });
+    console.error(JSON.stringify({
+      event: 'taskjournal_request_failed',
+      requestId: requestId,
+      stage: 'drive',
+      elapsedMs: Date.now() - requestStartedAt,
+      error: err && err.message ? err.message : 'sync failed'
+    }));
+    return jsonOutput({ protocolVersion: PROTOCOL_VERSION, requestId: requestId, error: err && err.message ? err.message : 'sync failed' });
   } finally {
     if (lock.hasLock()) lock.releaseLock();
   }
@@ -172,8 +196,18 @@ function handleMutationSync(data) {
   // ドキュメント更新失敗は同期済みタスクを巻き戻さず、次回変更時に再試行する。
   if (hasChanges) refreshNotebookDocumentSafely();
 
+  console.log(JSON.stringify({
+    event: 'taskjournal_request_completed',
+    requestId: requestId,
+    action: 'sync',
+    elapsedMs: Date.now() - requestStartedAt,
+    mutationCount: mutations.length,
+    changed: hasChanges
+  }));
+
   return jsonOutput({
     protocolVersion: PROTOCOL_VERSION,
+    requestId: requestId,
     revision: result.state.revision,
     tasks: result.state.tasks,
     tombstones: result.state.tombstones,
@@ -183,6 +217,10 @@ function handleMutationSync(data) {
     ackedMutationIds: result.ackedMutationIds,
     ackedCategoryMutationId: result.ackedCategoryMutationId
   });
+}
+
+function safeRequestId(value) {
+  return typeof value === 'string' && /^[A-Za-z0-9._-]{1,100}$/.test(value) ? value : '';
 }
 
 /**
