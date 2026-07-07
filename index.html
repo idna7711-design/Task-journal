@@ -631,6 +631,8 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
         // - pull: 起動時・復帰時・同期アイコンクリック時に取得し、削除優先でローカルへ反映
 
         // ---- State ----
+        const APP_BUILD = '2026-07-07-safe-sync-ai-diagnostics';
+        const SW_CACHE_NAME = 'taskjournal-cache-v5';
         let tasks = [];
         let taskTombstones = [];
         let taskConflicts = [];
@@ -669,6 +671,16 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
         let syncRetryAttempt = 0;
         let syncRetryTimer = null;
         let lastCloudPullAt = 0;
+        let lastSyncSuccessAt = 0;
+        let syncProgressPercent = 0;
+        let syncDiagnostic = {
+            requestId: '',
+            stage: 'idle',
+            attempt: 0,
+            elapsedMs: 0,
+            errorCode: '',
+            httpStatus: null,
+        };
         let syncProgressHideTimer = null;
         let db = null;
 
@@ -710,10 +722,19 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
         // 端末・実行環境の情報を収集（APIキー等の秘密は含めない）
         function collectEnv() {
             let endpointHost = '';
+            let syncEndpointHost = '';
+            let syncEndpointPath = '';
             try { endpointHost = (settings && settings.aiEndpointUrl) ? new URL(settings.aiEndpointUrl).host : ''; } catch { }
+            try {
+                const syncUrl = (settings && settings.webhookUrl) ? new URL(settings.webhookUrl) : null;
+                syncEndpointHost = syncUrl ? syncUrl.host : '';
+                syncEndpointPath = syncUrl ? syncUrl.pathname : '';
+            } catch { }
             const env = {
                 time: new Date().toISOString(),
                 url: location.href,
+                appBuild: APP_BUILD,
+                swCache: SW_CACHE_NAME,
                 userAgent: navigator.userAgent,
                 platform: navigator.platform,
                 language: navigator.language,
@@ -724,7 +745,22 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
                 screen: { w: screen.width, h: screen.height, dpr: window.devicePixelRatio },
                 viewport: { w: window.innerWidth, h: window.innerHeight },
                 aiEndpointHost: endpointHost,   // ホストのみ（キーやフルURLは送らない）
-                swController: !!(navigator.serviceWorker && navigator.serviceWorker.controller)
+                syncEndpointHost,
+                syncEndpointPath,
+                swController: !!(navigator.serviceWorker && navigator.serviceWorker.controller),
+                visibilityState: document.visibilityState,
+                connectionType: navigator.connection && navigator.connection.effectiveType
+                    ? navigator.connection.effectiveType : '',
+                sync: {
+                    requestId: syncDiagnostic.requestId,
+                    stage: syncDiagnostic.stage,
+                    attempt: syncDiagnostic.attempt,
+                    elapsedMs: syncDiagnostic.elapsedMs,
+                    errorCode: syncDiagnostic.errorCode,
+                    httpStatus: syncDiagnostic.httpStatus,
+                    pendingChanges: syncOutbox.length,
+                    lastSuccessAt: lastSyncSuccessAt ? new Date(lastSyncSuccessAt).toISOString() : '',
+                },
             };
             try { env.hasAiKey = !!(settings && settings.aiApiKey); } catch { }
             return env;
@@ -833,6 +869,10 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
                 reasoningLength: details.reasoningLength || 0,
                 responseContentType: details.responseContentType || '',
                 responseLength: details.responseLength || 0,
+                requestId: details.requestId || '',
+                stage: details.stage || '',
+                attempt: Number(details.attempt) || 0,
+                elapsedMs: Number(details.elapsedMs) || 0,
             };
         }
 
@@ -842,6 +882,9 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
             const status = Number(details.status || 0);
             if (error && error.code === 'AI_EMPTY_CONTENT') {
                 return 'ローカルAIは応答しましたが、本文が空でした。モデルの出力設定や推論トークン設定を確認してください。';
+            }
+            if (error && error.code === 'AI_REASONING_ONLY') {
+                return 'ローカルAIは推論しましたが、最終回答を生成しませんでした。出力上限を増やしてもう一度お試しください。';
             }
             if (error && error.code === 'AI_INVALID_JSON') {
                 return 'AIから一時的に読み取れない応答が返りました。自動再試行でも直らなかったため、少し待ってからもう一度お試しください。';
@@ -858,8 +901,11 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
             return 'AIへの接続または応答処理に失敗しました。タスク本体は保持されています。';
         }
 
-        async function requestAiChat(context, payload, timeoutMs = 45000, attempt = 0) {
+        async function requestAiChat(context, payload, timeoutMs = 45000, attempt = 0, requestId = '') {
             const info = aiEndpointInfo();
+            const diagnosticRequestId = requestId || createRequestId('ai');
+            const startedAt = performance.now();
+            console.info('AI request started', { requestId: diagnosticRequestId, context, attempt });
             let response;
             try {
                 response = await fetchWithTimeout(settings.aiEndpointUrl, {
@@ -870,9 +916,13 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
             } catch (error) {
                 if (attempt === 0) {
                     await new Promise(resolve => setTimeout(resolve, 1500));
-                    return requestAiChat(context, payload, timeoutMs, 1);
+                    return requestAiChat(context, payload, timeoutMs, 1, diagnosticRequestId);
                 }
                 throw new AiRequestError('AI_FETCH_FAILED', error && error.message ? error.message : 'AI fetch failed', {
+                    requestId: diagnosticRequestId,
+                    stage: 'network',
+                    attempt,
+                    elapsedMs: Math.round(performance.now() - startedAt),
                     endpointHost: info.host,
                     endpointPath: info.pathname,
                 });
@@ -882,9 +932,13 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
                 const responseSnippet = await response.text().then(t => String(t).slice(0, 500)).catch(() => '');
                 if (attempt === 0 && [502, 503, 504].includes(response.status)) {
                     await new Promise(resolve => setTimeout(resolve, 1500));
-                    return requestAiChat(context, payload, timeoutMs, 1);
+                    return requestAiChat(context, payload, timeoutMs, 1, diagnosticRequestId);
                 }
                 throw new AiRequestError('AI_HTTP_' + response.status, 'AI endpoint returned HTTP ' + response.status, {
+                    requestId: diagnosticRequestId,
+                    stage: [401, 403].includes(response.status) ? 'authentication' : 'upstream',
+                    attempt,
+                    elapsedMs: Math.round(performance.now() - startedAt),
                     status: response.status,
                     statusText: response.statusText,
                     endpointHost: info.host,
@@ -901,9 +955,13 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
             } catch (error) {
                 if (attempt === 0) {
                     await new Promise(resolve => setTimeout(resolve, 1500));
-                    return requestAiChat(context, payload, timeoutMs, 1);
+                    return requestAiChat(context, payload, timeoutMs, 1, diagnosticRequestId);
                 }
                 throw new AiRequestError('AI_INVALID_JSON', 'AI response was not valid JSON', {
+                    requestId: diagnosticRequestId,
+                    stage: 'response',
+                    attempt,
+                    elapsedMs: Math.round(performance.now() - startedAt),
                     endpointHost: info.host,
                     endpointPath: info.pathname,
                     responseContentType,
@@ -916,17 +974,30 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
             if (!content) {
                 if (attempt === 0) {
                     await new Promise(resolve => setTimeout(resolve, 1500));
-                    return requestAiChat(context, payload, timeoutMs, 1);
+                    return requestAiChat(context, payload, timeoutMs, 1, diagnosticRequestId);
                 }
-                throw new AiRequestError('AI_EMPTY_CONTENT', 'AI response content was empty', {
+                const hasReasoningContent = !!message.reasoning_content;
+                throw new AiRequestError(hasReasoningContent ? 'AI_REASONING_ONLY' : 'AI_EMPTY_CONTENT', hasReasoningContent
+                    ? 'AI produced reasoning but no final content'
+                    : 'AI response content was empty', {
+                    requestId: diagnosticRequestId,
+                    stage: 'generation',
+                    attempt,
+                    elapsedMs: Math.round(performance.now() - startedAt),
                     endpointHost: info.host,
                     endpointPath: info.pathname,
                     model: result && result.model ? result.model : '',
                     finishReason: result && result.choices && result.choices[0] ? (result.choices[0].finish_reason || '') : '',
-                    hasReasoningContent: !!message.reasoning_content,
+                    hasReasoningContent,
                     reasoningLength: message.reasoning_content ? String(message.reasoning_content).length : 0,
                 });
             }
+            console.info('AI request completed', {
+                requestId: diagnosticRequestId,
+                context,
+                attempt,
+                elapsedMs: Math.round(performance.now() - startedAt),
+            });
             return { content, result, context };
         }
 
@@ -1044,6 +1115,9 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
             return (crypto && crypto.randomUUID) ? crypto.randomUUID()
                 : 'id-' + Date.now() + '-' + Math.random().toString(36).slice(2);
         }
+        function createRequestId(prefix) {
+            return `${prefix || 'req'}-${uid()}`.slice(0, 100);
+        }
         const now = () => Date.now();
         const isSyncConfigured = () => !!(settings.webhookUrl && settings.syncToken);
         async function fetchWithTimeout(url, options = {}, timeoutMs = 20000) {
@@ -1055,30 +1129,78 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
                 clearTimeout(timeoutId);
             }
         }
-        async function postSyncRequest(payload, timeoutMs = 20000) {
-            const response = await fetchWithTimeout(settings.webhookUrl, {
-                method: 'POST',
-                headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-                body: JSON.stringify({ protocolVersion: 3, syncToken: settings.syncToken, ...payload })
-            }, timeoutMs);
+        async function postSyncRequest(payload, timeoutMs = 20000, diagnostic = {}) {
+            const requestId = diagnostic.requestId || createRequestId('sync');
+            const attempt = Number(diagnostic.attempt) || 0;
+            const startedAt = performance.now();
+            syncDiagnostic = { requestId, stage: payload.action || 'sync', attempt, elapsedMs: 0, errorCode: '', httpStatus: null };
+            console.info('Sync request started', { requestId, action: payload.action || '', attempt, pendingChanges: syncOutbox.length });
+            let response;
+            try {
+                response = await fetchWithTimeout(settings.webhookUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                    body: JSON.stringify({ protocolVersion: 3, syncToken: settings.syncToken, requestId, attempt, ...payload })
+                }, timeoutMs);
+            } catch (error) {
+                const code = error && error.name === 'AbortError' ? 'SYNC_TIMEOUT' : 'SYNC_NETWORK_ERROR';
+                error.code = error.code || code;
+                error.details = {
+                    requestId,
+                    stage: payload.action || 'sync',
+                    attempt,
+                    elapsedMs: Math.round(performance.now() - startedAt),
+                    endpointHost: (() => { try { return new URL(settings.webhookUrl).host; } catch { return ''; } })(),
+                };
+                syncDiagnostic = { ...syncDiagnostic, elapsedMs: error.details.elapsedMs, errorCode: error.code };
+                console.error('Sync request failed', { ...error.details, code: error.code, name: error.name });
+                throw error;
+            }
+            const elapsedMs = Math.round(performance.now() - startedAt);
+            let responseHost = '';
+            try { responseHost = new URL(response.url).host; } catch { }
+            syncDiagnostic = { ...syncDiagnostic, elapsedMs, httpStatus: response.status };
+            console.info('Sync response received', {
+                requestId,
+                action: payload.action || '',
+                attempt,
+                elapsedMs,
+                status: response.status,
+                redirected: response.redirected,
+                responseHost,
+            });
             const text = (await response.text()).trim();
             let result;
             try { result = JSON.parse(text); } catch { result = null; }
-            if (!response.ok || !result || result.protocolVersion !== 3) {
-                const error = new Error(result && result.error ? String(result.error) : 'SYNC_PROTOCOL_MISMATCH');
-                error.code = result && result.error ? String(result.error) : 'SYNC_PROTOCOL_MISMATCH';
+            if (!response.ok) {
+                const error = new Error(`同期APIがHTTP ${response.status}を返しました`);
+                error.code = `SYNC_HTTP_${response.status}`;
+                error.status = response.status;
+                const retryAfter = Number(response.headers.get('retry-after'));
+                if (Number.isFinite(retryAfter) && retryAfter > 0) error.retryAfterMs = Math.min(retryAfter * 1000, 60000);
+                syncDiagnostic = { ...syncDiagnostic, errorCode: error.code };
+                throw error;
+            }
+            if (!result || result.protocolVersion !== 3) {
+                const error = new Error('SYNC_PROTOCOL_MISMATCH');
+                error.code = 'SYNC_PROTOCOL_MISMATCH';
+                syncDiagnostic = { ...syncDiagnostic, errorCode: error.code };
                 throw error;
             }
             if (result.error) {
                 const error = new Error(String(result.error));
                 error.code = String(result.error);
+                syncDiagnostic = { ...syncDiagnostic, errorCode: error.code };
                 throw error;
+            }
+            if (result.requestId && result.requestId !== requestId) {
+                console.warn('Sync requestId mismatch', { requestId, responseRequestId: String(result.requestId).slice(0, 100) });
             }
             return result;
         }
-        async function ensureSyncV3() {
+        async function ensureSyncV3(requestId, attempt) {
             if (syncCapabilityVerified) return;
-            const result = await postSyncRequest({ action: 'capabilities' }, 60000);
+            const result = await postSyncRequest({ action: 'capabilities' }, 60000, { requestId, attempt });
             if (!result.capabilities || !result.capabilities.mutationSync) {
                 const error = new Error('SYNC_PROTOCOL_MISMATCH');
                 error.code = 'SYNC_PROTOCOL_MISMATCH';
@@ -1093,7 +1215,7 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
             if (error && error.code === 'Unauthorized') {
                 return '同期キーが一致しません。設定を確認してください。ローカルデータは保持されています。';
             }
-            return error && error.name === 'AbortError'
+            return error && (error.name === 'AbortError' || error.code === 'SYNC_TIMEOUT')
                 ? 'クラウドの応答に時間がかかっています。ローカルデータは保持されているため、そのまま操作できます。通信状態が安定すると自動で再試行します。'
                 : 'クラウド同期に失敗しました。通信状態と同期設定を確認してください。';
         }
@@ -1340,8 +1462,11 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
         }
 
         async function runSyncV3() {
+            const requestId = syncRetryAttempt > 0 && syncDiagnostic.requestId
+                ? syncDiagnostic.requestId : createRequestId('sync');
+            const attempt = syncRetryAttempt;
             setSyncProgress(10, '同期の準備中...');
-            await ensureSyncV3();
+            await ensureSyncV3(requestId, attempt);
             setSyncProgress(25, 'サーバーの同期方式を確認しました');
             const submitted = syncOutbox.map(item => ({ ...item, task: { ...item.task } }));
             setSyncProgress(45, submitted.length ? `${submitted.length}件の変更を送信中...` : 'クラウドの最新データを取得中...');
@@ -1354,26 +1479,58 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
                     categories: getGenres()
                 } : null,
                 resolvedConflictIds: taskConflicts.filter(item => item.resolvedAt).map(item => item.id)
-            }, 60000);
+            }, 60000, { requestId, attempt });
             setSyncProgress(70, '受信したデータを確認中...');
             result.submittedCategoryMutationId = settings.categoriesMutationId || '';
             await applySyncV3Result(result, submitted.map(item => item.mutationId));
             setSyncProgress(90, 'この端末へ保存中...');
             lastCloudPullAt = Date.now();
+            lastSyncSuccessAt = lastCloudPullAt;
+            dbPutMeta({ key: 'lastSyncSuccess', at: lastSyncSuccessAt })
+                .catch(error => console.warn('Last sync time could not be saved', { name: error && error.name ? error.name : 'Error' }));
             syncRetryAttempt = 0;
             clearTimeout(syncRetryTimer);
+            syncDiagnostic = { ...syncDiagnostic, stage: 'completed', errorCode: '', httpStatus: 200 };
             updateSyncStatus('success');
             setSyncProgress(100, '同期が完了しました');
             scheduleSyncProgressHide(1500);
         }
 
+        function isRetryableSyncError(error) {
+            if (!error) return false;
+            if (error.name === 'AbortError' || error.name === 'TypeError') return true;
+            if (['SYNC_TIMEOUT', 'SYNC_NETWORK_ERROR'].includes(error.code)) return true;
+            const status = Number(error.status || String(error.code || '').replace('SYNC_HTTP_', ''));
+            return status === 408 || status === 429 || status >= 500;
+        }
+
         function scheduleSyncRetry(error) {
-            if (!isSyncConfigured() || (error && error.code === 'SYNC_PROTOCOL_MISMATCH')) return;
-            const delays = [5000, 15000, 60000];
-            if (syncRetryAttempt >= delays.length) return;
-            const delay = delays[syncRetryAttempt++];
+            if (!isSyncConfigured() || !isRetryableSyncError(error)) return 0;
+            const delays = [2000, 5000, 15000];
+            if (syncRetryAttempt >= delays.length) return 0;
+            const delay = Number(error && error.retryAfterMs) || delays[syncRetryAttempt];
+            syncRetryAttempt++;
             clearTimeout(syncRetryTimer);
+            if (!navigator.onLine) return -1;
             syncRetryTimer = setTimeout(() => triggerDriveSync(true), delay);
+            console.info('Sync retry scheduled', {
+                requestId: syncDiagnostic.requestId,
+                attempt: syncRetryAttempt,
+                delayMs: delay,
+                pendingChanges: syncOutbox.length,
+            });
+            return delay;
+        }
+
+        function showSyncFailure(error, retryDelay) {
+            const pending = syncOutbox.length;
+            const retryText = retryDelay > 0
+                ? `${Math.ceil(retryDelay / 1000)}秒後に自動再試行します`
+                : retryDelay === -1
+                    ? '通信が戻ると自動再試行します'
+                    : '自動再試行は終了しました。同期ボタンで再実行できます';
+            setSyncProgress(syncProgressPercent, `同期未完了：端末に保存済み（未送信 ${pending}件）。${retryText}`, 'error');
+            scheduleSyncProgressHide(8000);
         }
 
         window.triggerDriveSync = (immediate = false) => {
@@ -1391,9 +1548,8 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
                 } catch (error) {
                     console.error('Drive sync error', error);
                     updateSyncStatus('error');
-                    setSyncProgress(100, '同期できませんでした。自動で再試行します');
-                    scheduleSyncProgressHide(5000);
-                    scheduleSyncRetry(error);
+                    const retryDelay = scheduleSyncRetry(error);
+                    showSyncFailure(error, retryDelay);
                 } finally {
                     pushInProgress = false;
                     const rerun = pushQueued;
@@ -1427,8 +1583,8 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
             } catch (e) {
                 console.error('Pull error', e);
                 updateSyncStatus('error');
-                setSyncProgress(100, '同期できませんでした。ローカルデータは保持されています');
-                scheduleSyncProgressHide(5000);
+                const retryDelay = scheduleSyncRetry(e);
+                showSyncFailure(e, retryDelay);
                 if (showOverlay) {
                     window.showToast(syncErrorMessage(e), 'error');
                 }
@@ -1446,18 +1602,25 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
         }
 
         // ---- Sync status indicator ----
-        function setSyncProgress(percent, label) {
+        function setSyncProgress(percent, label, state = 'active') {
             clearTimeout(syncProgressHideTimer);
             const safePercent = Math.max(0, Math.min(100, Math.round(Number(percent) || 0)));
+            syncProgressPercent = safePercent;
             const panel = document.getElementById('sync-progress-panel');
             if (panel) panel.classList.remove('hidden');
             for (const id of ['sync-progress-bar', 'sync-overlay-bar']) {
                 const bar = document.getElementById(id);
-                if (bar) bar.style.width = safePercent + '%';
+                if (bar) {
+                    bar.style.width = safePercent + '%';
+                    bar.style.backgroundColor = state === 'error' ? '#e11d48' : '';
+                }
             }
             for (const id of ['sync-progress-percent', 'sync-overlay-percent']) {
                 const el = document.getElementById(id);
-                if (el) el.textContent = safePercent + '%';
+                if (el) {
+                    el.textContent = state === 'error' ? '未同期' : safePercent + '%';
+                    el.style.color = state === 'error' ? '#e11d48' : '';
+                }
             }
             for (const id of ['sync-progress-label', 'sync-overlay-label']) {
                 const el = document.getElementById(id);
@@ -2191,6 +2354,17 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
                 errorCode: error && error.code ? error.code : '',
                 status: error && Number(error.status) ? Number(error.status) : null,
                 message: error && error.message ? String(error.message).slice(0, 300) : String(error).slice(0, 300),
+                requestId: error && error.details && error.details.requestId ? String(error.details.requestId).slice(0, 100) : '',
+                stage: error && error.details && error.details.stage ? String(error.details.stage).slice(0, 60) : '',
+                attempt: error && error.details ? Number(error.details.attempt) || 0 : 0,
+                elapsedMs: error && error.details ? Number(error.details.elapsedMs) || 0 : 0,
+                responseContentType: error && error.details && error.details.responseContentType
+                    ? String(error.details.responseContentType).slice(0, 100) : '',
+                responseLength: error && error.details ? Number(error.details.responseLength) || 0 : 0,
+                finishReason: error && error.details && error.details.finishReason
+                    ? String(error.details.finishReason).slice(0, 80) : '',
+                hasReasoningContent: !!(error && error.details && error.details.hasReasoningContent),
+                reasoningLength: error && error.details ? Number(error.details.reasoningLength) || 0 : 0,
             };
             console.error('Connection test failed', details);
             reportDebug(`connection-test: ${kind} failed`, JSON.stringify(details));
@@ -2204,75 +2378,199 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
             return url.toString();
         }
 
+        function attachConnectionDetails(error, details) {
+            error.details = { ...(error.details || {}), ...details };
+            return error;
+        }
+
+        function shouldRetryConnectionTest(error) {
+            if (!error) return false;
+            if (error.name === 'AbortError' || error.name === 'TypeError') return true;
+            if (['AI_EMPTY_CONTENT', 'AI_REASONING_ONLY', 'AI_INVALID_JSON'].includes(error.code)) return true;
+            const status = Number(error.status || 0);
+            return status === 408 || status === 429 || status >= 500;
+        }
+
+        async function probeSyncConnection(endpoint, token, requestId, attempt) {
+            const startedAt = performance.now();
+            let response;
+            try {
+                response = await fetchWithTimeout(endpoint, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                    body: JSON.stringify({ protocolVersion: 3, action: 'capabilities', syncToken: token, requestId, attempt }),
+                }, 20000);
+            } catch (error) {
+                error.code = error.code || (error.name === 'AbortError' ? 'SYNC_TIMEOUT' : 'SYNC_NETWORK_ERROR');
+                throw attachConnectionDetails(error, {
+                    requestId, stage: 'network', attempt,
+                    elapsedMs: Math.round(performance.now() - startedAt),
+                });
+            }
+            const responseText = await response.text();
+            let data = null;
+            try { data = JSON.parse(responseText); } catch { /* 下で安全な分類エラーにする */ }
+            const common = {
+                requestId, stage: 'response', attempt,
+                elapsedMs: Math.round(performance.now() - startedAt),
+                responseLength: responseText.length,
+                responseContentType: response.headers.get('content-type') || '',
+            };
+            if (!response.ok) {
+                const error = new Error(`同期APIがHTTP ${response.status}を返しました`);
+                error.code = `SYNC_HTTP_${response.status}`;
+                error.status = response.status;
+                throw attachConnectionDetails(error, common);
+            }
+            if (responseText.trim() === 'Unauthorized' || (data && data.error === 'Unauthorized')) {
+                const error = new Error('同期キーが一致しません');
+                error.code = 'Unauthorized';
+                throw attachConnectionDetails(error, { ...common, stage: 'authentication' });
+            }
+            if (!data || data.protocolVersion !== 3 || !data.capabilities || !data.capabilities.mutationSync) {
+                const error = new Error('同期APIの応答形式またはバージョンが一致しません');
+                error.code = 'SYNC_PROTOCOL_MISMATCH';
+                throw attachConnectionDetails(error, { ...common, stage: 'protocol' });
+            }
+            return { ...common, stage: 'completed' };
+        }
+
         window.testSyncConnection = async () => {
             const endpointInput = document.getElementById('webhook-input').value.trim();
             const token = document.getElementById('sync-token-input').value.trim();
-            setConnectionTestState('sync', 'testing', '同期APIへ接続しています...');
+            const requestId = createRequestId('sync-test');
             try {
                 const endpoint = validHttpEndpoint(endpointInput, 'GAS Webhook');
                 if (!token) throw new Error('同期キーを入力してください');
-                const response = await fetchWithTimeout(endpoint, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-                    body: JSON.stringify({ protocolVersion: 3, action: 'capabilities', syncToken: token }),
-                }, 20000);
-                const responseText = await response.text();
-                let data = null;
-                try { data = JSON.parse(responseText); } catch { /* 下で形式エラーにする */ }
-                if (!response.ok) {
-                    const error = new Error(`同期APIがHTTP ${response.status}を返しました`);
-                    error.status = response.status;
-                    throw error;
+                let lastError;
+                for (let attempt = 0; attempt < 2; attempt++) {
+                    setConnectionTestState('sync', 'testing', attempt === 0
+                        ? '確認1/3：同期APIへ接続しています...'
+                        : '一時エラーのため、もう一度確認しています...');
+                    try {
+                        await probeSyncConnection(endpoint, token, requestId, attempt);
+                        setConnectionTestState('sync', 'success', '接続成功：GAS到達・同期キー・同期方式v3を確認しました。');
+                        return;
+                    } catch (error) {
+                        lastError = error;
+                        if (attempt === 0 && shouldRetryConnectionTest(error)) {
+                            await new Promise(resolve => setTimeout(resolve, 1500));
+                            continue;
+                        }
+                        throw error;
+                    }
                 }
-                if (!data || data.protocolVersion !== 3 || !data.capabilities || !data.capabilities.mutationSync) {
-                    const error = new Error('同期APIの応答形式またはバージョンが一致しません');
-                    error.code = 'SYNC_PROTOCOL_MISMATCH';
-                    throw error;
-                }
-                setConnectionTestState('sync', 'success', '接続成功：同期APIと同期キーを確認できました。');
+                throw lastError;
             } catch (error) {
                 safeConnectionError('sync', endpointInput, error);
-                setConnectionTestState('sync', 'error', `接続失敗：${error.message || error}`);
+                const message = error && error.code === 'Unauthorized'
+                    ? '接続失敗：GASには到達しましたが、同期キーが一致しません。'
+                    : `接続失敗：${error.message || error}`;
+                setConnectionTestState('sync', 'error', message);
             }
         };
 
-        window.testAiConnection = async () => {
-            const endpointInput = document.getElementById('ai-endpoint-input').value.trim();
-            const model = document.getElementById('ai-model-input').value.trim() || 'local-model';
-            const apiKey = document.getElementById('ai-apikey-input').value.trim();
-            setConnectionTestState('ai', 'testing', 'AI APIへ接続しています...');
+        async function probeAiConnection(endpoint, model, apiKey, requestId, attempt) {
+            const startedAt = performance.now();
+            let response;
             try {
-                const endpoint = validHttpEndpoint(endpointInput, 'AI Endpoint');
-                if ([...apiKey].some(char => char.charCodeAt(0) > 255)) throw new Error('APIキーに全角文字など使用できない文字が含まれています');
-                const response = await fetchWithTimeout(endpoint, {
+                response = await fetchWithTimeout(endpoint, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey || 'dummy'}` },
                     body: JSON.stringify({
                         model,
                         temperature: 0,
-                        max_tokens: 8,
+                        max_tokens: 128,
                         messages: [{ role: 'user', content: 'Reply only: OK' }],
                     }),
                 }, 45000);
-                const responseText = await response.text();
-                let data = null;
-                try { data = JSON.parse(responseText); } catch { /* 下で形式エラーにする */ }
-                if (!response.ok) {
-                    const error = new Error(`AI APIがHTTP ${response.status}を返しました`);
-                    error.status = response.status;
-                    throw error;
+            } catch (error) {
+                error.code = error.code || 'AI_FETCH_FAILED';
+                throw attachConnectionDetails(error, {
+                    requestId, stage: 'worker', attempt,
+                    elapsedMs: Math.round(performance.now() - startedAt),
+                });
+            }
+            const responseText = await response.text();
+            let data = null;
+            try { data = JSON.parse(responseText); } catch { /* 下で安全な分類エラーにする */ }
+            const common = {
+                requestId, attempt,
+                elapsedMs: Math.round(performance.now() - startedAt),
+                responseContentType: response.headers.get('content-type') || '',
+                responseLength: responseText.length,
+            };
+            if (!response.ok) {
+                const error = new Error(`AI APIがHTTP ${response.status}を返しました`);
+                error.code = `AI_HTTP_${response.status}`;
+                error.status = response.status;
+                const stage = [401, 403].includes(response.status) ? 'authentication'
+                    : [502, 503, 504].includes(response.status) ? 'upstream' : 'worker';
+                throw attachConnectionDetails(error, { ...common, stage });
+            }
+            if (!data) {
+                const error = new Error('AI APIの応答をJSONとして読み取れませんでした');
+                error.code = 'AI_INVALID_JSON';
+                throw attachConnectionDetails(error, { ...common, stage: 'response' });
+            }
+            const choice = data && data.choices && data.choices[0] ? data.choices[0] : {};
+            const message = choice.message || {};
+            const content = String(message.content || '').trim();
+            if (!content) {
+                const hasReasoningContent = !!message.reasoning_content;
+                const error = new Error(hasReasoningContent
+                    ? 'AIは推論しましたが、最終回答を生成しませんでした'
+                    : 'AI APIは応答しましたが、回答本文が空でした');
+                error.code = hasReasoningContent ? 'AI_REASONING_ONLY' : 'AI_EMPTY_CONTENT';
+                throw attachConnectionDetails(error, {
+                    ...common,
+                    stage: 'generation',
+                    finishReason: choice.finish_reason || '',
+                    hasReasoningContent,
+                    reasoningLength: message.reasoning_content ? String(message.reasoning_content).length : 0,
+                });
+            }
+            return { ...common, stage: 'completed' };
+        }
+
+        window.testAiConnection = async () => {
+            const endpointInput = document.getElementById('ai-endpoint-input').value.trim();
+            const model = document.getElementById('ai-model-input').value.trim() || 'local-model';
+            const apiKey = document.getElementById('ai-apikey-input').value.trim();
+            const requestId = createRequestId('ai-test');
+            try {
+                const endpoint = validHttpEndpoint(endpointInput, 'AI Endpoint');
+                if ([...apiKey].some(char => char.charCodeAt(0) > 255)) throw new Error('APIキーに全角文字など使用できない文字が含まれています');
+                let lastError;
+                for (let attempt = 0; attempt < 2; attempt++) {
+                    setConnectionTestState('ai', 'testing', attempt === 0
+                        ? '確認1/3：Worker・LM Studioへ接続しています...'
+                        : '一時エラーのため、回答生成をもう一度確認しています...');
+                    try {
+                        await probeAiConnection(endpoint, model, apiKey, requestId, attempt);
+                        setConnectionTestState('ai', 'success', '接続成功：Worker・LM Studio・回答生成を確認しました。');
+                        return;
+                    } catch (error) {
+                        lastError = error;
+                        if (attempt === 0 && shouldRetryConnectionTest(error)) {
+                            await new Promise(resolve => setTimeout(resolve, 1500));
+                            continue;
+                        }
+                        throw error;
+                    }
                 }
-                const content = data && data.choices && data.choices[0] && data.choices[0].message
-                    ? String(data.choices[0].message.content || '').trim() : '';
-                if (!content) {
-                    const error = new Error('AI APIは応答しましたが、回答本文が空でした');
-                    error.code = 'AI_EMPTY_CONTENT';
-                    throw error;
-                }
-                setConnectionTestState('ai', 'success', '接続成功：AI APIから回答を受信しました。');
+                throw lastError;
             } catch (error) {
                 safeConnectionError('ai', endpointInput, error);
-                setConnectionTestState('ai', 'error', `接続失敗：${error.message || error}`);
+                let message = `接続失敗：${error.message || error}`;
+                if (error && [401, 403].includes(Number(error.status))) {
+                    message = '接続失敗：Workerには到達しましたが、AIキーが一致しません。';
+                } else if (error && [502, 503, 504].includes(Number(error.status))) {
+                    message = '接続失敗：Workerには到達しましたが、LM Studioへ接続できません。';
+                } else if (error && ['AI_EMPTY_CONTENT', 'AI_REASONING_ONLY'].includes(error.code)) {
+                    message = `接続失敗：LM Studioまでは到達しましたが、${error.message}`;
+                }
+                setConnectionTestState('ai', 'error', message);
             }
         };
 
@@ -2854,7 +3152,13 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
             document.getElementById('debug-modal').addEventListener('click', (e) => { if (e.target.id === 'debug-modal') closeDebugModal(); });
             document.getElementById('genre-modal').addEventListener('click', (e) => { if (e.target.id === 'genre-modal') closeGenreModal(); });
             document.getElementById('genre-picker-modal').addEventListener('click', (e) => { if (e.target.id === 'genre-picker-modal') closeGenrePicker(); });
-            document.getElementById('sync-status').addEventListener('click', () => { if (isSyncConfigured()) pullFromCloud(true); });
+            document.getElementById('sync-status').addEventListener('click', () => {
+                if (!isSyncConfigured()) return;
+                syncRetryAttempt = 0;
+                clearTimeout(syncRetryTimer);
+                syncDiagnostic = { ...syncDiagnostic, requestId: '', stage: 'manual', errorCode: '' };
+                pullFromCloud(true);
+            });
 
             // 確認ダイアログ（OK/キャンセル/背景クリック）
             document.getElementById('confirm-ok-btn').addEventListener('click', () => settleConfirm(true));
@@ -2937,7 +3241,11 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
             };
             attachSwipeHandlers(document.getElementById('active-task-list'));
             attachSwipeHandlers(document.getElementById('completed-task-list'));
-            window.addEventListener('online', refreshFromCloudIfStale);
+            window.addEventListener('online', () => {
+                syncRetryAttempt = 0;
+                clearTimeout(syncRetryTimer);
+                refreshFromCloudIfStale();
+            });
             document.addEventListener('visibilitychange', () => {
                 if (document.visibilityState === 'visible') refreshFromCloudIfStale();
             });
@@ -2994,6 +3302,8 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
                 taskConflicts = normalizeConflicts(conflictMeta && conflictMeta.items);
                 const outboxMeta = await dbGetMeta('syncOutbox');
                 syncOutbox = normalizeOutbox(outboxMeta && outboxMeta.items);
+                const lastSyncMeta = await dbGetMeta('lastSyncSuccess');
+                lastSyncSuccessAt = Number(lastSyncMeta && lastSyncMeta.at) || 0;
                 const deletedIds = new Set(taskTombstones.map(t => t.id));
                 const storedTasks = (await dbGetAllTasks()).map(normalizeTask);
                 tasks = storedTasks.filter(task => !deletedIds.has(task.id));

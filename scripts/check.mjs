@@ -82,7 +82,7 @@ for (const requiredSyncSafety of [
     'new AbortController()',
     'let pullPromise = null',
     'let pushInProgress = false',
-    '}, 60000);',
+    '}, 60000, { requestId, attempt });',
     'クラウドの応答に時間がかかっています。ローカルデータは保持されているため、そのまま操作できます。',
     "action: 'capabilities'",
     "action: 'sync'",
@@ -91,6 +91,12 @@ for (const requiredSyncSafety of [
     'serverVersion',
     'mutationId',
     'SYNC_PROTOCOL_MISMATCH',
+    'function isRetryableSyncError(',
+    'const delays = [2000, 5000, 15000];',
+    "state === 'error' ? '未同期'",
+    'pendingChanges: syncOutbox.length',
+    'const APP_BUILD =',
+    'function createRequestId(',
 ]) {
     if (indexHtml.includes(requiredSyncSafety)) {
         console.log(`OK  同期停止対策: ${requiredSyncSafety}`);
@@ -99,7 +105,25 @@ for (const requiredSyncSafety of [
         console.error(`NG  同期停止対策がありません: ${requiredSyncSafety}`);
     }
 }
+for (const requiredDiagnosticFeature of [
+    'function probeSyncConnection(',
+    'function probeAiConnection(',
+    'max_tokens: 128',
+    "error.code = hasReasoningContent ? 'AI_REASONING_ONLY' : 'AI_EMPTY_CONTENT';",
+    'requestId: details.requestId ||',
+]) {
+    if (indexHtml.includes(requiredDiagnosticFeature)) console.log(`OK  接続診断強化: ${requiredDiagnosticFeature}`);
+    else { failed++; console.error(`NG  接続診断強化がありません: ${requiredDiagnosticFeature}`); }
+}
 const gasCode = readFileSync(join(root, 'gas', 'Code.gs'), 'utf8');
+for (const requiredGasDiagnostic of [
+    'function safeRequestId(value)',
+    "event: 'taskjournal_request_started'",
+    'requestId: requestId',
+]) {
+    if (gasCode.includes(requiredGasDiagnostic)) console.log(`OK  GAS診断ID: ${requiredGasDiagnostic}`);
+    else { failed++; console.error(`NG  GAS診断IDがありません: ${requiredGasDiagnostic}`); }
+}
 for (const lightweightPullSafety of [
     'const hasChanges = mutations.length > 0 || !!categoryMutation || resolvedConflictIds.length > 0;',
     'if (hasChanges) {',
@@ -141,7 +165,7 @@ if (indexHtml.includes("console.error('Debug upload failed'") && indexHtml.inclu
     failed++;
     console.error('NG  デバッグ送信失敗の詳細が端末に残りません');
 }
-if (indexHtml.includes("postSyncRequest({ action: 'capabilities' }, 60000)")) console.log('OK  同期能力確認は60秒待機');
+if (indexHtml.includes("postSyncRequest({ action: 'capabilities' }, 60000, { requestId, attempt })")) console.log('OK  同期能力確認は60秒待機');
 else { failed++; console.error('NG  同期能力確認の待機時間が不足しています'); }
 if (!indexHtml.includes("url.searchParams.set('syncToken'")) console.log('OK  同期キーをURLへ含めない');
 else { failed++; console.error('NG  同期キーがURLへ含まれています'); }
@@ -151,7 +175,7 @@ else { failed++; console.error('NG  AI未設定時にも既定接続先へアク
 for (const requiredAiRecovery of [
     "const responseText = await response.text();",
     'result = JSON.parse(responseText);',
-    "return requestAiChat(context, payload, timeoutMs, 1);",
+    'return requestAiChat(context, payload, timeoutMs, 1, diagnosticRequestId);',
     'responseContentType,',
     'responseLength: responseText.length,',
     'AIから一時的に読み取れない応答が返りました。',
