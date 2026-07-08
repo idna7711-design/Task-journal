@@ -97,6 +97,8 @@ for (const requiredSyncSafety of [
     'pendingChanges: syncOutbox.length',
     'const APP_BUILD =',
     'function createRequestId(',
+    'function showSyncRetrying(',
+    'if (retryDelay !== 0) showSyncRetrying(retryDelay);',
 ]) {
     if (indexHtml.includes(requiredSyncSafety)) {
         console.log(`OK  同期停止対策: ${requiredSyncSafety}`);
@@ -125,8 +127,8 @@ for (const requiredGasDiagnostic of [
     else { failed++; console.error(`NG  GAS診断IDがありません: ${requiredGasDiagnostic}`); }
 }
 for (const lightweightPullSafety of [
-    'const hasChanges = mutations.length > 0 || !!categoryMutation || resolvedConflictIds.length > 0;',
-    'if (hasChanges) {',
+    'if (result.changed) {',
+    'changed: result.changed',
 ]) {
     if (gasCode.includes(lightweightPullSafety)) console.log(`OK  変更なし同期を軽量化: ${lightweightPullSafety}`);
     else { failed++; console.error(`NG  変更なし同期の軽量化がありません: ${lightweightPullSafety}`); }
@@ -134,7 +136,9 @@ for (const lightweightPullSafety of [
 for (const requiredLockFix of [
     'function refreshNotebookDocumentSafely()',
     'const documentLock = LockService.getUserLock();',
-    'if (hasChanges) refreshNotebookDocumentSafely();',
+    'function scheduleNotebookDocumentRefresh()',
+    'function runPendingNotebookRefresh()',
+    'if (result.changed) scheduleNotebookDocumentRefresh();',
     "console.error('Notebook document refresh failed:",
 ]) {
     if (gasCode.includes(requiredLockFix)) console.log(`OK  GASロック短縮: ${requiredLockFix}`);
@@ -142,13 +146,20 @@ for (const requiredLockFix of [
 }
 const mutationSyncSource = gasCode.slice(
     gasCode.indexOf('function handleMutationSync'),
-    gasCode.indexOf('function normalizeProtocol3State')
+    gasCode.indexOf('function safeRequestId')
 );
-if (mutationSyncSource.indexOf('if (lock.hasLock()) lock.releaseLock();') < mutationSyncSource.indexOf('refreshNotebookDocumentSafely();')) {
-    console.log('OK  Googleドキュメント更新は同期ロック解放後');
+if (!mutationSyncSource.includes('refreshNotebookDocumentSafely();')
+    && mutationSyncSource.indexOf('if (lock.hasLock()) lock.releaseLock();') < mutationSyncSource.indexOf('scheduleNotebookDocumentRefresh();')) {
+    console.log('OK  Googleドキュメント更新は同期応答処理から分離');
 } else {
     failed++;
-    console.error('NG  Googleドキュメント更新が同期ロック内に残っています');
+    console.error('NG  Googleドキュメント更新が同期応答処理内に残っています');
+}
+if (gasCode.includes('changed: changed') && gasCode.includes('if (result.changed) {')) {
+    console.log('OK  再送済みmutationではDriveとGoogleドキュメントを再更新しない');
+} else {
+    failed++;
+    console.error('NG  再送済みmutationの重複更新防止がありません');
 }
 const workerCode = readFileSync(join(root, 'cloudflare', 'worker-openai-proxy.js'), 'utf8');
 for (const requiredDebugDiagnosis of [

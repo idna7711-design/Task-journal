@@ -32,6 +32,11 @@ const MAX_CATEGORIES = 100;
 const MAX_LOGS_PER_TASK = 200;
 const MAX_MUTATIONS = 500;
 const MAX_APPLIED_MUTATIONS = 5000;
+const NOTEBOOK_REFRESH_HANDLER = 'runPendingNotebookRefresh';
+const NOTEBOOK_REFRESH_PENDING_PROPERTY = 'NOTEBOOK_REFRESH_PENDING_AT';
+const NOTEBOOK_REFRESH_ATTEMPTS_PROPERTY = 'NOTEBOOK_REFRESH_ATTEMPTS';
+const NOTEBOOK_REFRESH_DELAY_MS = 10000;
+const NOTEBOOK_REFRESH_MAX_ATTEMPTS = 3;
 
 function doPost(e) {
   if (!e || !e.postData) {
@@ -131,9 +136,9 @@ function doPost(e) {
     if (lock.hasLock()) lock.releaseLock();
   }
 
-  // Googleドキュメント全体の更新は重いため、同期状態を守るScriptLockの外で行う。
+  // Googleドキュメント全体の更新は重いため、応答後の時間主導トリガーへ分離する。
   // 失敗してもJSON同期は成功済みなので、端末の変更を送信待ちへ戻さない。
-  if (stateSaved) refreshNotebookDocumentSafely();
+  if (stateSaved) scheduleNotebookDocumentRefresh();
 
   // ※ カレンダー登録はアプリの「カレンダーに追加」ボタン押下時のみ行う。
   //    日時設定のたびに自動登録すると、ボタン押下分と合わせて二重に予定が入るため、
@@ -168,13 +173,12 @@ function handleMutationSync(data) {
 
   const lock = LockService.getScriptLock();
   let result;
-  const hasChanges = mutations.length > 0 || !!categoryMutation || resolvedConflictIds.length > 0;
   try {
     lock.waitLock(30000);
     const folder = DriveApp.getFolderById(FOLDER_ID);
     const state = normalizeProtocol3State(readSyncState(folder));
     result = applyMutations(state, mutations, categoryMutation, resolvedConflictIds);
-    if (hasChanges) {
+    if (result.changed) {
       result.state.revision = finiteNumberOrZero(state.revision) + 1;
       result.state.updatedAt = Date.now();
       upsertFile(folder, JSON_FILE_NAME, JSON.stringify(result.state));
@@ -192,9 +196,8 @@ function handleMutationSync(data) {
     if (lock.hasLock()) lock.releaseLock();
   }
 
-  // NotebookLM用ドキュメントは別ロックで直列化し、直前に最新JSONを読み直す。
-  // ドキュメント更新失敗は同期済みタスクを巻き戻さず、次回変更時に再試行する。
-  if (hasChanges) refreshNotebookDocumentSafely();
+  // NotebookLM用ドキュメント更新は応答後に行い、iPhone Safariの待ち時間を短縮する。
+  if (result.changed) scheduleNotebookDocumentRefresh();
 
   console.log(JSON.stringify({
     event: 'taskjournal_request_completed',
@@ -202,7 +205,7 @@ function handleMutationSync(data) {
     action: 'sync',
     elapsedMs: Date.now() - requestStartedAt,
     mutationCount: mutations.length,
-    changed: hasChanges
+    changed: result.changed
   }));
 
   return jsonOutput({
@@ -221,6 +224,69 @@ function handleMutationSync(data) {
 
 function safeRequestId(value) {
   return typeof value === 'string' && /^[A-Za-z0-9._-]{1,100}$/.test(value) ? value : '';
+}
+
+/**
+ * NotebookLM用ドキュメントの更新を1本の時間主導トリガーへまとめる。
+ * 同期データは先にDriveへ保存済みなので、トリガー作成失敗でも同期結果は失わない。
+ */
+function scheduleNotebookDocumentRefresh() {
+  const properties = PropertiesService.getScriptProperties();
+  properties.setProperty(NOTEBOOK_REFRESH_PENDING_PROPERTY, String(Date.now()));
+  properties.setProperty(NOTEBOOK_REFRESH_ATTEMPTS_PROPERTY, '0');
+  ensureNotebookRefreshTrigger();
+}
+
+function ensureNotebookRefreshTrigger() {
+  const lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(5000);
+    const exists = ScriptApp.getProjectTriggers().some(function(trigger) {
+      return trigger.getHandlerFunction() === NOTEBOOK_REFRESH_HANDLER;
+    });
+    if (!exists) {
+      ScriptApp.newTrigger(NOTEBOOK_REFRESH_HANDLER)
+        .timeBased()
+        .after(NOTEBOOK_REFRESH_DELAY_MS)
+        .create();
+    }
+  } catch (err) {
+    console.error('Notebook refresh trigger could not be scheduled: ' + (err && err.stack ? err.stack : err));
+  } finally {
+    if (lock.hasLock()) lock.releaseLock();
+  }
+}
+
+/** 時間主導トリガーから呼ばれ、最新JSONを固定Googleドキュメントへ反映する。 */
+function runPendingNotebookRefresh() {
+  const properties = PropertiesService.getScriptProperties();
+  const pendingBefore = properties.getProperty(NOTEBOOK_REFRESH_PENDING_PROPERTY);
+  removeNotebookRefreshTriggers();
+  if (!pendingBefore) return;
+
+  const refreshed = refreshNotebookDocumentSafely();
+  const pendingAfter = properties.getProperty(NOTEBOOK_REFRESH_PENDING_PROPERTY);
+  if (refreshed && pendingAfter === pendingBefore) {
+    properties.deleteProperty(NOTEBOOK_REFRESH_PENDING_PROPERTY);
+    properties.deleteProperty(NOTEBOOK_REFRESH_ATTEMPTS_PROPERTY);
+    return;
+  }
+
+  if (refreshed) {
+    properties.setProperty(NOTEBOOK_REFRESH_ATTEMPTS_PROPERTY, '0');
+    ensureNotebookRefreshTrigger();
+    return;
+  }
+
+  const attempts = positiveIntegerOrZero(properties.getProperty(NOTEBOOK_REFRESH_ATTEMPTS_PROPERTY)) + 1;
+  properties.setProperty(NOTEBOOK_REFRESH_ATTEMPTS_PROPERTY, String(attempts));
+  if (attempts < NOTEBOOK_REFRESH_MAX_ATTEMPTS) ensureNotebookRefreshTrigger();
+}
+
+function removeNotebookRefreshTriggers() {
+  ScriptApp.getProjectTriggers().forEach(function(trigger) {
+    if (trigger.getHandlerFunction() === NOTEBOOK_REFRESH_HANDLER) ScriptApp.deleteTrigger(trigger);
+  });
 }
 
 /**
@@ -278,13 +344,17 @@ function applyMutations(state, mutations, categoryMutation, resolvedConflictIds)
   const conflictById = {};
   const applied = {};
   const acked = [];
+  let changed = false;
 
   state.tasks.forEach(function(task) { taskById[task.id] = task; });
   state.tombstones.forEach(function(item) { tombstoneById[item.id] = item; });
   state.conflicts.forEach(function(item) { conflictById[item.id] = item; });
   state.appliedMutations.forEach(function(item) { applied[item.id] = item; });
   resolvedConflictIds.forEach(function(id) {
-    if (conflictById[id]) conflictById[id].resolvedAt = Date.now();
+    if (conflictById[id] && !conflictById[id].resolvedAt) {
+      conflictById[id].resolvedAt = Date.now();
+      changed = true;
+    }
   });
 
   mutations.forEach(function(mutation) {
@@ -337,6 +407,7 @@ function applyMutations(state, mutations, categoryMutation, resolvedConflictIds)
 
     applied[mutation.mutationId] = { id: mutation.mutationId, appliedAt: Date.now() };
     acked.push(mutation.mutationId);
+    changed = true;
   });
 
   let ackedCategoryMutationId = '';
@@ -348,6 +419,7 @@ function applyMutations(state, mutations, categoryMutation, resolvedConflictIds)
       state.categoriesVersion = positiveIntegerOrZero(state.categoriesVersion) + 1;
       state.lastCategoryMutationId = categoryMutation.mutationId;
       ackedCategoryMutationId = categoryMutation.mutationId;
+      changed = true;
     }
   }
 
@@ -357,7 +429,12 @@ function applyMutations(state, mutations, categoryMutation, resolvedConflictIds)
   state.appliedMutations = Object.keys(applied).map(function(id) { return applied[id]; })
     .sort(function(a, b) { return a.appliedAt - b.appliedAt; })
     .slice(-MAX_APPLIED_MUTATIONS);
-  return { state: state, ackedMutationIds: acked, ackedCategoryMutationId: ackedCategoryMutationId };
+  return {
+    state: state,
+    ackedMutationIds: acked,
+    ackedCategoryMutationId: ackedCategoryMutationId,
+    changed: changed
+  };
 }
 
 function deletionVariant(id, text, serverVersion, lastMutationId) {
