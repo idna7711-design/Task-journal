@@ -101,6 +101,7 @@ const scenarios = String.raw`
   }
   let v3 = normalizeProtocol3State(createEmptySyncState());
   let v3Result = applyMutations(v3, [mutation('m1', 'v3-task', 'create', 0, '', '初版')], null, []);
+  assert(v3Result.changed === true, '新規mutationは状態変更として扱う');
   v3 = v3Result.state;
   assert(v3.tasks[0].serverVersion === 1 && v3.tasks[0].text === '初版', 'v3で新規作成できない');
 
@@ -110,6 +111,7 @@ const scenarios = String.raw`
   assert(v3.tasks[0].serverVersion === 2, 'タスク版番号が進まない');
 
   v3Result = applyMutations(v3, [mutation('m2', 'v3-task', 'update', 1, 'm1', '端末時計が古い後発編集')], null, []);
+  assert(v3Result.changed === false, '送信済みmutationの再送は状態を変更しない');
   assert(v3Result.state.tasks[0].serverVersion === 2, '同じ変更の再送が二重適用される');
 
   v3Result = applyMutations(v3, [

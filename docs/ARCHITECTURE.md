@@ -50,7 +50,8 @@
 - 各変更は`mutationId`を持ち、再送されてもGASで二重適用しない
 - 各タスクの`serverVersion`と変更元の`baseVersion`で分岐を判定し、端末時計は同期の勝敗に使わない
 - GASは`LockService`内で変更を直列化し、成功した変更IDだけを端末へ返す
-- GASのScriptLockはJSONの読取・統合・保存だけに限定し、NotebookLM用Googleドキュメント更新は別ロックで直列化する
+- GASのScriptLockはJSONの読取・統合・保存だけに限定し、NotebookLM用Googleドキュメント更新は時間主導トリガーへ分離して別ロックで直列化する
+- 端末への同期応答はDrive保存後に返し、重いGoogleドキュメント再生成を待たせない（通常は約1分以内に反映開始）
 - Googleドキュメント更新に失敗しても、保存済みタスク同期は取り消さず、次回変更時に最新JSONから再生成する
 - 変更のない取得同期はDriveとGoogleドキュメントを書き換えず、保存処理を待たずに状態だけ返す
 - オフライン中の同一端末での連続編集は`parentMutationId`で順番を維持

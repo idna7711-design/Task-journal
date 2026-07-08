@@ -631,7 +631,7 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
         // - pull: 起動時・復帰時・同期アイコンクリック時に取得し、削除優先でローカルへ反映
 
         // ---- State ----
-        const APP_BUILD = '2026-07-07-safe-sync-ai-diagnostics';
+        const APP_BUILD = '2026-07-08-fast-sync-background-notebook';
         const SW_CACHE_NAME = 'taskjournal-cache-v5';
         let tasks = [];
         let taskTombstones = [];
@@ -1533,6 +1533,15 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
             scheduleSyncProgressHide(8000);
         }
 
+        function showSyncRetrying(retryDelay) {
+            const pending = syncOutbox.length;
+            const retryText = retryDelay > 0
+                ? `${Math.ceil(retryDelay / 1000)}秒後に再試行します`
+                : '通信が戻ると再試行します';
+            updateSyncStatus('syncing');
+            setSyncProgress(syncProgressPercent, `一時的に接続できません（未送信 ${pending}件）。${retryText}`);
+        }
+
         window.triggerDriveSync = (immediate = false) => {
             if (!isSyncConfigured()) return;
             updateSyncStatus('syncing');
@@ -1547,9 +1556,13 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
                     await runSyncV3();
                 } catch (error) {
                     console.error('Drive sync error', error);
-                    updateSyncStatus('error');
                     const retryDelay = scheduleSyncRetry(error);
-                    showSyncFailure(error, retryDelay);
+                    if (retryDelay !== 0) showSyncRetrying(retryDelay);
+                    else {
+                        updateSyncStatus('error');
+                        showSyncFailure(error, retryDelay);
+                        window.showToast(syncErrorMessage(error), 'error');
+                    }
                 } finally {
                     pushInProgress = false;
                     const rerun = pushQueued;
@@ -1582,10 +1595,13 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
                 await pullPromise;
             } catch (e) {
                 console.error('Pull error', e);
-                updateSyncStatus('error');
                 const retryDelay = scheduleSyncRetry(e);
-                showSyncFailure(e, retryDelay);
-                if (showOverlay) {
+                if (retryDelay !== 0) showSyncRetrying(retryDelay);
+                else {
+                    updateSyncStatus('error');
+                    showSyncFailure(e, retryDelay);
+                }
+                if (showOverlay && retryDelay === 0) {
                     window.showToast(syncErrorMessage(e), 'error');
                 }
                 // 取得失敗してもローカルデータで継続
