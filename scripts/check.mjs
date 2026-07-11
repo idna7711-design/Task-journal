@@ -77,6 +77,11 @@ checkPowerShell('scripts/notebooklm-refresh.ps1');
 checkPowerShell('scripts/register-notebooklm-sync-task.ps1');
 
 const indexHtml = readFileSync(join(root, 'index.html'), 'utf8');
+for (const uniqueId of ['sync-recovery-panel', 'sync-recovery-message', 'sync-recovery-retry-btn']) {
+    const count = (indexHtml.match(new RegExp(`id=["']${uniqueId}["']`, 'g')) || []).length;
+    if (count === 1) console.log(`OK  同期復旧UIのID: ${uniqueId}`);
+    else { failed++; console.error(`NG  同期復旧UIのIDが一意ではありません: ${uniqueId} (${count})`); }
+}
 for (const requiredSyncSafety of [
     'fetchWithTimeout',
     'new AbortController()',
@@ -99,6 +104,10 @@ for (const requiredSyncSafety of [
     'function createRequestId(',
     'function showSyncRetrying(',
     'if (retryDelay !== 0) showSyncRetrying(retryDelay);',
+    'function reconcileSyncOutbox(',
+    'const SYNC_ACK_MISS_LIMIT = 3;',
+    'function schedulePendingAckVerification()',
+    'window.retryBlockedSyncChanges = async () =>',
 ]) {
     if (indexHtml.includes(requiredSyncSafety)) {
         console.log(`OK  同期停止対策: ${requiredSyncSafety}`);

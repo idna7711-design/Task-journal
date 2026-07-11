@@ -540,6 +540,12 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
                         <i data-lucide="plug-zap" class="w-4 h-4"></i> 同期APIの接続テスト
                     </button>
                     <p id="sync-connection-test-result" class="hidden text-xs font-bold mt-2 ml-1" role="status" aria-live="polite"></p>
+                    <div id="sync-recovery-panel" class="hidden mt-3 rounded-2xl border border-amber-200 bg-amber-50 p-4" role="status" aria-live="polite">
+                        <p id="sync-recovery-message" class="text-xs font-bold text-amber-800 leading-relaxed"></p>
+                        <button type="button" id="sync-recovery-retry-btn" onclick="retryBlockedSyncChanges()" class="hidden mt-3 w-full items-center justify-center gap-2 text-xs font-bold bg-white border-2 border-amber-200 text-amber-800 hover:bg-amber-100 px-4 py-3 rounded-2xl transition-all active:scale-95">
+                            <i data-lucide="refresh-cw" class="w-4 h-4"></i> 未同期タスクをもう一度確認
+                        </button>
+                    </div>
                 </div>
 
                 <hr class="border-zinc-100 mb-6">
@@ -631,12 +637,16 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
         // - pull: 起動時・復帰時・同期アイコンクリック時に取得し、削除優先でローカルへ反映
 
         // ---- State ----
-        const APP_BUILD = '2026-07-08-fast-sync-background-notebook';
-        const SW_CACHE_NAME = 'taskjournal-cache-v5';
+        const APP_BUILD = '2026-07-12-stalled-sync-recovery';
+        const SW_CACHE_NAME = 'taskjournal-cache-v6';
+        const SYNC_ACK_MISS_LIMIT = 3;
+        const SYNC_RECOVERY_MAX = 1;
+        const SYNC_RECOVERY_ARCHIVE_LIMIT = 50;
         let tasks = [];
         let taskTombstones = [];
         let taskConflicts = [];
         let syncOutbox = [];
+        let syncRecoveryArchive = [];
         let settings = {
             webhookUrl: '',
             syncToken: '',
@@ -670,6 +680,7 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
         let syncCapabilityVerified = false;
         let syncRetryAttempt = 0;
         let syncRetryTimer = null;
+        let syncAckTimer = null;
         let lastCloudPullAt = 0;
         let lastSyncSuccessAt = 0;
         let syncProgressPercent = 0;
@@ -759,6 +770,8 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
                     errorCode: syncDiagnostic.errorCode,
                     httpStatus: syncDiagnostic.httpStatus,
                     pendingChanges: syncOutbox.length,
+                    blockedChanges: syncOutbox.filter(item => item.blocked).length,
+                    recoveryArchiveCount: syncRecoveryArchive.length,
                     lastSuccessAt: lastSyncSuccessAt ? new Date(lastSyncSuccessAt).toISOString() : '',
                 },
             };
@@ -1082,14 +1095,18 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
         function dbPersistLocalMutation(task, operation, resolvesConflictId = '') {
             return new Promise((resolve, reject) => {
                 const tx = db.transaction(['tasks', 'meta'], 'readwrite');
-                tx.oncomplete = () => resolve();
+                tx.oncomplete = () => {
+                    renderSyncRecoveryState();
+                    resolve();
+                };
                 tx.onerror = () => reject(tx.error);
                 const taskStore = tx.objectStore('tasks');
                 const metaStore = tx.objectStore('meta');
                 const request = metaStore.get('syncOutbox');
                 request.onerror = () => reject(request.error);
                 request.onsuccess = () => {
-                    const items = normalizeOutbox(request.result && request.result.items);
+                    const items = normalizeOutbox(request.result && request.result.items)
+                        .filter(item => !(item.taskId === task.id && item.blocked));
                     const previous = [...items].reverse().find(item => item.taskId === task.id);
                     const mutation = {
                         mutationId: uid(),
@@ -1099,7 +1116,10 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
                         parentMutationId: previous ? previous.mutationId : (task.lastMutationId || ''),
                         resolvesConflictId,
                         task: { ...normalizeTask(task), deleted: operation === 'delete' },
-                        createdAt: now()
+                        createdAt: now(),
+                        ackMisses: 0,
+                        recoveryCount: 0,
+                        blocked: false
                     };
                     items.push(mutation);
                     syncOutbox = items;
@@ -1274,8 +1294,23 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
                 parentMutationId: String(item.parentMutationId || ''),
                 resolvesConflictId: String(item.resolvesConflictId || ''),
                 task: normalizeTask(item.task || { id: item.taskId }),
-                createdAt: Number(item.createdAt) || 0
+                createdAt: Number(item.createdAt) || 0,
+                ackMisses: Math.max(0, Math.min(100, Number(item.ackMisses) || 0)),
+                recoveryCount: Math.max(0, Math.min(SYNC_RECOVERY_MAX, Number(item.recoveryCount) || 0)),
+                blocked: !!item.blocked
             }));
+        }
+
+        function normalizeRecoveryArchive(items) {
+            if (!Array.isArray(items)) return [];
+            return items.filter(entry => entry && Number.isFinite(entry.archivedAt) && Array.isArray(entry.items))
+                .map(entry => ({
+                    archivedAt: entry.archivedAt,
+                    reason: ['already-synced', 'rebuilt', 'blocked'].includes(entry.reason) ? entry.reason : 'blocked',
+                    items: normalizeOutbox(entry.items)
+                }))
+                .filter(entry => entry.items.length > 0)
+                .slice(-SYNC_RECOVERY_ARCHIVE_LIMIT);
         }
 
         function taskContentSignature(task) {
@@ -1283,6 +1318,88 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
                 task.text || '', task.dueDate || null, task.category || null,
                 task.status || 'todo', !!task.pinned, Array.isArray(task.logs) ? task.logs : []
             ]);
+        }
+
+        function taskSyncSignature(task) {
+            const normalized = normalizeTask(task || {});
+            return JSON.stringify([
+                normalized.text, normalized.dueDate, normalized.category, normalized.status,
+                normalized.pinned, normalized.logs, normalized.createdAt,
+                normalized.createdDeviceId, normalized.createdDeviceName, normalized.updatedAt
+            ]);
+        }
+
+        function mutationGoalSatisfied(mutation, canonicalTasks, canonicalTombstones) {
+            const serverTask = canonicalTasks.get(mutation.taskId);
+            if (mutation.operation === 'delete') return !serverTask;
+            return !!serverTask && taskSyncSignature(serverTask) === taskSyncSignature(mutation.task);
+        }
+
+        function reconcileSyncOutbox(items, submittedMutationIds, ackedMutationIds, remoteTasks, remoteTombstones, makeId = uid, at = now()) {
+            const submitted = new Set(submittedMutationIds || []);
+            const acked = new Set(ackedMutationIds || []);
+            const canonicalTasks = new Map((remoteTasks || []).map(task => [task.id, normalizeTask(task)]));
+            const canonicalTombstones = new Map(normalizeTombstones(remoteTombstones).map(item => [item.id, item]));
+            const archiveEntries = [];
+            const ackedCount = items.filter(item => submitted.has(item.mutationId) && acked.has(item.mutationId)).length;
+            let working = items.filter(item => !(submitted.has(item.mutationId) && acked.has(item.mutationId)))
+                .map(item => submitted.has(item.mutationId) && !acked.has(item.mutationId) && !item.blocked
+                    ? { ...item, ackMisses: Math.min(100, item.ackMisses + 1) }
+                    : item);
+            let rebuiltCount = 0;
+            let alreadySyncedCount = 0;
+            let newlyBlockedCount = 0;
+
+            Array.from(new Set(working.map(item => item.taskId))).forEach(taskId => {
+                const group = working.filter(item => item.taskId === taskId);
+                const active = group.filter(item => !item.blocked);
+                const latest = active.length ? active[active.length - 1] : group[group.length - 1];
+                const needsReview = group.some(item => item.blocked || (!item.blocked && item.ackMisses >= SYNC_ACK_MISS_LIMIT));
+                if (!needsReview || !latest) return;
+
+                if (mutationGoalSatisfied(latest, canonicalTasks, canonicalTombstones)) {
+                    archiveEntries.push({ archivedAt: at, reason: 'already-synced', items: group });
+                    working = working.filter(item => item.taskId !== taskId);
+                    alreadySyncedCount++;
+                    return;
+                }
+
+                if (latest.blocked) return;
+                if (latest.recoveryCount >= SYNC_RECOVERY_MAX) {
+                    archiveEntries.push({ archivedAt: at, reason: 'blocked', items: group });
+                    const blocked = { ...latest, blocked: true };
+                    working = working.filter(item => item.taskId !== taskId);
+                    working.push(blocked);
+                    newlyBlockedCount++;
+                    return;
+                }
+
+                const current = canonicalTasks.get(taskId) || canonicalTombstones.get(taskId) || null;
+                const recovery = {
+                    ...latest,
+                    mutationId: makeId(),
+                    baseVersion: current ? (Number(current.serverVersion) || 0) + 1 : 0,
+                    parentMutationId: '',
+                    createdAt: at,
+                    ackMisses: 0,
+                    recoveryCount: latest.recoveryCount + 1,
+                    blocked: false
+                };
+                archiveEntries.push({ archivedAt: at, reason: 'rebuilt', items: group });
+                working = working.filter(item => item.taskId !== taskId);
+                working.push(recovery);
+                rebuiltCount++;
+            });
+
+            return {
+                outbox: normalizeOutbox(working),
+                archiveEntries,
+                ackedCount,
+                unackedCount: Math.max(0, submitted.size - ackedCount),
+                rebuiltCount,
+                alreadySyncedCount,
+                newlyBlockedCount
+            };
         }
 
         function simpleHash(text) {
@@ -1405,11 +1522,29 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
 
         // ---- Cloud sync v3 ----
         async function applySyncV3Result(remote, submittedMutationIds) {
-            const acked = new Set(Array.isArray(remote.ackedMutationIds) ? remote.ackedMutationIds : []);
-            const submitted = new Set(submittedMutationIds || []);
-            syncOutbox = syncOutbox.filter(item => !(submitted.has(item.mutationId) && acked.has(item.mutationId)));
-
             const canonical = new Map((remote.tasks || []).map(task => [task.id, normalizeTask(task)]));
+            const reconciliation = reconcileSyncOutbox(
+                syncOutbox,
+                submittedMutationIds,
+                Array.isArray(remote.ackedMutationIds) ? remote.ackedMutationIds : [],
+                remote.tasks,
+                remote.tombstones
+            );
+            syncOutbox = reconciliation.outbox;
+            if (reconciliation.archiveEntries.length) {
+                syncRecoveryArchive = normalizeRecoveryArchive(syncRecoveryArchive.concat(reconciliation.archiveEntries));
+                await dbPutMeta({ key: 'syncRecoveryArchive', items: syncRecoveryArchive });
+            }
+            console.info('Sync acknowledgement summary', {
+                submittedCount: (submittedMutationIds || []).length,
+                ackedCount: reconciliation.ackedCount,
+                unackedCount: reconciliation.unackedCount,
+                rebuiltCount: reconciliation.rebuiltCount,
+                alreadySyncedCount: reconciliation.alreadySyncedCount,
+                blockedCount: syncOutbox.filter(item => item.blocked).length,
+                unackedTags: syncOutbox.filter(item => !item.blocked && item.ackMisses > 0)
+                    .map(item => simpleHash(item.mutationId).slice(0, 8))
+            });
             // v2からの初回移行時、未送信だったローカル差分は捨てずに競合候補として次回送る。
             const pendingTaskIds = new Set(syncOutbox.map(item => item.taskId));
             tasks.forEach(localTask => {
@@ -1424,7 +1559,10 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
                     baseVersion: 0,
                     parentMutationId: '',
                     task: normalizeTask(localTask),
-                    createdAt: now()
+                    createdAt: now(),
+                    ackMisses: 0,
+                    recoveryCount: 0,
+                    blocked: false
                 });
                 pendingTaskIds.add(localTask.id);
                 pushQueued = true;
@@ -1441,6 +1579,7 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
             await dbReplaceTasks(tasks);
             await persistTaskTombstones();
             await persistTaskConflicts();
+            renderSyncRecoveryState();
 
             const submittedCategoryMutationId = remote.submittedCategoryMutationId || '';
             if (submittedCategoryMutationId && remote.ackedCategoryMutationId === submittedCategoryMutationId
@@ -1462,13 +1601,23 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
         }
 
         async function runSyncV3() {
+            clearTimeout(syncAckTimer);
             const requestId = syncRetryAttempt > 0 && syncDiagnostic.requestId
                 ? syncDiagnostic.requestId : createRequestId('sync');
             const attempt = syncRetryAttempt;
             setSyncProgress(10, '同期の準備中...');
             await ensureSyncV3(requestId, attempt);
             setSyncProgress(25, 'サーバーの同期方式を確認しました');
-            const submitted = syncOutbox.map(item => ({ ...item, task: { ...item.task } }));
+            const submitted = syncOutbox.filter(item => !item.blocked).map(item => ({
+                mutationId: item.mutationId,
+                taskId: item.taskId,
+                operation: item.operation,
+                baseVersion: item.baseVersion,
+                parentMutationId: item.parentMutationId,
+                resolvesConflictId: item.resolvesConflictId,
+                task: { ...item.task },
+                createdAt: item.createdAt
+            }));
             setSyncProgress(45, submitted.length ? `${submitted.length}件の変更を送信中...` : 'クラウドの最新データを取得中...');
             const result = await postSyncRequest({
                 action: 'sync',
@@ -1491,9 +1640,34 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
             syncRetryAttempt = 0;
             clearTimeout(syncRetryTimer);
             syncDiagnostic = { ...syncDiagnostic, stage: 'completed', errorCode: '', httpStatus: 200 };
-            updateSyncStatus('success');
-            setSyncProgress(100, '同期が完了しました');
-            scheduleSyncProgressHide(1500);
+            const blockedCount = syncOutbox.filter(item => item.blocked).length;
+            const activePendingCount = syncOutbox.length - blockedCount;
+            if (blockedCount > 0) {
+                updateSyncStatus('warning');
+                const activeText = activePendingCount > 0 ? `ほか${activePendingCount}件は自動確認中です。` : '';
+                setSyncProgress(100, `${blockedCount}件は内容を保持して停止しました。${activeText}設定から再確認できます`, 'warning');
+                if (activePendingCount > 0) schedulePendingAckVerification();
+                scheduleSyncProgressHide(8000);
+            } else if (activePendingCount > 0) {
+                updateSyncStatus('syncing');
+                setSyncProgress(90, `${activePendingCount}件の受領を確認中です。自動で再確認します`, 'warning');
+                schedulePendingAckVerification();
+            } else {
+                updateSyncStatus('success');
+                setSyncProgress(100, '同期が完了しました');
+                scheduleSyncProgressHide(1500);
+            }
+        }
+
+        function schedulePendingAckVerification() {
+            clearTimeout(syncAckTimer);
+            const active = syncOutbox.filter(item => !item.blocked);
+            if (!active.length || !navigator.onLine) return;
+            const highestMisses = Math.max(0, ...active.map(item => item.ackMisses));
+            const delays = [2000, 5000, 15000];
+            const delay = delays[Math.min(highestMisses, delays.length - 1)];
+            syncAckTimer = setTimeout(() => triggerDriveSync(true), delay);
+            console.info('Sync acknowledgement recheck scheduled', { delayMs: delay, pendingCount: active.length });
         }
 
         function isRetryableSyncError(error) {
@@ -1628,14 +1802,14 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
                 const bar = document.getElementById(id);
                 if (bar) {
                     bar.style.width = safePercent + '%';
-                    bar.style.backgroundColor = state === 'error' ? '#e11d48' : '';
+                    bar.style.backgroundColor = state === 'error' ? '#e11d48' : state === 'warning' ? '#d97706' : '';
                 }
             }
             for (const id of ['sync-progress-percent', 'sync-overlay-percent']) {
                 const el = document.getElementById(id);
                 if (el) {
-                    el.textContent = state === 'error' ? '未同期' : safePercent + '%';
-                    el.style.color = state === 'error' ? '#e11d48' : '';
+                    el.textContent = state === 'error' ? '未同期' : state === 'warning' ? '確認中' : safePercent + '%';
+                    el.style.color = state === 'error' ? '#e11d48' : state === 'warning' ? '#b45309' : '';
                 }
             }
             for (const id of ['sync-progress-label', 'sync-overlay-label']) {
@@ -1680,9 +1854,40 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
                 el.innerHTML = '<i data-lucide="cloud-alert" class="w-5 h-5 text-rose-500"></i>';
                 el.title = '同期エラー (URLが正しいか確認してください)';
                 el.classList.add('bg-rose-50', 'border-rose-100');
+            } else if (status === 'warning') {
+                el.innerHTML = '<i data-lucide="cloud-alert" class="w-5 h-5 text-amber-600"></i>';
+                el.title = '一部のタスクは端末内に保持して確認待ちです';
+                el.classList.add('bg-amber-50', 'border-amber-200');
             }
             lucide.createIcons();
         }
+
+        function renderSyncRecoveryState() {
+            const panel = document.getElementById('sync-recovery-panel');
+            const message = document.getElementById('sync-recovery-message');
+            const retry = document.getElementById('sync-recovery-retry-btn');
+            if (!panel || !message || !retry) return;
+            const blockedCount = syncOutbox.filter(item => item.blocked).length;
+            const activeCount = syncOutbox.length - blockedCount;
+            panel.classList.toggle('hidden', syncOutbox.length === 0);
+            retry.classList.toggle('hidden', blockedCount === 0);
+            retry.classList.toggle('flex', blockedCount > 0);
+            message.textContent = blockedCount > 0
+                ? `${blockedCount}件はデータを端末内に保持して自動送信を停止しています。下のボタンで安全に再確認できます。`
+                : `${activeCount}件の変更について、クラウドの受領確認を自動で続けています。`;
+            if (typeof lucide !== 'undefined') lucide.createIcons();
+        }
+
+        window.retryBlockedSyncChanges = async () => {
+            const blockedCount = syncOutbox.filter(item => item.blocked).length;
+            if (!blockedCount) return;
+            syncOutbox = syncOutbox.map(item => item.blocked ? { ...item, blocked: false, ackMisses: 0 } : item);
+            await dbPutMeta({ key: 'syncOutbox', items: syncOutbox });
+            renderSyncRecoveryState();
+            updateSyncStatus('syncing');
+            showToast(`${blockedCount}件の再確認を開始しました。データは削除されません。`, 'success');
+            triggerDriveSync(true);
+        };
 
         function showLoading(on) {
             const el = document.getElementById('loading-overlay');
@@ -3318,6 +3523,8 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
                 taskConflicts = normalizeConflicts(conflictMeta && conflictMeta.items);
                 const outboxMeta = await dbGetMeta('syncOutbox');
                 syncOutbox = normalizeOutbox(outboxMeta && outboxMeta.items);
+                const recoveryArchiveMeta = await dbGetMeta('syncRecoveryArchive');
+                syncRecoveryArchive = normalizeRecoveryArchive(recoveryArchiveMeta && recoveryArchiveMeta.items);
                 const lastSyncMeta = await dbGetMeta('lastSyncSuccess');
                 lastSyncSuccessAt = Number(lastSyncMeta && lastSyncMeta.at) || 0;
                 const deletedIds = new Set(taskTombstones.map(t => t.id));
@@ -3326,6 +3533,7 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
                 if (tasks.length !== storedTasks.length) await dbReplaceTasks(tasks);
                 sortTasks();
                 render();
+                renderSyncRecoveryState();
 
                 if (isSyncConfigured()) {
                     // ローカルデータを先に使える状態にし、同期は画面を遮らず裏側で行う。

@@ -165,7 +165,11 @@ try {
     const clientFunctions = [
         extractFunction(htmlSource, 'uid'),
         extractFunction(htmlSource, 'normalizeTask'),
+        extractFunction(htmlSource, 'normalizeOutbox'),
         extractFunction(htmlSource, 'taskContentSignature'),
+        extractFunction(htmlSource, 'taskSyncSignature'),
+        extractFunction(htmlSource, 'mutationGoalSatisfied'),
+        extractFunction(htmlSource, 'reconcileSyncOutbox'),
         extractFunction(htmlSource, 'simpleHash'),
         extractFunction(htmlSource, 'createConflict'),
         extractFunction(htmlSource, 'normalizeConflicts'),
@@ -202,6 +206,50 @@ try {
       datedLog.date = '2026-07-06';
       datedLog.time = '10:45';
       if (serializeTaskLogEntry(datedLog) !== '[2026-07-06 10:45] 日付付きの記録') throw new Error('日付付き履歴を保存できない');
+
+      function queued(id, taskId, operation, text, recoveryCount) {
+        return normalizeOutbox([{
+          mutationId: id,
+          taskId,
+          operation,
+          baseVersion: 0,
+          parentMutationId: '',
+          task: { id: taskId, text, createdAt: 1, updatedAt: 1 },
+          createdAt: 1,
+          ackMisses: 0,
+          recoveryCount: recoveryCount || 0,
+          blocked: false
+        }])[0];
+      }
+
+      let pending = [queued('ack-me', 'ack-task', 'create', '正常')];
+      let recovery = reconcileSyncOutbox(pending, ['ack-me'], ['ack-me'], [], [], () => 'unused', 10);
+      if (recovery.outbox.length !== 0 || recovery.ackedCount !== 1) throw new Error('受領済み変更を待ち箱から除去できない');
+
+      pending = [queued('same-mutation', 'same-task', 'create', '反映済み')];
+      const sameRemote = [{ id: 'same-task', text: '反映済み', createdAt: 1, updatedAt: 1, serverVersion: 1 }];
+      recovery = reconcileSyncOutbox(pending, ['same-mutation'], [], sameRemote, [], () => 'unused', 20);
+      recovery = reconcileSyncOutbox(recovery.outbox, ['same-mutation'], [], sameRemote, [], () => 'unused', 21);
+      if (recovery.outbox[0].ackMisses !== 2) throw new Error('2回の未受領で早期復旧している');
+      recovery = reconcileSyncOutbox(recovery.outbox, ['same-mutation'], [], sameRemote, [], () => 'unused', 22);
+      if (recovery.outbox.length !== 0 || recovery.alreadySyncedCount !== 1) throw new Error('反映済みの残留変更を安全に完了扱いできない');
+
+      pending = [queued('old-mutation', 'different-task', 'create', '端末側の内容')];
+      const differentRemote = [{ id: 'different-task', text: 'クラウド側の内容', createdAt: 1, updatedAt: 2, serverVersion: 5, lastMutationId: 'remote-5' }];
+      recovery = reconcileSyncOutbox(pending, ['old-mutation'], [], differentRemote, [], () => 'recovery-mutation', 30);
+      recovery = reconcileSyncOutbox(recovery.outbox, ['old-mutation'], [], differentRemote, [], () => 'recovery-mutation', 31);
+      recovery = reconcileSyncOutbox(recovery.outbox, ['old-mutation'], [], differentRemote, [], () => 'recovery-mutation', 32);
+      if (recovery.rebuiltCount !== 1 || recovery.outbox[0].mutationId !== 'recovery-mutation') throw new Error('内容が異なる残留変更を復旧mutationへ再構成できない');
+      if (recovery.outbox[0].baseVersion !== 6 || recovery.outbox[0].recoveryCount !== 1) throw new Error('復旧mutationがクラウドを強制上書きしない版指定になっていない');
+      recovery = reconcileSyncOutbox(recovery.outbox, ['recovery-mutation'], [], differentRemote, [], () => 'unused', 33);
+      recovery = reconcileSyncOutbox(recovery.outbox, ['recovery-mutation'], [], differentRemote, [], () => 'unused', 34);
+      recovery = reconcileSyncOutbox(recovery.outbox, ['recovery-mutation'], [], differentRemote, [], () => 'unused', 35);
+      if (!recovery.outbox[0].blocked || recovery.newlyBlockedCount !== 1) throw new Error('復旧後も未受領の変更を自動停止できない');
+
+      pending = [queued('delete-mutation', 'gone-task', 'delete', '削除対象')];
+      pending[0].ackMisses = 2;
+      recovery = reconcileSyncOutbox(pending, ['delete-mutation'], [], [], [], () => 'unused', 40);
+      if (recovery.outbox.length !== 0 || recovery.alreadySyncedCount !== 1) throw new Error('既に削除済みの残留変更を完了扱いできない');
     `;
     vm.runInNewContext(`${clientFunctions}\n${clientScenarios}`, {
         crypto: { randomUUID: () => 'test-id' },
@@ -210,8 +258,11 @@ try {
         Number,
         Array,
         String,
+        SYNC_ACK_MISS_LIMIT: 3,
+        SYNC_RECOVERY_MAX: 1,
     }, { timeout: 5000 });
     console.log('OK  index.htmlの端末側統合処理');
+    console.log('OK  残留同期の自動復旧と停止境界');
     console.log('\n端末同期シナリオ: すべてOK');
 } catch (error) {
     console.error(`NG  端末同期シナリオ\n${error.stack || error.message || error}`);
