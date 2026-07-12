@@ -218,6 +218,7 @@ function handleMutationSync(data) {
     categories: result.state.categories,
     categoriesVersion: result.state.categoriesVersion,
     ackedMutationIds: result.ackedMutationIds,
+    mutationResults: result.mutationResults,
     ackedCategoryMutationId: result.ackedCategoryMutationId
   });
 }
@@ -344,6 +345,7 @@ function applyMutations(state, mutations, categoryMutation, resolvedConflictIds)
   const conflictById = {};
   const applied = {};
   const acked = [];
+  const mutationResults = [];
   let changed = false;
 
   state.tasks.forEach(function(task) { taskById[task.id] = task; });
@@ -360,6 +362,11 @@ function applyMutations(state, mutations, categoryMutation, resolvedConflictIds)
   mutations.forEach(function(mutation) {
     if (applied[mutation.mutationId]) {
       acked.push(mutation.mutationId);
+      mutationResults.push({
+        mutationId: mutation.mutationId,
+        taskId: mutation.taskId,
+        status: 'duplicate'
+      });
       return;
     }
     const currentTask = taskById[mutation.taskId];
@@ -374,8 +381,11 @@ function applyMutations(state, mutations, categoryMutation, resolvedConflictIds)
       || (!!mutation.parentMutationId && mutation.parentMutationId === currentMutationId)
       || !!resolvingConflict;
 
+    let mutationStatus = 'applied';
+    let resultVersion = currentVersion;
     if (followsCurrent) {
       const nextVersion = currentVersion + 1;
+      resultVersion = nextVersion;
       if (mutation.operation === 'delete') {
         delete taskById[mutation.taskId];
         tombstoneById[mutation.taskId] = {
@@ -395,6 +405,7 @@ function applyMutations(state, mutations, categoryMutation, resolvedConflictIds)
       }
       if (resolvingConflict) conflictById[mutation.resolvesConflictId].resolvedAt = Date.now();
     } else {
+      mutationStatus = 'conflict';
       const currentVariant = currentTask
         ? currentTask
         : deletionVariant(mutation.taskId, mutation.task && mutation.task.text, currentVersion, currentMutationId);
@@ -407,6 +418,12 @@ function applyMutations(state, mutations, categoryMutation, resolvedConflictIds)
 
     applied[mutation.mutationId] = { id: mutation.mutationId, appliedAt: Date.now() };
     acked.push(mutation.mutationId);
+    mutationResults.push({
+      mutationId: mutation.mutationId,
+      taskId: mutation.taskId,
+      status: mutationStatus,
+      serverVersion: resultVersion
+    });
     changed = true;
   });
 
@@ -432,6 +449,7 @@ function applyMutations(state, mutations, categoryMutation, resolvedConflictIds)
   return {
     state: state,
     ackedMutationIds: acked,
+    mutationResults: mutationResults,
     ackedCategoryMutationId: ackedCategoryMutationId,
     changed: changed
   };
