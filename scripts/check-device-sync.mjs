@@ -107,11 +107,13 @@ const scenarios = String.raw`
 
   v3Result = applyMutations(v3, [mutation('m2', 'v3-task', 'update', 1, 'm1', '端末時計が古い後発編集')], null, []);
   v3 = v3Result.state;
+  assert(v3Result.mutationResults[0].status === 'applied', '正常適用の結果種別が返らない');
   assert(v3.tasks[0].text === '端末時計が古い後発編集', '端末時計に依存して後発編集を失う');
   assert(v3.tasks[0].serverVersion === 2, 'タスク版番号が進まない');
 
   v3Result = applyMutations(v3, [mutation('m2', 'v3-task', 'update', 1, 'm1', '端末時計が古い後発編集')], null, []);
   assert(v3Result.changed === false, '送信済みmutationの再送は状態を変更しない');
+  assert(v3Result.mutationResults[0].status === 'duplicate', '重複受領の結果種別が返らない');
   assert(v3Result.state.tasks[0].serverVersion === 2, '同じ変更の再送が二重適用される');
 
   v3Result = applyMutations(v3, [
@@ -122,6 +124,7 @@ const scenarios = String.raw`
   assert(v3.tasks[0].text === 'オフライン編集2' && v3.tasks[0].serverVersion === 4, '連続オフライン編集を順番に適用できない');
 
   v3Result = applyMutations(v3, [mutation('other-device', 'v3-task', 'update', 2, 'm2', '別端末の分岐編集')], null, []);
+  assert(v3Result.mutationResults[0].status === 'conflict', '競合保存の結果種別が返らない');
   assert(v3Result.state.conflicts.some(function(item) { return !item.resolvedAt; }), '分岐編集の両候補を保持できない');
 
   const deleteMutation = mutation('delete-device', 'v3-task', 'delete', 2, 'm2', '削除前の内容');
@@ -168,6 +171,7 @@ try {
         extractFunction(htmlSource, 'normalizeOutbox'),
         extractFunction(htmlSource, 'taskContentSignature'),
         extractFunction(htmlSource, 'taskSyncSignature'),
+        extractFunction(htmlSource, 'buildLegacyTaskMutations'),
         extractFunction(htmlSource, 'mutationGoalSatisfied'),
         extractFunction(htmlSource, 'reconcileSyncOutbox'),
         extractFunction(htmlSource, 'simpleHash'),
@@ -206,6 +210,25 @@ try {
       datedLog.date = '2026-07-06';
       datedLog.time = '10:45';
       if (serializeTaskLogEntry(datedLog) !== '[2026-07-06 10:45] 日付付きの記録') throw new Error('日付付き履歴を保存できない');
+
+      const canonicalLegacy = new Map([
+        ['already-acknowledged', { id: 'already-acknowledged', text: 'クラウド版', createdAt: 1, updatedAt: 2, serverVersion: 1 }],
+        ['needs-migration', { id: 'needs-migration', text: '別内容', createdAt: 1, updatedAt: 2, serverVersion: 1 }]
+      ]);
+      const legacyTasks = [
+        { id: 'already-acknowledged', text: '端末版', createdAt: 1, updatedAt: 2, serverVersion: 0 },
+        { id: 'needs-migration', text: '端末の未送信内容', createdAt: 1, updatedAt: 2, serverVersion: 0 }
+      ];
+      const migration = buildLegacyTaskMutations(
+        legacyTasks, canonicalLegacy, [], ['already-acknowledged'], false, () => 'legacy-mutation', 50
+      );
+      if (migration.mutations.length !== 1 || migration.mutations[0].taskId !== 'needs-migration') {
+        throw new Error('ACK済み旧タスクを移行処理で再登録している');
+      }
+      const completedMigration = buildLegacyTaskMutations(
+        legacyTasks, canonicalLegacy, [], [], true, () => 'unused', 51
+      );
+      if (completedMigration.mutations.length !== 0) throw new Error('完了済みの旧移行を再実行している');
 
       function queued(id, taskId, operation, text, recoveryCount) {
         return normalizeOutbox([{

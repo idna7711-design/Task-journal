@@ -637,11 +637,13 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
         // - pull: 起動時・復帰時・同期アイコンクリック時に取得し、削除優先でローカルへ反映
 
         // ---- State ----
-        const APP_BUILD = '2026-07-12-stalled-sync-recovery';
-        const SW_CACHE_NAME = 'taskjournal-cache-v6';
+        const APP_BUILD = '2026-07-12-sync-loop-guard';
+        const SW_CACHE_NAME = 'taskjournal-cache-v7';
         const SYNC_ACK_MISS_LIMIT = 3;
         const SYNC_RECOVERY_MAX = 1;
         const SYNC_RECOVERY_ARCHIVE_LIMIT = 50;
+        const SYNC_QUEUED_RERUN_LIMIT = 3;
+        const SYNC_V3_MIGRATION_META_KEY = 'syncV3MigrationCompleted';
         let tasks = [];
         let taskTombstones = [];
         let taskConflicts = [];
@@ -676,7 +678,11 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
         let syncTimeout = null;
         let pushInProgress = false;
         let pushQueued = false;
+        let queuedSyncReruns = 0;
+        let syncPromise = null;
         let pullPromise = null;
+        let dbWriteQueue = Promise.resolve();
+        let syncV3MigrationCompleted = false;
         let syncCapabilityVerified = false;
         let syncRetryAttempt = 0;
         let syncRetryTimer = null;
@@ -1077,23 +1083,35 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
             });
         }
         const dbGetAllTasks = () => idb(store('tasks', 'readonly').getAll());
-        const dbPutTask = (t) => idb(store('tasks', 'readwrite').put(t));
-        const dbDeleteTask = (id) => idb(store('tasks', 'readwrite').delete(id));
+        function enqueueDbWrite(operation, action) {
+            const run = dbWriteQueue.then(action, action);
+            dbWriteQueue = run.catch(() => {});
+            return run.catch(error => {
+                console.error('IndexedDB write failed', {
+                    operation,
+                    name: error && error.name ? error.name : 'Error',
+                    message: error && error.message ? error.message : String(error)
+                });
+                throw error;
+            });
+        }
+        const dbPutTask = (t) => enqueueDbWrite('tasks.put', () => idb(store('tasks', 'readwrite').put(t)));
+        const dbDeleteTask = (id) => enqueueDbWrite('tasks.delete', () => idb(store('tasks', 'readwrite').delete(id)));
         function dbReplaceTasks(arr) {
-            return new Promise((res, rej) => {
+            return enqueueDbWrite('tasks.replace', () => new Promise((res, rej) => {
                 const tx = db.transaction('tasks', 'readwrite');
                 tx.oncomplete = () => res();
                 tx.onerror = () => rej(tx.error);
                 const s = tx.objectStore('tasks');
                 s.clear();
                 arr.forEach(x => s.put(x));
-            });
+            }));
         }
         const dbGetMeta = (key) => idb(store('meta', 'readonly').get(key));
-        const dbPutMeta = (obj) => idb(store('meta', 'readwrite').put(obj));
+        const dbPutMeta = (obj) => enqueueDbWrite(`meta.put:${obj && obj.key ? obj.key : 'unknown'}`, () => idb(store('meta', 'readwrite').put(obj)));
 
         function dbPersistLocalMutation(task, operation, resolvesConflictId = '') {
-            return new Promise((resolve, reject) => {
+            return enqueueDbWrite(`mutation.persist:${operation}`, () => new Promise((resolve, reject) => {
                 const tx = db.transaction(['tasks', 'meta'], 'readwrite');
                 tx.oncomplete = () => {
                     renderSyncRecoveryState();
@@ -1127,7 +1145,7 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
                     if (operation === 'delete') taskStore.delete(task.id);
                     else taskStore.put(task);
                 };
-            });
+            }));
         }
 
         // ---- Utilities ----
@@ -1329,6 +1347,35 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
             ]);
         }
 
+        function buildLegacyTaskMutations(localTasks, canonicalTasks, pendingTaskIds, acknowledgedTaskIds, migrationCompleted, makeId = uid, at = now()) {
+            if (migrationCompleted) return { mutations: [], taskIds: [] };
+            const pending = new Set(pendingTaskIds || []);
+            const acknowledged = new Set(acknowledgedTaskIds || []);
+            const mutations = [];
+            const taskIds = [];
+            (Array.isArray(localTasks) ? localTasks : []).forEach(localTask => {
+                if (!localTask || !localTask.id || pending.has(localTask.id) || acknowledged.has(localTask.id)
+                    || (Number(localTask.serverVersion) || 0) > 0) return;
+                const serverTask = canonicalTasks.get(localTask.id);
+                if (serverTask && taskContentSignature(serverTask) === taskContentSignature(localTask)) return;
+                mutations.push({
+                    mutationId: makeId(),
+                    taskId: localTask.id,
+                    operation: serverTask ? 'update' : 'create',
+                    baseVersion: 0,
+                    parentMutationId: '',
+                    task: normalizeTask(localTask),
+                    createdAt: at,
+                    ackMisses: 0,
+                    recoveryCount: 0,
+                    blocked: false
+                });
+                pending.add(localTask.id);
+                taskIds.push(localTask.id);
+            });
+            return { mutations, taskIds };
+        }
+
         function mutationGoalSatisfied(mutation, canonicalTasks, canonicalTombstones) {
             const serverTask = canonicalTasks.get(mutation.taskId);
             if (mutation.operation === 'delete') return !serverTask;
@@ -1523,10 +1570,15 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
         // ---- Cloud sync v3 ----
         async function applySyncV3Result(remote, submittedMutationIds) {
             const canonical = new Map((remote.tasks || []).map(task => [task.id, normalizeTask(task)]));
+            const submittedIds = new Set(submittedMutationIds || []);
+            const acknowledgedIds = new Set(Array.isArray(remote.ackedMutationIds) ? remote.ackedMutationIds : []);
+            const acknowledgedTaskIds = new Set(syncOutbox
+                .filter(item => submittedIds.has(item.mutationId) && acknowledgedIds.has(item.mutationId))
+                .map(item => item.taskId));
             const reconciliation = reconcileSyncOutbox(
                 syncOutbox,
                 submittedMutationIds,
-                Array.isArray(remote.ackedMutationIds) ? remote.ackedMutationIds : [],
+                Array.from(acknowledgedIds),
                 remote.tasks,
                 remote.tombstones
             );
@@ -1545,28 +1597,39 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
                 unackedTags: syncOutbox.filter(item => !item.blocked && item.ackMisses > 0)
                     .map(item => simpleHash(item.mutationId).slice(0, 8))
             });
-            // v2からの初回移行時、未送信だったローカル差分は捨てずに競合候補として次回送る。
-            const pendingTaskIds = new Set(syncOutbox.map(item => item.taskId));
-            tasks.forEach(localTask => {
-                if (pendingTaskIds.has(localTask.id) || (localTask.serverVersion || 0) > 0) return;
-                const serverTask = canonical.get(localTask.id);
-                if (serverTask && taskContentSignature(serverTask) === taskContentSignature(localTask)) return;
-                const mutationId = uid();
-                syncOutbox.push({
-                    mutationId,
-                    taskId: localTask.id,
-                    operation: serverTask ? 'update' : 'create',
-                    baseVersion: 0,
-                    parentMutationId: '',
-                    task: normalizeTask(localTask),
-                    createdAt: now(),
-                    ackMisses: 0,
-                    recoveryCount: 0,
-                    blocked: false
+            const mutationResults = Array.isArray(remote.mutationResults) ? remote.mutationResults : [];
+            if (mutationResults.length) {
+                console.info('Sync mutation result summary', {
+                    appliedCount: mutationResults.filter(item => item.status === 'applied').length,
+                    conflictCount: mutationResults.filter(item => item.status === 'conflict').length,
+                    duplicateCount: mutationResults.filter(item => item.status === 'duplicate').length
                 });
-                pendingTaskIds.add(localTask.id);
-                pushQueued = true;
-            });
+            }
+
+            // v2からの初回移行時、未送信だったローカル差分は捨てずに競合候補として次回送る。
+            // ACK済みタスクはこの同期でサーバー版へ収束するため、旧移行処理で再登録しない。
+            const pendingTaskIds = new Set(syncOutbox.map(item => item.taskId));
+            const migration = buildLegacyTaskMutations(
+                tasks,
+                canonical,
+                pendingTaskIds,
+                acknowledgedTaskIds,
+                syncV3MigrationCompleted
+            );
+            if (migration.mutations.length) {
+                syncOutbox.push(...migration.mutations);
+                requestQueuedSync('legacy-migration');
+            }
+            if (!syncV3MigrationCompleted) {
+                syncV3MigrationCompleted = true;
+                try {
+                    await dbPutMeta({ key: SYNC_V3_MIGRATION_META_KEY, completedAt: now() });
+                } catch (error) {
+                    console.error('Sync migration marker could not be saved', {
+                        name: error && error.name ? error.name : 'Error'
+                    });
+                }
+            }
             await dbPutMeta({ key: 'syncOutbox', items: syncOutbox });
 
             syncOutbox.forEach(item => {
@@ -1589,7 +1652,7 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
                 // 別端末が先にジャンルを更新していた場合は、最新サーバー版を基準に一度だけ再送する。
                 settings.categoriesServerVersion = Number(remote.categoriesVersion) || 0;
                 settings.categoriesMutationId = uid();
-                pushQueued = true;
+                requestQueuedSync('category-retry');
             }
             if (Array.isArray(remote.categories) && !settings.categoriesMutationId) {
                 settings.categories = remote.categories;
@@ -1716,18 +1779,63 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
             setSyncProgress(syncProgressPercent, `一時的に接続できません（未送信 ${pending}件）。${retryText}`);
         }
 
-        window.triggerDriveSync = (immediate = false) => {
+        function requestQueuedSync(reason) {
+            if (queuedSyncReruns >= SYNC_QUEUED_RERUN_LIMIT) {
+                pushQueued = false;
+                console.warn('Sync queued rerun limit reached', {
+                    limit: SYNC_QUEUED_RERUN_LIMIT,
+                    reason: reason || 'unknown',
+                    pendingChanges: syncOutbox.length
+                });
+                return false;
+            }
+            queuedSyncReruns++;
+            pushQueued = true;
+            console.info('Sync follow-up queued', {
+                count: queuedSyncReruns,
+                limit: SYNC_QUEUED_RERUN_LIMIT,
+                reason: reason || 'unknown'
+            });
+            return true;
+        }
+
+        function beginSyncRun() {
+            if (syncPromise) return syncPromise;
+            pushInProgress = true;
+            const run = runSyncV3();
+            syncPromise = run;
+            run.then(() => {
+                if (syncPromise === run) {
+                    syncPromise = null;
+                    pushInProgress = false;
+                }
+            }, () => {
+                if (syncPromise === run) {
+                    syncPromise = null;
+                    pushInProgress = false;
+                }
+            });
+            return run;
+        }
+
+        function flushQueuedSync() {
+            if (!pushQueued || syncPromise) return;
+            pushQueued = false;
+            triggerDriveSync(true, true);
+        }
+
+        window.triggerDriveSync = (immediate = false, followUp = false) => {
             if (!isSyncConfigured()) return;
             updateSyncStatus('syncing');
-            if (pushInProgress) {
-                pushQueued = true;
+            if (pushInProgress || syncPromise) {
+                requestQueuedSync('sync-in-progress');
                 return;
             }
+            if (!followUp) queuedSyncReruns = 0;
             clearTimeout(syncTimeout);
             syncTimeout = setTimeout(async () => {
-                pushInProgress = true;
                 try {
-                    await runSyncV3();
+                    await beginSyncRun();
                 } catch (error) {
                     console.error('Drive sync error', error);
                     const retryDelay = scheduleSyncRetry(error);
@@ -1738,10 +1846,10 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
                         window.showToast(syncErrorMessage(error), 'error');
                     }
                 } finally {
-                    pushInProgress = false;
                     const rerun = pushQueued;
                     pushQueued = false;
-                    if (rerun) triggerDriveSync(true);
+                    if (rerun) triggerDriveSync(true, true);
+                    else if (syncOutbox.length === 0) queuedSyncReruns = 0;
                 }
             }, immediate ? 0 : 1500);
         };
@@ -1760,9 +1868,7 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
                 }
                 return;
             }
-            const runPull = async () => {
-                await runSyncV3();
-            };
+            const runPull = async () => { await beginSyncRun(); };
             try {
                 if (showOverlay) showLoading(true);
                 pullPromise = runPull();
@@ -1782,6 +1888,7 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
             } finally {
                 pullPromise = null;
                 if (showOverlay) showLoading(false);
+                flushQueuedSync();
             }
         }
 
@@ -3525,6 +3632,8 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
                 syncOutbox = normalizeOutbox(outboxMeta && outboxMeta.items);
                 const recoveryArchiveMeta = await dbGetMeta('syncRecoveryArchive');
                 syncRecoveryArchive = normalizeRecoveryArchive(recoveryArchiveMeta && recoveryArchiveMeta.items);
+                const migrationMeta = await dbGetMeta(SYNC_V3_MIGRATION_META_KEY);
+                syncV3MigrationCompleted = !!(migrationMeta && migrationMeta.completedAt);
                 const lastSyncMeta = await dbGetMeta('lastSyncSuccess');
                 lastSyncSuccessAt = Number(lastSyncMeta && lastSyncMeta.at) || 0;
                 const deletedIds = new Set(taskTombstones.map(t => t.id));
