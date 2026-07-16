@@ -248,6 +248,18 @@ for (const requiredUxFeature of [
     if (indexHtml.includes(requiredUxFeature)) console.log(`OK  GUI/UX刷新: ${requiredUxFeature}`);
     else { failed++; console.error(`NG  GUI/UX機能がありません: ${requiredUxFeature}`); }
 }
+for (const requiredCompletedBoxFeature of [
+    'aria-label="完了したタスクの格納ボックス"',
+    'aria-describedby="completed-toggle-description"',
+    'data-lucide="archive"',
+    'let completedCollapsed = true;',
+    'if (storedCompletedState !== null)',
+    "description.textContent = completedCollapsed ? 'タップして表示' : 'タップして閉じる';",
+    'ccEl.textContent = `${doneTasks.length}件`;',
+]) {
+    if (indexHtml.includes(requiredCompletedBoxFeature)) console.log(`OK  完了タスク格納ボックス: ${requiredCompletedBoxFeature}`);
+    else { failed++; console.error(`NG  完了タスク格納ボックスが不完全です: ${requiredCompletedBoxFeature}`); }
+}
 if (!indexHtml.includes('id="trivia-bar"') && !indexHtml.includes('id="trivia-modal"')) console.log('OK  豆知識UIを撤去');
 else { failed++; console.error('NG  豆知識UIが残っています'); }
 if (indexHtml.includes('src="icons/icon-192.png"')) console.log('OK  ヘッダーに選定アイコンを表示');
