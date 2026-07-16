@@ -18,6 +18,7 @@
 | `sw.js` | Service Worker。network-first キャッシュ（通常リロードで最新が反映される） |
 | `manifest.webmanifest` | PWAマニフェスト（ホーム画面追加時の名前・アイコン・テーマ色） |
 | `icons/*.png` | PWA・apple-touch用アイコン（スクリプト生成のフラットアイコン。手で編集しない） |
+| `.nojekyll` | GitHub Pagesで不要なJekyll処理を無効化し、静的ファイルをそのまま公開するための空ファイル |
 | `cloudflare/worker-openai-proxy.js` | Cloudflare Worker のコード。AIプロキシ＋デバッグログ受け口。**デプロイは手動**（オーナーがダッシュボードに貼って Deploy） |
 | `cloudflare/*.md` | Worker・AI接続まわりの運用ドキュメント |
 | `gas/Code.gs` | Google Apps Script（Drive同期・カレンダー連携）。**デプロイは手動** |

@@ -3,7 +3,7 @@
 //   index.html 内のインライン <script> と、単体JSファイルの構文を検証する。
 //   使い方: node scripts/check.mjs   （依存パッケージ不要・Node だけで動く）
 //   すべて OK なら終了コード 0、問題があれば 1 を返す。
-import { readFileSync, writeFileSync, mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -29,6 +29,13 @@ function checkSource(label, code, ext) {
 
 // 1) index.html のインライン <script>（src 付きの外部読み込みは除外）
 const html = readFileSync(join(root, 'index.html'), 'utf8');
+const noJekyllPath = join(root, '.nojekyll');
+if (existsSync(noJekyllPath) && readFileSync(noJekyllPath).length === 0) {
+    console.log('OK  GitHub PagesのJekyll処理を無効化');
+} else {
+    failed++;
+    console.error('NG  ルートに空の.nojekyllがありません');
+}
 const scripts = [...html.matchAll(/<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/gi)];
 if (scripts.length === 0) {
     console.error('NG  index.html: インライン <script> が見つかりません');
