@@ -340,17 +340,26 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
                     <div id="conflict-list" class="space-y-4"></div>
                 </section>
 
-                <div class="mt-auto pt-8 border-t border-zinc-100">
-                    <button id="completed-toggle" type="button" onclick="toggleCompletedSection()" class="w-full flex items-center justify-between gap-3 mb-5 px-1 opacity-60 hover:opacity-100 transition-opacity text-left" aria-expanded="true" aria-controls="completed-task-list">
+                <section class="mt-auto pt-8" aria-label="完了したタスクの格納ボックス">
+                    <button id="completed-toggle" type="button" onclick="toggleCompletedSection()" class="w-full flex items-center justify-between gap-3 p-4 rounded-2xl border border-zinc-200 bg-zinc-50/80 hover:bg-zinc-50 hover:shadow transition-all active:scale-95 text-left" aria-expanded="false" aria-controls="completed-task-list" aria-describedby="completed-toggle-description">
                         <span class="flex items-center gap-3 min-w-0">
-                            <span class="w-2 h-2 rounded-full bg-emerald-500 shrink-0"></span>
-                            <span class="text-sm font-bold text-zinc-500 tracking-wide">完了済み</span>
-                            <span id="completed-count" class="shrink-0 inline-flex items-center justify-center min-w-[1.25rem] h-5 px-1.5 rounded-full bg-zinc-200 text-zinc-600 text-[11px] font-bold">0</span>
+                            <span class="w-10 h-10 rounded-2xl bg-violet-50 text-violet-600 flex items-center justify-center shrink-0" aria-hidden="true">
+                                <i data-lucide="archive" class="w-5 h-5"></i>
+                            </span>
+                            <span class="min-w-0">
+                                <span class="flex items-center gap-2">
+                                    <span class="text-sm font-bold text-zinc-800 tracking-wide">完了したタスク</span>
+                                    <span id="completed-count" class="shrink-0 inline-flex items-center justify-center min-w-[1.25rem] h-5 px-1.5 rounded-full bg-zinc-200 text-zinc-600 text-[11px] font-bold">0件</span>
+                                </span>
+                                <span id="completed-toggle-description" class="block text-[11px] text-zinc-500 mt-1">タップして表示</span>
+                            </span>
                         </span>
-                        <i id="completed-chevron" data-lucide="chevron-down" class="w-4 h-4 text-zinc-500 shrink-0 transition-transform duration-200" aria-hidden="true"></i>
+                        <span class="w-8 h-8 rounded-full bg-white border border-zinc-200 flex items-center justify-center shrink-0" aria-hidden="true">
+                            <i id="completed-chevron" data-lucide="chevron-down" class="w-4 h-4 text-zinc-500 transition-transform duration-200"></i>
+                        </span>
                     </button>
-                    <div id="completed-task-list" class="space-y-3 opacity-70"><div class="text-xs font-medium text-zinc-400 py-6 text-center">完了したタスクはまだありません。</div></div>
-                </div>
+                    <div id="completed-task-list" class="mt-4 space-y-3 opacity-70" hidden><div class="text-xs font-medium text-zinc-400 py-6 text-center">完了したタスクはまだありません。</div></div>
+                </section>
 
             </div>
         </main>
@@ -637,7 +646,7 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
         // - pull: 起動時・復帰時・同期アイコンクリック時に取得し、削除優先でローカルへ反映
 
         // ---- State ----
-        const APP_BUILD = '2026-07-12-sync-loop-guard';
+        const APP_BUILD = '2026-07-17-completed-task-box';
         const SW_CACHE_NAME = 'taskjournal-cache-v7';
         const SYNC_ACK_MISS_LIMIT = 3;
         const SYNC_RECOVERY_MAX = 1;
@@ -667,8 +676,11 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
         let editingTaskLogs = [];
         let activeGenreFilters = new Set(); // 空=すべて。要素は ジャンルID または '__none__'(未分類)
         const COMPLETED_COLLAPSE_KEY = 'taskjournal:completedCollapsed';
-        let completedCollapsed = false;
-        try { completedCollapsed = localStorage.getItem(COMPLETED_COLLAPSE_KEY) === 'true'; } catch { /* 保存不可でも開閉は使える */ }
+        let completedCollapsed = true;
+        try {
+            const storedCompletedState = localStorage.getItem(COMPLETED_COLLAPSE_KEY);
+            if (storedCompletedState !== null) completedCollapsed = storedCompletedState === 'true';
+        } catch { /* 保存不可でも開閉は使える */ }
         // 表示テーマ（auto/light/dark）。UI状態なのでlocalStorageに保存。
         const THEME_KEY = 'taskjournal:theme';
         let themePreference = 'auto';
@@ -3361,10 +3373,12 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
             const list = document.getElementById('completed-task-list');
             const toggle = document.getElementById('completed-toggle');
             const chevron = document.getElementById('completed-chevron');
+            const description = document.getElementById('completed-toggle-description');
             if (!list || !toggle) return;
             list.hidden = completedCollapsed;
             toggle.setAttribute('aria-expanded', String(!completedCollapsed));
-            toggle.title = completedCollapsed ? '完了済みタスクを展開' : '完了済みタスクを折りたたむ';
+            toggle.title = completedCollapsed ? '完了したタスクを表示' : '完了したタスクを閉じる';
+            if (description) description.textContent = completedCollapsed ? 'タップして表示' : 'タップして閉じる';
             if (chevron) chevron.style.transform = completedCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)';
         }
 
@@ -3437,7 +3451,7 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
             const acEl = document.getElementById('active-count');
             if (acEl) acEl.textContent = activeTasks.length;
             const ccEl = document.getElementById('completed-count');
-            if (ccEl) ccEl.textContent = doneTasks.length;
+            if (ccEl) ccEl.textContent = `${doneTasks.length}件`;
 
             if (activeTasks.length === 0) {
                 const msg = isSearching
