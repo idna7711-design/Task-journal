@@ -10,7 +10,7 @@
  * 注意: タスクや設定(APIキー等)は IndexedDB に保存されており、このキャッシュとは無関係。
  *       キャッシュを消してもユーザーデータは消えない。
  */
-const CACHE = 'taskjournal-cache-v8';
+const CACHE = 'taskjournal-cache-v9';
 const CORE_ASSETS = [
     './',
     './index.html',
