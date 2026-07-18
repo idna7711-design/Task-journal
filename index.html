@@ -103,6 +103,21 @@ body {
 /* トーストもセーフエリアの内側に出す */
 .app-toast { top: calc(1rem + env(safe-area-inset-top)); }
 
+/* 完了・削除の格納ボックスはスマートフォンでも常に横並びにする。 */
+.storage-box-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.75rem;
+}
+.storage-box-button {
+    min-height: 7rem;
+    padding: 0.75rem;
+}
+@media (max-width: 380px) {
+    .storage-box-grid { gap: 0.5rem; }
+    .storage-box-button { padding: 0.625rem; }
+}
+
 /* キーボード操作時だけ見えるフォーカスリング（マウス操作では出ない） */
 :focus-visible { outline: 2px solid #c05828; outline-offset: 2px; border-radius: 6px; }
 
@@ -340,25 +355,46 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
                     <div id="conflict-list" class="space-y-4"></div>
                 </section>
 
-                <section class="mt-auto pt-8" aria-label="完了したタスクの格納ボックス">
-                    <button id="completed-toggle" type="button" onclick="toggleCompletedSection()" class="w-full flex items-center justify-between gap-3 p-4 rounded-2xl border border-zinc-200 bg-zinc-50/80 hover:bg-zinc-50 hover:shadow transition-all active:scale-95 text-left" aria-expanded="false" aria-controls="completed-task-list" aria-describedby="completed-toggle-description">
-                        <span class="flex items-center gap-3 min-w-0">
-                            <span class="w-10 h-10 rounded-2xl bg-violet-50 text-violet-600 flex items-center justify-center shrink-0" aria-hidden="true">
-                                <i data-lucide="archive" class="w-5 h-5"></i>
-                            </span>
-                            <span class="min-w-0">
-                                <span class="flex items-center gap-2">
-                                    <span class="text-sm font-bold text-zinc-800 tracking-wide">完了したタスク</span>
-                                    <span id="completed-count" class="shrink-0 inline-flex items-center justify-center min-w-[1.25rem] h-5 px-1.5 rounded-full bg-zinc-200 text-zinc-600 text-[11px] font-bold">0件</span>
+                <section class="mt-auto pt-8" aria-label="タスク格納ボックス">
+                    <div id="task-storage-boxes" class="storage-box-grid">
+                        <button id="completed-toggle" type="button" onclick="toggleCompletedSection()" class="storage-box-button w-full flex flex-col justify-between rounded-2xl border border-zinc-200 bg-zinc-50/80 hover:bg-zinc-50 hover:shadow transition-all active:scale-95 text-left" aria-label="完了したタスクの格納ボックス" aria-expanded="false" aria-controls="completed-task-list" aria-describedby="completed-toggle-description">
+                            <span class="flex items-center justify-between gap-2 w-full">
+                                <span class="w-10 h-10 rounded-2xl bg-violet-50 text-violet-600 flex items-center justify-center shrink-0" aria-hidden="true">
+                                    <i data-lucide="archive" class="w-5 h-5"></i>
                                 </span>
-                                <span id="completed-toggle-description" class="block text-[11px] text-zinc-500 mt-1">タップして表示</span>
+                                <span class="w-8 h-8 rounded-full bg-white border border-zinc-200 flex items-center justify-center shrink-0" aria-hidden="true">
+                                    <i id="completed-chevron" data-lucide="chevron-down" class="w-4 h-4 text-zinc-500 transition-transform duration-200"></i>
+                                </span>
                             </span>
-                        </span>
-                        <span class="w-8 h-8 rounded-full bg-white border border-zinc-200 flex items-center justify-center shrink-0" aria-hidden="true">
-                            <i id="completed-chevron" data-lucide="chevron-down" class="w-4 h-4 text-zinc-500 transition-transform duration-200"></i>
-                        </span>
-                    </button>
-                    <div id="completed-task-list" class="mt-4 space-y-3 opacity-70" hidden><div class="text-xs font-medium text-zinc-400 py-6 text-center">完了したタスクはまだありません。</div></div>
+                            <span class="block min-w-0 mt-2">
+                                <span class="flex items-center gap-1.5">
+                                    <span class="text-xs font-bold text-zinc-800 tracking-wide">完了したタスク</span>
+                                    <span id="completed-count" class="shrink-0 inline-flex items-center justify-center h-5 px-1.5 rounded-full bg-zinc-200 text-zinc-600 text-[10px] font-bold">0件</span>
+                                </span>
+                                <span id="completed-toggle-description" class="block text-[10px] text-zinc-500 mt-1">タップして表示</span>
+                            </span>
+                        </button>
+
+                        <button id="deleted-toggle" type="button" onclick="toggleDeletedSection()" class="storage-box-button w-full flex flex-col justify-between rounded-2xl border border-zinc-200 bg-zinc-50/80 hover:bg-zinc-50 hover:shadow transition-all active:scale-95 text-left" aria-label="削除したタスクの格納ボックス" aria-expanded="false" aria-controls="deleted-task-list" aria-describedby="deleted-toggle-description">
+                            <span class="flex items-center justify-between gap-2 w-full">
+                                <span class="w-10 h-10 rounded-2xl bg-rose-50 text-rose-500 flex items-center justify-center shrink-0" aria-hidden="true">
+                                    <i data-lucide="trash-2" class="w-5 h-5"></i>
+                                </span>
+                                <span class="w-8 h-8 rounded-full bg-white border border-zinc-200 flex items-center justify-center shrink-0" aria-hidden="true">
+                                    <i id="deleted-chevron" data-lucide="chevron-down" class="w-4 h-4 text-zinc-500 transition-transform duration-200"></i>
+                                </span>
+                            </span>
+                            <span class="block min-w-0 mt-2">
+                                <span class="flex items-center gap-1.5">
+                                    <span class="text-xs font-bold text-zinc-800 tracking-wide">削除したタスク</span>
+                                    <span id="deleted-count" class="shrink-0 inline-flex items-center justify-center h-5 px-1.5 rounded-full bg-zinc-200 text-zinc-600 text-[10px] font-bold">0件</span>
+                                </span>
+                                <span id="deleted-toggle-description" class="block text-[10px] text-zinc-500 mt-1">この端末・30日保存</span>
+                            </span>
+                        </button>
+                    </div>
+                    <div id="completed-task-list" class="mt-4 space-y-3 opacity-70" aria-live="polite" hidden><div class="text-xs font-medium text-zinc-400 py-6 text-center">完了したタスクはまだありません。</div></div>
+                    <div id="deleted-task-list" class="mt-4 space-y-3" aria-live="polite" hidden><div class="text-xs font-medium text-zinc-400 py-6 text-center">この端末で削除したタスクはありません。</div></div>
                 </section>
 
             </div>
@@ -646,8 +682,8 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
         // - pull: 起動時・復帰時・同期アイコンクリック時に取得し、削除優先でローカルへ反映
 
         // ---- State ----
-        const APP_BUILD = '2026-07-17-completed-task-box';
-        const SW_CACHE_NAME = 'taskjournal-cache-v7';
+        const APP_BUILD = '2026-07-18-deleted-task-box';
+        const SW_CACHE_NAME = 'taskjournal-cache-v8';
         const SYNC_ACK_MISS_LIMIT = 3;
         const SYNC_RECOVERY_MAX = 1;
         const SYNC_RECOVERY_ARCHIVE_LIMIT = 50;
@@ -658,6 +694,7 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
         let taskConflicts = [];
         let syncOutbox = [];
         let syncRecoveryArchive = [];
+        let deletedTaskArchive = [];
         let settings = {
             webhookUrl: '',
             syncToken: '',
@@ -676,10 +713,17 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
         let editingTaskLogs = [];
         let activeGenreFilters = new Set(); // 空=すべて。要素は ジャンルID または '__none__'(未分類)
         const COMPLETED_COLLAPSE_KEY = 'taskjournal:completedCollapsed';
+        const DELETED_COLLAPSE_KEY = 'taskjournal:deletedCollapsed';
+        const DELETED_TASK_ARCHIVE_KEY = 'deletedTaskArchive';
+        const DELETED_TASK_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
+        const DELETED_TASK_ARCHIVE_LIMIT = 100;
         let completedCollapsed = true;
+        let deletedCollapsed = true;
         try {
             const storedCompletedState = localStorage.getItem(COMPLETED_COLLAPSE_KEY);
             if (storedCompletedState !== null) completedCollapsed = storedCompletedState === 'true';
+            const storedDeletedState = localStorage.getItem(DELETED_COLLAPSE_KEY);
+            if (storedDeletedState !== null) deletedCollapsed = storedDeletedState === 'true';
         } catch { /* 保存不可でも開閉は使える */ }
         // 表示テーマ（auto/light/dark）。UI状態なのでlocalStorageに保存。
         const THEME_KEY = 'taskjournal:theme';
@@ -1122,14 +1166,20 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
         const dbGetMeta = (key) => idb(store('meta', 'readonly').get(key));
         const dbPutMeta = (obj) => enqueueDbWrite(`meta.put:${obj && obj.key ? obj.key : 'unknown'}`, () => idb(store('meta', 'readwrite').put(obj)));
 
-        function dbPersistLocalMutation(task, operation, resolvesConflictId = '') {
+        function dbPersistLocalMutation(task, operation, resolvesConflictId = '', options = {}) {
             return enqueueDbWrite(`mutation.persist:${operation}`, () => new Promise((resolve, reject) => {
                 const tx = db.transaction(['tasks', 'meta'], 'readwrite');
+                let nextOutbox = null;
+                let nextDeletedArchive = null;
+                let deletedArchiveId = '';
                 tx.oncomplete = () => {
+                    if (nextOutbox) syncOutbox = nextOutbox;
+                    if (nextDeletedArchive) deletedTaskArchive = nextDeletedArchive;
                     renderSyncRecoveryState();
-                    resolve();
+                    resolve({ deletedArchiveId });
                 };
                 tx.onerror = () => reject(tx.error);
+                tx.onabort = () => reject(tx.error || new Error('IndexedDB transaction aborted'));
                 const taskStore = tx.objectStore('tasks');
                 const metaStore = tx.objectStore('meta');
                 const request = metaStore.get('syncOutbox');
@@ -1137,25 +1187,52 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
                 request.onsuccess = () => {
                     const items = normalizeOutbox(request.result && request.result.items)
                         .filter(item => !(item.taskId === task.id && item.blocked));
-                    const previous = [...items].reverse().find(item => item.taskId === task.id);
-                    const mutation = {
-                        mutationId: uid(),
-                        taskId: task.id,
-                        operation,
-                        baseVersion: Number(task.serverVersion) || 0,
-                        parentMutationId: previous ? previous.mutationId : (task.lastMutationId || ''),
-                        resolvesConflictId,
-                        task: { ...normalizeTask(task), deleted: operation === 'delete' },
-                        createdAt: now(),
-                        ackMisses: 0,
-                        recoveryCount: 0,
-                        blocked: false
+                    const persistMutation = (archiveItems = null) => {
+                        const previous = [...items].reverse().find(item => item.taskId === task.id);
+                        const mutation = {
+                            mutationId: uid(),
+                            taskId: task.id,
+                            operation,
+                            baseVersion: Number(task.serverVersion) || 0,
+                            parentMutationId: previous ? previous.mutationId : (task.lastMutationId || ''),
+                            resolvesConflictId,
+                            task: { ...normalizeTask(task), deleted: operation === 'delete' },
+                            createdAt: now(),
+                            ackMisses: 0,
+                            recoveryCount: 0,
+                            blocked: false
+                        };
+                        items.push(mutation);
+                        nextOutbox = items;
+                        metaStore.put({ key: 'syncOutbox', items });
+                        if (archiveItems) {
+                            nextDeletedArchive = archiveItems;
+                            metaStore.put({ key: DELETED_TASK_ARCHIVE_KEY, items: archiveItems });
+                        }
+                        if (operation === 'delete') taskStore.delete(task.id);
+                        else taskStore.put(task);
                     };
-                    items.push(mutation);
-                    syncOutbox = items;
-                    metaStore.put({ key: 'syncOutbox', items });
-                    if (operation === 'delete') taskStore.delete(task.id);
-                    else taskStore.put(task);
+
+                    const removeArchiveId = String(options.removeDeletedArchiveId || '');
+                    if (operation !== 'delete' && !removeArchiveId) {
+                        persistMutation();
+                        return;
+                    }
+
+                    const archiveRequest = metaStore.get(DELETED_TASK_ARCHIVE_KEY);
+                    archiveRequest.onerror = () => reject(archiveRequest.error);
+                    archiveRequest.onsuccess = () => {
+                        let archiveItems = normalizeDeletedTaskArchive(archiveRequest.result && archiveRequest.result.items);
+                        if (operation === 'delete') {
+                            const entry = createDeletedTaskArchiveEntry(task);
+                            deletedArchiveId = entry.archiveId;
+                            archiveItems = normalizeDeletedTaskArchive(archiveItems.concat(entry));
+                        }
+                        if (removeArchiveId) {
+                            archiveItems = archiveItems.filter(item => item.archiveId !== removeArchiveId);
+                        }
+                        persistMutation(archiveItems);
+                    };
                 };
             }));
         }
@@ -1304,6 +1381,44 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
                 serverVersion: Number.isFinite(t.serverVersion) ? t.serverVersion : 0,
                 lastMutationId: typeof t.lastMutationId === 'string' ? t.lastMutationId : '',
                 deleted: !!t.deleted
+            };
+        }
+
+        function normalizeDeletedTaskArchive(items, referenceTime = Date.now()) {
+            if (!Array.isArray(items)) return [];
+            const byArchiveId = new Map();
+            items.forEach(item => {
+                if (!item || !item.task || !Number.isFinite(Number(item.deletedAt))) return;
+                const archiveId = String(item.archiveId || '');
+                if (!/^[A-Za-z0-9._-]{1,100}$/.test(archiveId)) return;
+                const deletedAt = Number(item.deletedAt);
+                const expiresAt = Number(item.expiresAt) || (deletedAt + DELETED_TASK_RETENTION_MS);
+                if (expiresAt <= referenceTime) return;
+                const originalId = String(item.originalId || item.task.id || '');
+                if (!originalId) return;
+                const task = normalizeTask({
+                    ...item.task,
+                    id: originalId,
+                    logs: Array.isArray(item.task.logs) ? [...item.task.logs] : [],
+                    deleted: false
+                });
+                const existing = byArchiveId.get(archiveId);
+                if (!existing || deletedAt > existing.deletedAt) {
+                    byArchiveId.set(archiveId, { archiveId, originalId, task, deletedAt, expiresAt });
+                }
+            });
+            return Array.from(byArchiveId.values())
+                .sort((a, b) => b.deletedAt - a.deletedAt)
+                .slice(0, DELETED_TASK_ARCHIVE_LIMIT);
+        }
+
+        function createDeletedTaskArchiveEntry(task, deletedAt = now()) {
+            return {
+                archiveId: uid(),
+                originalId: String(task.id),
+                task: normalizeTask({ ...task, logs: [...(task.logs || [])], deleted: false }),
+                deletedAt,
+                expiresAt: deletedAt + DELETED_TASK_RETENTION_MS
             };
         }
 
@@ -2432,18 +2547,28 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
         window.deleteTask = async (id) => {
             const task = tasks.find(x => x.id === id);
             if (!task) return;
+            const snapshot = { ...task, logs: [...(task.logs || [])] };
             tasks = tasks.filter(x => x.id !== id);
-            await dbPersistLocalMutation(task, 'delete');
+            let result;
+            try {
+                result = await dbPersistLocalMutation(task, 'delete');
+            } catch (err) {
+                tasks.push(snapshot);
+                sortTasks();
+                render();
+                console.error('Task deletion failed', { name: err && err.name, message: err && err.message });
+                showToast('削除できませんでした。タスクは元の場所に戻しました。', 'error');
+                return;
+            }
             render();
             triggerDriveSync();
-            const snapshot = { ...task, logs: [...(task.logs || [])] };
-            showUndoToast(`「${snapshot.text}」を削除しました`, () => undoDeleteTask(snapshot));
+            showUndoToast(`「${snapshot.text}」を削除しました`, () => undoDeleteTask(snapshot, result.deletedArchiveId));
         };
 
         // 削除の取り消し。同期の墓標(tombstone)が旧IDに残るため、
         // 同じIDで復活させると次回同期で再び消えてしまう。新しいIDの
         // 新規タスクとして作り直すことで、全端末で安全に復元される。
-        async function undoDeleteTask(original) {
+        async function undoDeleteTask(original, deletedArchiveId = '') {
             const restored = normalizeTask({
                 ...original,
                 id: uid(),
@@ -2454,13 +2579,50 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
                 logs: [...(original.logs || []), `${getTimeString()} ↩ 削除を取り消しました`],
                 updatedAt: now()
             });
+            try {
+                await dbPersistLocalMutation(restored, 'create', '', { removeDeletedArchiveId: deletedArchiveId });
+            } catch (err) {
+                console.error('Deleted task restore failed', { name: err && err.name, message: err && err.message });
+                showToast('復元できませんでした。削除ボックスには残っています。', 'error');
+                return false;
+            }
             tasks.push(restored);
-            await dbPersistLocalMutation(restored, 'create');
             sortTasks();
             render();
             triggerDriveSync();
             showToast('タスクを元に戻しました。', 'success');
+            return true;
         }
+
+        window.restoreDeletedTask = async (archiveId) => {
+            const entry = deletedTaskArchive.find(item => item.archiveId === archiveId);
+            if (!entry) {
+                showToast('復元するタスクが見つかりません。', 'error');
+                return;
+            }
+            await undoDeleteTask(entry.task, entry.archiveId);
+        };
+
+        window.permanentlyDeleteArchivedTask = async (archiveId) => {
+            const entry = deletedTaskArchive.find(item => item.archiveId === archiveId);
+            if (!entry) return;
+            const ok = await showConfirm({
+                title: `「${entry.task.text || '無題のタスク'}」を完全に削除しますか？`,
+                message: 'この端末にある復元用コピーを削除します。この操作は取り消せません。',
+                confirmLabel: '完全に削除'
+            });
+            if (!ok) return;
+            const nextArchive = deletedTaskArchive.filter(item => item.archiveId !== archiveId);
+            try {
+                await dbPutMeta({ key: DELETED_TASK_ARCHIVE_KEY, items: nextArchive });
+                deletedTaskArchive = nextArchive;
+                render();
+                showToast('復元用コピーを完全に削除しました。', 'success');
+            } catch (err) {
+                console.error('Deleted task purge failed', { name: err && err.name, message: err && err.message });
+                showToast('完全に削除できませんでした。もう一度お試しください。', 'error');
+            }
+        };
 
         function formatToGoogleCalendarDate(datetimeLocalStr) {
             if (!datetimeLocalStr) return '';
@@ -3388,6 +3550,61 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
             applyCompletedSectionState();
         };
 
+        function applyDeletedSectionState() {
+            const list = document.getElementById('deleted-task-list');
+            const toggle = document.getElementById('deleted-toggle');
+            const chevron = document.getElementById('deleted-chevron');
+            const description = document.getElementById('deleted-toggle-description');
+            if (!list || !toggle) return;
+            list.hidden = deletedCollapsed;
+            toggle.setAttribute('aria-expanded', String(!deletedCollapsed));
+            toggle.title = deletedCollapsed ? '削除したタスクを表示' : '削除したタスクを閉じる';
+            if (description) description.textContent = deletedCollapsed ? 'この端末・30日保存' : 'タップして閉じる';
+            if (chevron) chevron.style.transform = deletedCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)';
+        }
+
+        window.toggleDeletedSection = () => {
+            deletedCollapsed = !deletedCollapsed;
+            try { localStorage.setItem(DELETED_COLLAPSE_KEY, String(deletedCollapsed)); } catch { /* 保存不可でも開閉は続ける */ }
+            applyDeletedSectionState();
+        };
+
+        function formatDeletedAt(value) {
+            const date = new Date(value);
+            if (Number.isNaN(date.getTime())) return '削除日時不明';
+            return date.toLocaleString('ja-JP', {
+                year: 'numeric', month: '2-digit', day: '2-digit',
+                hour: '2-digit', minute: '2-digit'
+            });
+        }
+
+        function createDeletedTaskHTML(entry) {
+            const task = entry.task;
+            const archiveId = entry.archiveId;
+            const title = escapeHtml(task.text || '無題のタスク');
+            const ariaTitle = escapeHtml(task.text || '無題のタスク');
+            return `<article class="rounded-2xl border border-zinc-200 bg-zinc-50/50 p-4" data-deleted-archive-id="${archiveId}">
+                <div class="flex items-start gap-3">
+                    <span class="w-10 h-10 rounded-2xl bg-rose-50 text-rose-500 flex items-center justify-center shrink-0" aria-hidden="true">
+                        <i data-lucide="trash-2" class="w-5 h-5"></i>
+                    </span>
+                    <div class="min-w-0 flex-1">
+                        <p class="text-sm font-bold text-zinc-700" style="text-decoration:line-through;">${title}</p>
+                        <p class="text-[11px] text-zinc-500 mt-1">${escapeHtml(formatDeletedAt(entry.deletedAt))} に削除</p>
+                        <p class="text-[10px] text-zinc-400 mt-1">この端末に30日間保存</p>
+                    </div>
+                </div>
+                <div class="flex justify-end gap-2 mt-4 pt-4 border-t border-zinc-200">
+                    <button type="button" onclick="restoreDeletedTask('${archiveId}')" class="flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-violet-700 bg-violet-50 hover:bg-violet-100 rounded-xl transition-colors" aria-label="${ariaTitle}を復元">
+                        <i data-lucide="rotate-ccw" class="w-4 h-4"></i>復元
+                    </button>
+                    <button type="button" onclick="permanentlyDeleteArchivedTask('${archiveId}')" class="flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-rose-500 bg-rose-50 hover:bg-rose-100 rounded-xl transition-colors" aria-label="${ariaTitle}を完全に削除">
+                        <i data-lucide="trash-2" class="w-4 h-4"></i>完全削除
+                    </button>
+                </div>
+            </article>`;
+        }
+
         // 検索クエリ（本文・メモの部分一致）にタスクが一致するか
         function matchesSearch(t) {
             if (!searchQuery) return true;
@@ -3434,8 +3651,10 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
         function render() {
             const activeList = document.getElementById('active-task-list');
             const completedList = document.getElementById('completed-task-list');
+            const deletedList = document.getElementById('deleted-task-list');
             activeList.innerHTML = '';
             completedList.innerHTML = '';
+            deletedList.innerHTML = '';
 
             renderGenreFilter();
             renderConflicts();
@@ -3452,6 +3671,8 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
             if (acEl) acEl.textContent = activeTasks.length;
             const ccEl = document.getElementById('completed-count');
             if (ccEl) ccEl.textContent = `${doneTasks.length}件`;
+            const dcEl = document.getElementById('deleted-count');
+            if (dcEl) dcEl.textContent = `${deletedTaskArchive.length}件`;
 
             if (activeTasks.length === 0) {
                 const msg = isSearching
@@ -3476,8 +3697,14 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
             } else {
                 doneTasks.forEach(task => { completedList.innerHTML += createTaskHTML(task); });
             }
+            if (deletedTaskArchive.length === 0) {
+                deletedList.innerHTML = '<div class="text-xs font-medium text-zinc-400 py-6 text-center">この端末で削除したタスクはありません。</div>';
+            } else {
+                deletedTaskArchive.forEach(entry => { deletedList.innerHTML += createDeletedTaskHTML(entry); });
+            }
             lucide.createIcons();
             applyCompletedSectionState();
+            applyDeletedSectionState();
         }
 
         // ---- Init ----
@@ -3597,6 +3824,7 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
 
             lucide.createIcons();
             applyCompletedSectionState();
+            applyDeletedSectionState();
 
             try {
                 db = await openDB();
@@ -3644,6 +3872,13 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
                 taskConflicts = normalizeConflicts(conflictMeta && conflictMeta.items);
                 const outboxMeta = await dbGetMeta('syncOutbox');
                 syncOutbox = normalizeOutbox(outboxMeta && outboxMeta.items);
+                const deletedArchiveMeta = await dbGetMeta(DELETED_TASK_ARCHIVE_KEY);
+                const storedDeletedArchive = Array.isArray(deletedArchiveMeta && deletedArchiveMeta.items)
+                    ? deletedArchiveMeta.items : [];
+                deletedTaskArchive = normalizeDeletedTaskArchive(storedDeletedArchive);
+                if (deletedTaskArchive.length !== storedDeletedArchive.length) {
+                    await dbPutMeta({ key: DELETED_TASK_ARCHIVE_KEY, items: deletedTaskArchive });
+                }
                 const recoveryArchiveMeta = await dbGetMeta('syncRecoveryArchive');
                 syncRecoveryArchive = normalizeRecoveryArchive(recoveryArchiveMeta && recoveryArchiveMeta.items);
                 const migrationMeta = await dbGetMeta(SYNC_V3_MIGRATION_META_KEY);

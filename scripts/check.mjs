@@ -267,6 +267,33 @@ for (const requiredCompletedBoxFeature of [
     if (indexHtml.includes(requiredCompletedBoxFeature)) console.log(`OK  完了タスク格納ボックス: ${requiredCompletedBoxFeature}`);
     else { failed++; console.error(`NG  完了タスク格納ボックスが不完全です: ${requiredCompletedBoxFeature}`); }
 }
+for (const requiredDeletedBoxFeature of [
+    'id="task-storage-boxes" class="storage-box-grid"',
+    'aria-label="削除したタスクの格納ボックス"',
+    'aria-describedby="deleted-toggle-description"',
+    "const DELETED_TASK_ARCHIVE_KEY = 'deletedTaskArchive';",
+    'const DELETED_TASK_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;',
+    'function normalizeDeletedTaskArchive(',
+    '.sort((a, b) => b.deletedAt - a.deletedAt)',
+    '.slice(0, DELETED_TASK_ARCHIVE_LIMIT);',
+    'removeDeletedArchiveId: deletedArchiveId',
+    'window.restoreDeletedTask = async (archiveId) =>',
+    'window.permanentlyDeleteArchivedTask = async (archiveId) =>',
+    "const title = escapeHtml(task.text || '無題のタスク');",
+    "description.textContent = deletedCollapsed ? 'この端末・30日保存' : 'タップして閉じる';",
+    'dcEl.textContent = `${deletedTaskArchive.length}件`;',
+]) {
+    if (indexHtml.includes(requiredDeletedBoxFeature)) console.log(`OK  削除タスク格納ボックス: ${requiredDeletedBoxFeature}`);
+    else { failed++; console.error(`NG  削除タスク格納ボックスが不完全です: ${requiredDeletedBoxFeature}`); }
+}
+const serviceWorkerCode = readFileSync(join(root, 'sw.js'), 'utf8');
+if (indexHtml.includes("const SW_CACHE_NAME = 'taskjournal-cache-v8';")
+    && serviceWorkerCode.includes("const CACHE = 'taskjournal-cache-v8';")) {
+    console.log('OK  Service Workerキャッシュ名が一致');
+} else {
+    failed++;
+    console.error('NG  Service Workerキャッシュ名が一致していません');
+}
 if (!indexHtml.includes('id="trivia-bar"') && !indexHtml.includes('id="trivia-modal"')) console.log('OK  豆知識UIを撤去');
 else { failed++; console.error('NG  豆知識UIが残っています'); }
 if (indexHtml.includes('src="icons/icon-192.png"')) console.log('OK  ヘッダーに選定アイコンを表示');
