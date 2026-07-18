@@ -286,9 +286,21 @@ for (const requiredDeletedBoxFeature of [
     if (indexHtml.includes(requiredDeletedBoxFeature)) console.log(`OK  削除タスク格納ボックス: ${requiredDeletedBoxFeature}`);
     else { failed++; console.error(`NG  削除タスク格納ボックスが不完全です: ${requiredDeletedBoxFeature}`); }
 }
+for (const requiredExclusiveStorageBoxFeature of [
+    'function persistTaskStorageBoxStates()',
+    'if (!completedCollapsed && !deletedCollapsed)',
+    'if (willOpen) deletedCollapsed = true;',
+    'if (willOpen) completedCollapsed = true;',
+    'persistTaskStorageBoxStates();',
+    'applyCompletedSectionState();',
+    'applyDeletedSectionState();',
+]) {
+    if (indexHtml.includes(requiredExclusiveStorageBoxFeature)) console.log(`OK  格納ボックス排他開閉: ${requiredExclusiveStorageBoxFeature}`);
+    else { failed++; console.error(`NG  格納ボックス排他開閉が不完全です: ${requiredExclusiveStorageBoxFeature}`); }
+}
 const serviceWorkerCode = readFileSync(join(root, 'sw.js'), 'utf8');
-if (indexHtml.includes("const SW_CACHE_NAME = 'taskjournal-cache-v8';")
-    && serviceWorkerCode.includes("const CACHE = 'taskjournal-cache-v8';")) {
+if (indexHtml.includes("const SW_CACHE_NAME = 'taskjournal-cache-v9';")
+    && serviceWorkerCode.includes("const CACHE = 'taskjournal-cache-v9';")) {
     console.log('OK  Service Workerキャッシュ名が一致');
 } else {
     failed++;

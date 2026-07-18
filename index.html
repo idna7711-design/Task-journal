@@ -682,8 +682,8 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
         // - pull: 起動時・復帰時・同期アイコンクリック時に取得し、削除優先でローカルへ反映
 
         // ---- State ----
-        const APP_BUILD = '2026-07-18-deleted-task-box';
-        const SW_CACHE_NAME = 'taskjournal-cache-v8';
+        const APP_BUILD = '2026-07-19-exclusive-task-boxes';
+        const SW_CACHE_NAME = 'taskjournal-cache-v9';
         const SYNC_ACK_MISS_LIMIT = 3;
         const SYNC_RECOVERY_MAX = 1;
         const SYNC_RECOVERY_ARCHIVE_LIMIT = 50;
@@ -719,12 +719,25 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
         const DELETED_TASK_ARCHIVE_LIMIT = 100;
         let completedCollapsed = true;
         let deletedCollapsed = true;
+
+        function persistTaskStorageBoxStates() {
+            try {
+                localStorage.setItem(COMPLETED_COLLAPSE_KEY, String(completedCollapsed));
+                localStorage.setItem(DELETED_COLLAPSE_KEY, String(deletedCollapsed));
+            } catch { /* 保存不可でも開閉は続ける */ }
+        }
+
         try {
             const storedCompletedState = localStorage.getItem(COMPLETED_COLLAPSE_KEY);
             if (storedCompletedState !== null) completedCollapsed = storedCompletedState === 'true';
             const storedDeletedState = localStorage.getItem(DELETED_COLLAPSE_KEY);
             if (storedDeletedState !== null) deletedCollapsed = storedDeletedState === 'true';
         } catch { /* 保存不可でも開閉は使える */ }
+        // 旧バージョンで両方が開いていた場合は、よく使う完了一覧を残して排他状態へ移行する。
+        if (!completedCollapsed && !deletedCollapsed) {
+            deletedCollapsed = true;
+            persistTaskStorageBoxStates();
+        }
         // 表示テーマ（auto/light/dark）。UI状態なのでlocalStorageに保存。
         const THEME_KEY = 'taskjournal:theme';
         let themePreference = 'auto';
@@ -3545,9 +3558,12 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
         }
 
         window.toggleCompletedSection = () => {
+            const willOpen = completedCollapsed;
             completedCollapsed = !completedCollapsed;
-            try { localStorage.setItem(COMPLETED_COLLAPSE_KEY, String(completedCollapsed)); } catch { /* 保存不可でも開閉は続ける */ }
+            if (willOpen) deletedCollapsed = true;
+            persistTaskStorageBoxStates();
             applyCompletedSectionState();
+            applyDeletedSectionState();
         };
 
         function applyDeletedSectionState() {
@@ -3564,8 +3580,11 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
         }
 
         window.toggleDeletedSection = () => {
+            const willOpen = deletedCollapsed;
             deletedCollapsed = !deletedCollapsed;
-            try { localStorage.setItem(DELETED_COLLAPSE_KEY, String(deletedCollapsed)); } catch { /* 保存不可でも開閉は続ける */ }
+            if (willOpen) completedCollapsed = true;
+            persistTaskStorageBoxStates();
+            applyCompletedSectionState();
             applyDeletedSectionState();
         };
 
