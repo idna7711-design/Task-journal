@@ -96,6 +96,330 @@
 <style>
 /* ===== UX強化スタイル（precompiled CSS の後に置き、上書きを効かせる） ===== */
 
+/* カレンダー表示はTailwind CDNに依存せず、オフラインでも同じ配置にする。 */
+.calendar-shell {
+    border: 1px solid #e5e7eb;
+    border-radius: 1.5rem;
+    background: #fff;
+    padding: 1rem;
+    box-shadow: 0 10px 28px rgba(17, 24, 39, 0.06);
+}
+.calendar-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+}
+.calendar-title {
+    margin: 0;
+    color: #111827;
+    font-size: 1.05rem;
+    font-weight: 800;
+}
+.calendar-range-title {
+    margin: 0.15rem 0 0;
+    color: #6b7280;
+    font-size: 0.8rem;
+}
+.calendar-controls,
+.calendar-view-modes,
+.calendar-legend,
+.calendar-status-row {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+}
+.calendar-control-button,
+.calendar-mode-button,
+.calendar-refresh-button {
+    min-height: 2.4rem;
+    border: 1px solid #e5e7eb;
+    border-radius: 0.8rem;
+    background: #fff;
+    color: #374151;
+    padding: 0.45rem 0.7rem;
+    font-size: 0.78rem;
+    font-weight: 700;
+}
+.calendar-refresh-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+}
+.calendar-control-button:hover,
+.calendar-mode-button:hover,
+.calendar-refresh-button:hover {
+    border-color: #d06a38;
+    color: #b4532a;
+}
+.calendar-mode-button.is-active {
+    border-color: #111827;
+    background: #111827;
+    color: #fff;
+}
+.calendar-meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.65rem;
+    margin-top: 0.9rem;
+    padding: 0.65rem 0.75rem;
+    border-radius: 0.9rem;
+    background: #faf7f2;
+}
+.calendar-legend-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    color: #6b7280;
+    font-size: 0.72rem;
+    font-weight: 700;
+}
+.calendar-legend-dot {
+    width: 0.55rem;
+    height: 0.55rem;
+    border-radius: 999px;
+}
+.calendar-status {
+    color: #6b7280;
+    font-size: 0.72rem;
+    line-height: 1.45;
+}
+.calendar-status.is-error { color: #b91c1c; }
+.calendar-status.is-success { color: #047857; }
+.calendar-board { margin-top: 0.85rem; }
+.calendar-day-list {
+    display: grid;
+    gap: 0.65rem;
+}
+.calendar-week-grid {
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    gap: 0.5rem;
+}
+.calendar-day-column {
+    min-width: 0;
+    min-height: 10rem;
+    border: 1px solid #e5e7eb;
+    border-radius: 0.9rem;
+    background: #fafafa;
+    padding: 0.55rem;
+}
+.calendar-day-column.is-today {
+    border-color: #ed9b72;
+    background: #fff8f2;
+}
+.calendar-day-heading {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.35rem;
+    margin-bottom: 0.45rem;
+    color: #374151;
+    font-size: 0.7rem;
+    font-weight: 800;
+}
+.calendar-day-heading strong {
+    color: #111827;
+    font-size: 0.95rem;
+}
+.calendar-items {
+    display: grid;
+    gap: 0.4rem;
+}
+.calendar-item {
+    width: 100%;
+    border: 1px solid #e5e7eb;
+    border-left: 0.25rem solid #d06a38;
+    border-radius: 0.7rem;
+    background: #fff;
+    color: #111827;
+    padding: 0.5rem;
+    text-align: left;
+}
+.calendar-item.is-google {
+    border-left-color: var(--event-color, #4285f4);
+    background: #f8fbff;
+}
+.calendar-item.is-completed { opacity: 0.62; }
+.calendar-item-title {
+    display: -webkit-box;
+    overflow: hidden;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    font-size: 0.76rem;
+    font-weight: 800;
+    line-height: 1.35;
+}
+.calendar-item-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.3rem;
+    margin-top: 0.25rem;
+    color: #6b7280;
+    font-size: 0.64rem;
+    line-height: 1.35;
+}
+.calendar-duplicate-badge {
+    border-radius: 999px;
+    background: #fff1d6;
+    color: #9a4d13;
+    padding: 0.08rem 0.35rem;
+    font-weight: 800;
+}
+.calendar-empty {
+    border: 1px dashed #d1d5db;
+    border-radius: 0.85rem;
+    color: #9ca3af;
+    padding: 1.25rem 0.8rem;
+    text-align: center;
+    font-size: 0.78rem;
+}
+.calendar-month-weekdays,
+.calendar-month-grid {
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    gap: 0.3rem;
+}
+.calendar-month-weekday {
+    color: #9ca3af;
+    padding: 0.25rem;
+    text-align: center;
+    font-size: 0.68rem;
+    font-weight: 800;
+}
+.calendar-month-cell {
+    min-height: 7.6rem;
+    overflow: hidden;
+    border: 1px solid #e5e7eb;
+    border-radius: 0.75rem;
+    background: #fff;
+    padding: 0.4rem;
+    text-align: left;
+}
+.calendar-month-cell.is-outside { opacity: 0.42; }
+.calendar-month-cell.is-today {
+    border-color: #d06a38;
+    box-shadow: inset 0 0 0 1px #d06a38;
+}
+.calendar-month-day {
+    display: inline-flex;
+    min-width: 1.55rem;
+    height: 1.55rem;
+    align-items: center;
+    justify-content: center;
+    border-radius: 999px;
+    color: #374151;
+    font-size: 0.72rem;
+    font-weight: 800;
+}
+.calendar-month-cell.is-today .calendar-month-day {
+    background: #d06a38;
+    color: #fff;
+}
+.calendar-month-preview {
+    display: grid;
+    gap: 0.2rem;
+    margin-top: 0.25rem;
+}
+.calendar-month-preview-item {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    gap: 0.25rem;
+    color: #4b5563;
+    font-size: 0.62rem;
+}
+.calendar-month-preview-dot {
+    width: 0.4rem;
+    height: 0.4rem;
+    flex: 0 0 auto;
+    border-radius: 999px;
+    background: #d06a38;
+}
+.calendar-month-preview-dot.is-google {
+    background: var(--event-color, #4285f4);
+}
+.calendar-month-preview-title {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.calendar-month-more {
+    color: #9a4d13;
+    font-size: 0.62rem;
+    font-weight: 800;
+}
+html.dark .calendar-shell,
+html.dark .calendar-control-button,
+html.dark .calendar-mode-button,
+html.dark .calendar-refresh-button,
+html.dark .calendar-month-cell,
+html.dark .calendar-item {
+    border-color: #374151;
+    background: #1f2937;
+    color: #f9fafb;
+}
+html.dark .calendar-title,
+html.dark .calendar-day-heading strong,
+html.dark .calendar-item-title,
+html.dark .calendar-month-day { color: #f9fafb; }
+html.dark .calendar-range-title,
+html.dark .calendar-status,
+html.dark .calendar-legend-item,
+html.dark .calendar-item-meta,
+html.dark .calendar-month-preview-item { color: #d1d5db; }
+html.dark .calendar-meta,
+html.dark .calendar-day-column { background: #111827; }
+html.dark .calendar-day-column { border-color: #374151; }
+html.dark .calendar-day-column.is-today { background: #2c1d16; }
+html.dark .calendar-item.is-google { background: #172033; }
+html.dark .calendar-mode-button.is-active {
+    border-color: #f9fafb;
+    background: #f9fafb;
+    color: #111827;
+}
+@media (max-width: 639px) {
+    .calendar-shell {
+        border-radius: 1.2rem;
+        padding: 0.75rem;
+    }
+    .calendar-toolbar {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+    .calendar-controls,
+    .calendar-view-modes { width: 100%; }
+    .calendar-controls { justify-content: space-between; }
+    .calendar-control-button { flex: 1 1 auto; }
+    .calendar-mode-button { flex: 1 1 0; }
+    .calendar-meta {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+    .calendar-status-row {
+        width: 100%;
+        justify-content: space-between;
+    }
+    .calendar-status { max-width: 75%; }
+    .calendar-week-grid { grid-template-columns: 1fr; }
+    .calendar-day-column { min-height: 0; }
+    .calendar-month-cell {
+        min-height: 4.4rem;
+        padding: 0.25rem;
+    }
+    .calendar-month-preview {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.18rem;
+    }
+    .calendar-month-preview-item { gap: 0; }
+    .calendar-month-preview-title { display: none; }
+    .calendar-month-more { width: 100%; }
+}
+
 /* iPhoneノッチ・下部バー対応: 端末のセーフエリア分だけ余白を足す（非対応端末では0） */
 body {
     margin: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
@@ -273,6 +597,9 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
             </div>
             
             <div class="flex items-center gap-2 md:gap-4">
+                <button id="view-mode-toggle" type="button" class="flex items-center justify-center w-10 h-10 rounded-xl transition-all border border-zinc-200 bg-white text-zinc-500 hover:text-violet-600 hover:bg-violet-50 shadow-sm" aria-label="カレンダーを開く" aria-pressed="false" title="カレンダーを開く">
+                    <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"></rect><path d="M16 3v4M8 3v4M3 10h18"></path></svg>
+                </button>
                 <button id="sync-status" class="flex items-center justify-center w-10 h-10 rounded-xl transition-all cursor-help border text-zinc-400 hover:bg-zinc-50 border-transparent hover:border-zinc-200" title="同期未連携 (同期設定からURLを登録してください)"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="cloud-off" aria-hidden="true" class="lucide lucide-cloud-off w-5 h-5"><path d="M10.94 5.274A7 7 0 0 1 15.71 10h1.79a4.5 4.5 0 0 1 4.222 6.057"></path><path d="M18.796 18.81A4.5 4.5 0 0 1 17.5 19H9A7 7 0 0 1 5.79 5.78"></path><path d="m2 2 20 20"></path></svg></button>
                 
                 <button id="settings-btn" class="text-zinc-600 hover:text-violet-600 hover:bg-violet-50 flex items-center gap-2 bg-white border border-zinc-200 px-4 py-2 rounded-xl font-medium transition-all shadow-sm hover:shadow">
@@ -283,6 +610,7 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
         </header>
 
         <main class="flex flex-col gap-3 md:gap-6">
+            <div id="task-view" class="flex flex-col gap-3 md:gap-6">
 
             <div class="bg-white rounded-2xl md:rounded-[2rem] p-3 md:p-6 shadow-sm border border-zinc-200/60 shrink-0">
                 <form id="task-form">
@@ -398,6 +726,43 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
                 </section>
 
             </div>
+            </div>
+
+            <section id="calendar-view" class="calendar-shell hidden" aria-label="カレンダー表示">
+                <div class="calendar-toolbar">
+                    <div>
+                        <h2 class="calendar-title">カレンダー</h2>
+                        <p id="calendar-range-title" class="calendar-range-title">今週</p>
+                    </div>
+                    <div class="calendar-controls" aria-label="表示する期間を移動">
+                        <button id="calendar-prev" type="button" class="calendar-control-button" aria-label="前へ">
+                            <span aria-hidden="true">&lt;</span>
+                        </button>
+                        <button id="calendar-today" type="button" class="calendar-control-button">今日</button>
+                        <button id="calendar-next" type="button" class="calendar-control-button" aria-label="次へ">
+                            <span aria-hidden="true">&gt;</span>
+                        </button>
+                    </div>
+                    <div class="calendar-view-modes" role="group" aria-label="カレンダーの表示単位">
+                        <button type="button" class="calendar-mode-button" data-calendar-mode="day">日</button>
+                        <button type="button" class="calendar-mode-button" data-calendar-mode="week">週</button>
+                        <button type="button" class="calendar-mode-button" data-calendar-mode="month">月</button>
+                    </div>
+                </div>
+                <div class="calendar-meta">
+                    <div class="calendar-legend" aria-label="予定の種類">
+                        <span class="calendar-legend-item"><span class="calendar-legend-dot" style="background:#d06a38"></span>TaskJournal</span>
+                        <span class="calendar-legend-item"><span class="calendar-legend-dot" style="background:#4285f4"></span>Google</span>
+                    </div>
+                    <div class="calendar-status-row">
+                        <span id="calendar-status" class="calendar-status">TaskJournalの予定を表示しています</span>
+                        <button id="calendar-refresh" type="button" class="calendar-refresh-button">
+                            更新
+                        </button>
+                    </div>
+                </div>
+                <div id="calendar-board" class="calendar-board" aria-live="polite"></div>
+            </section>
         </main>
     </div>
 
@@ -682,13 +1047,19 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
         // - pull: 起動時・復帰時・同期アイコンクリック時に取得し、削除優先でローカルへ反映
 
         // ---- State ----
-        const APP_BUILD = '2026-07-19-exclusive-task-boxes';
-        const SW_CACHE_NAME = 'taskjournal-cache-v9';
+        const APP_BUILD = '2026-07-25-google-calendar-view';
+        const SW_CACHE_NAME = 'taskjournal-cache-v10';
         const SYNC_ACK_MISS_LIMIT = 3;
         const SYNC_RECOVERY_MAX = 1;
         const SYNC_RECOVERY_ARCHIVE_LIMIT = 50;
         const SYNC_QUEUED_RERUN_LIMIT = 3;
         const SYNC_V3_MIGRATION_META_KEY = 'syncV3MigrationCompleted';
+        const APP_VIEW_KEY = 'taskjournal:appView';
+        const CALENDAR_MODE_KEY = 'taskjournal:calendarMode';
+        const CALENDAR_CACHE_META_KEY = 'googleCalendarReadCache';
+        const CALENDAR_TOKEN_CONTEXT = 'TaskJournal calendar read v1';
+        const CALENDAR_CACHE_FRESH_MS = 3 * 60 * 1000;
+        const CALENDAR_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
         let tasks = [];
         let taskTombstones = [];
         let taskConflicts = [];
@@ -719,6 +1090,19 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
         const DELETED_TASK_ARCHIVE_LIMIT = 100;
         let completedCollapsed = true;
         let deletedCollapsed = true;
+        let appView = 'tasks';
+        let calendarMode = window.innerWidth < 640 ? 'day' : 'week';
+        let calendarCursor = new Date();
+        let calendarCache = null;
+        let googleCalendarEvents = [];
+        let calendarCapabilityState = 'unknown';
+        let calendarRequestSequence = 0;
+        let calendarRenderedItems = [];
+        let calendarLoadState = {
+            kind: 'local',
+            message: 'TaskJournalの予定を表示しています',
+            updatedAt: 0
+        };
 
         function persistTaskStorageBoxStates() {
             try {
@@ -742,6 +1126,12 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
         const THEME_KEY = 'taskjournal:theme';
         let themePreference = 'auto';
         try { themePreference = localStorage.getItem(THEME_KEY) || 'auto'; } catch { /* 保存不可なら常にauto */ }
+        try {
+            const storedAppView = localStorage.getItem(APP_VIEW_KEY);
+            if (storedAppView === 'calendar') appView = 'calendar';
+            const storedCalendarMode = localStorage.getItem(CALENDAR_MODE_KEY);
+            if (['day', 'week', 'month'].includes(storedCalendarMode)) calendarMode = storedCalendarMode;
+        } catch { /* 保存不可でも現在の表示は利用できる */ }
         // タスク検索クエリ（永続化しない。ページを開き直すとリセット）
         let searchQuery = '';
         let syncTimeout = null;
@@ -1367,6 +1757,568 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
             return String(s == null ? '' : s).replace(/[&<>"']/g, c =>
                 ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
         }
+
+        // ---- Calendar view (TaskJournal + Google Calendar read-only) ----
+        function calendarStartOfDay(value) {
+            const date = new Date(value);
+            date.setHours(0, 0, 0, 0);
+            return date;
+        }
+        function calendarAddDays(value, amount) {
+            const date = new Date(value);
+            date.setDate(date.getDate() + amount);
+            return date;
+        }
+        function calendarStartOfWeek(value) {
+            const date = calendarStartOfDay(value);
+            const dayFromMonday = (date.getDay() + 6) % 7;
+            return calendarAddDays(date, -dayFromMonday);
+        }
+        function calendarStartOfMonth(value) {
+            const date = calendarStartOfDay(value);
+            date.setDate(1);
+            return date;
+        }
+        function calendarDateKey(value) {
+            const date = new Date(value);
+            const pad = number => String(number).padStart(2, '0');
+            return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+        }
+        function calendarDateFromKey(value) {
+            const match = String(value || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+            if (!match) return null;
+            const date = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+            return Number.isNaN(date.getTime()) || calendarDateKey(date) !== String(value) ? null : date;
+        }
+        function getCalendarVisibleRange() {
+            if (calendarMode === 'day') {
+                const start = calendarStartOfDay(calendarCursor);
+                return { start, end: calendarAddDays(start, 1) };
+            }
+            if (calendarMode === 'month') {
+                const start = calendarStartOfWeek(calendarStartOfMonth(calendarCursor));
+                return { start, end: calendarAddDays(start, 42) };
+            }
+            const start = calendarStartOfWeek(calendarCursor);
+            return { start, end: calendarAddDays(start, 7) };
+        }
+        function safeCalendarColor(value) {
+            return /^#[0-9a-f]{6}$/i.test(String(value || '')) ? String(value) : '#4285f4';
+        }
+        function safeGoogleCalendarUrl(value) {
+            try {
+                const url = new URL(String(value || ''));
+                return url.protocol === 'https:' && url.hostname === 'calendar.google.com' ? url.toString() : '';
+            } catch {
+                return '';
+            }
+        }
+        function normalizeGoogleCalendarEvent(event) {
+            if (!event || typeof event !== 'object') return null;
+            const allDay = !!event.allDay;
+            const start = String(event.start || '');
+            const end = String(event.end || '');
+            if (allDay) {
+                if (!calendarDateFromKey(start) || !calendarDateFromKey(end)) return null;
+            } else {
+                if (Number.isNaN(new Date(start).getTime()) || Number.isNaN(new Date(end).getTime())) return null;
+            }
+            return {
+                key: String(event.key || '').slice(0, 120),
+                source: 'google',
+                title: String(event.title || '（無題の予定）').slice(0, 300),
+                start,
+                end,
+                allDay,
+                calendarName: String(event.calendarName || 'Googleカレンダー').slice(0, 100),
+                color: safeCalendarColor(event.color),
+                openUrl: safeGoogleCalendarUrl(event.openUrl)
+            };
+        }
+        function normalizeCalendarCache(meta) {
+            if (!meta || !Number.isFinite(Number(meta.fetchedAt))) return null;
+            const rangeStart = new Date(meta.rangeStart);
+            const rangeEnd = new Date(meta.rangeEnd);
+            if (Number.isNaN(rangeStart.getTime()) || Number.isNaN(rangeEnd.getTime())) return null;
+            return {
+                fetchedAt: Number(meta.fetchedAt),
+                rangeStart: rangeStart.toISOString(),
+                rangeEnd: rangeEnd.toISOString(),
+                calendarCount: Math.max(0, Number(meta.calendarCount) || 0),
+                partial: !!meta.partial,
+                truncated: !!meta.truncated,
+                events: Array.isArray(meta.events)
+                    ? meta.events.map(normalizeGoogleCalendarEvent).filter(Boolean).slice(0, 300)
+                    : []
+            };
+        }
+        function calendarCacheCovers(range) {
+            if (!calendarCache) return false;
+            return new Date(calendarCache.rangeStart).getTime() <= range.start.getTime()
+                && new Date(calendarCache.rangeEnd).getTime() >= range.end.getTime();
+        }
+        function useCalendarCache(range) {
+            if (!calendarCacheCovers(range)) return false;
+            if (Date.now() - calendarCache.fetchedAt > CALENDAR_CACHE_MAX_AGE_MS) return false;
+            googleCalendarEvents = calendarCache.events;
+            return true;
+        }
+        async function deriveCalendarReadToken(syncToken) {
+            if (!globalThis.crypto || !crypto.subtle) {
+                const error = new Error('CALENDAR_CRYPTO_UNAVAILABLE');
+                error.code = 'CALENDAR_CRYPTO_UNAVAILABLE';
+                throw error;
+            }
+            const encoder = new TextEncoder();
+            const key = await crypto.subtle.importKey(
+                'raw',
+                encoder.encode(syncToken),
+                { name: 'HMAC', hash: 'SHA-256' },
+                false,
+                ['sign']
+            );
+            const signature = new Uint8Array(await crypto.subtle.sign('HMAC', key, encoder.encode(CALENDAR_TOKEN_CONTEXT)));
+            let binary = '';
+            signature.forEach(byte => { binary += String.fromCharCode(byte); });
+            return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+        }
+        async function ensureCalendarReadCapability() {
+            if (calendarCapabilityState === 'ready') return;
+            if (calendarCapabilityState === 'missing') {
+                const error = new Error('CALENDAR_GAS_UPDATE_REQUIRED');
+                error.code = 'CALENDAR_GAS_UPDATE_REQUIRED';
+                throw error;
+            }
+            const result = await postSyncRequest(
+                { action: 'capabilities' },
+                60000,
+                { requestId: createRequestId('calendar-capability'), attempt: 0 }
+            );
+            const capabilities = result.capabilities || {};
+            if (!capabilities.calendarRead || capabilities.calendarTokenDerivation !== 'hmac-sha256-v1') {
+                calendarCapabilityState = 'missing';
+                const error = new Error('CALENDAR_GAS_UPDATE_REQUIRED');
+                error.code = 'CALENDAR_GAS_UPDATE_REQUIRED';
+                throw error;
+            }
+            calendarCapabilityState = 'ready';
+        }
+        async function postCalendarReadRequest(range) {
+            const requestId = createRequestId('calendar-read');
+            const startedAt = performance.now();
+            const calendarToken = await deriveCalendarReadToken(settings.syncToken);
+            console.info('Calendar read started', {
+                requestId,
+                rangeDays: Math.round((range.end.getTime() - range.start.getTime()) / 86400000)
+            });
+            let response;
+            try {
+                response = await fetchWithTimeout(settings.webhookUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                    body: JSON.stringify({
+                        protocolVersion: 3,
+                        action: 'calendar-range',
+                        requestId,
+                        calendarToken,
+                        start: range.start.toISOString(),
+                        end: range.end.toISOString()
+                    })
+                }, 30000);
+            } catch (error) {
+                error.code = error.code || (error.name === 'AbortError' ? 'CALENDAR_TIMEOUT' : 'CALENDAR_NETWORK_ERROR');
+                throw error;
+            }
+            const responseText = await response.text();
+            let result = null;
+            try { result = JSON.parse(responseText); } catch { /* 下で応答形式エラーにする */ }
+            if (!response.ok) {
+                const error = new Error(`CALENDAR_HTTP_${response.status}`);
+                error.code = `CALENDAR_HTTP_${response.status}`;
+                throw error;
+            }
+            if (!result || result.protocolVersion !== 3) {
+                const error = new Error('CALENDAR_PROTOCOL_MISMATCH');
+                error.code = 'CALENDAR_PROTOCOL_MISMATCH';
+                throw error;
+            }
+            if (result.error) {
+                const error = new Error(String(result.error));
+                error.code = String(result.errorCode || result.error);
+                throw error;
+            }
+            const events = Array.isArray(result.events)
+                ? result.events.map(normalizeGoogleCalendarEvent).filter(Boolean).slice(0, 300)
+                : [];
+            console.info('Calendar read completed', {
+                requestId,
+                elapsedMs: Math.round(performance.now() - startedAt),
+                eventCount: events.length,
+                calendarCount: Number(result.calendarCount) || 0,
+                cached: !!result.cached
+            });
+            return {
+                events,
+                calendarCount: Math.max(0, Number(result.calendarCount) || 0),
+                partial: !!result.partial,
+                truncated: !!result.truncated
+            };
+        }
+        function calendarErrorMessage(error, hasCache) {
+            if (error && error.code === 'CALENDAR_GAS_UPDATE_REQUIRED') {
+                return 'Google予定を読むにはGASの更新が必要です。TaskJournalの予定は表示できます。';
+            }
+            if (error && ['CALENDAR_UNAUTHORIZED', 'Unauthorized'].includes(error.code)) {
+                return 'カレンダー専用の認証に失敗しました。GASを再デプロイしてください。';
+            }
+            if (error && error.code === 'CALENDAR_CRYPTO_UNAVAILABLE') {
+                return 'このブラウザでは安全なカレンダー認証を作れません。TaskJournalの予定だけ表示します。';
+            }
+            return hasCache
+                ? 'Google予定を更新できないため、前回取得した予定を表示しています。'
+                : 'Google予定を取得できませんでした。TaskJournalの予定はそのまま使えます。';
+        }
+        async function loadCalendarRange(force = false) {
+            const sequence = ++calendarRequestSequence;
+            const range = getCalendarVisibleRange();
+            const hasCache = useCalendarCache(range);
+            if (!hasCache) googleCalendarEvents = [];
+            if (!isSyncConfigured()) {
+                calendarLoadState = {
+                    kind: 'local',
+                    message: '同期設定後、ここにGoogleカレンダーの予定も表示されます。',
+                    updatedAt: 0
+                };
+                renderCalendarView();
+                return;
+            }
+            if (!navigator.onLine) {
+                calendarLoadState = {
+                    kind: hasCache ? 'stale' : 'error',
+                    message: hasCache
+                        ? 'オフラインのため、前回取得したGoogle予定を表示しています。'
+                        : 'オフラインです。TaskJournalの予定だけ表示しています。',
+                    updatedAt: hasCache ? calendarCache.fetchedAt : 0
+                };
+                renderCalendarView();
+                return;
+            }
+            if (!force && hasCache && Date.now() - calendarCache.fetchedAt <= CALENDAR_CACHE_FRESH_MS) {
+                const cachedWarnings = [];
+                if (calendarCache.truncated) cachedWarnings.push('300件上限のため一部非表示');
+                if (calendarCache.partial) cachedWarnings.push('一部のカレンダーを取得できませんでした');
+                calendarLoadState = {
+                    kind: 'success',
+                    message: cachedWarnings.length
+                        ? `Google予定は最新です。${cachedWarnings.join('・')}。`
+                        : 'Google予定は最新です。',
+                    updatedAt: calendarCache.fetchedAt
+                };
+                renderCalendarView();
+                return;
+            }
+            calendarLoadState = {
+                kind: 'loading',
+                message: 'Googleカレンダーを読み込んでいます...',
+                updatedAt: hasCache ? calendarCache.fetchedAt : 0
+            };
+            renderCalendarView();
+            try {
+                await ensureCalendarReadCapability();
+                const result = await postCalendarReadRequest(range);
+                if (sequence !== calendarRequestSequence) return;
+                googleCalendarEvents = result.events;
+                calendarCache = {
+                    fetchedAt: Date.now(),
+                    rangeStart: range.start.toISOString(),
+                    rangeEnd: range.end.toISOString(),
+                    calendarCount: result.calendarCount,
+                    partial: result.partial,
+                    truncated: result.truncated,
+                    events: result.events
+                };
+                if (db) {
+                    try {
+                        await dbPutMeta({ key: CALENDAR_CACHE_META_KEY, ...calendarCache });
+                    } catch (cacheError) {
+                        console.warn('Calendar local cache write failed', {
+                            name: cacheError && cacheError.name ? cacheError.name : 'Error'
+                        });
+                    }
+                }
+                const warnings = [];
+                if (result.truncated) warnings.push('300件上限のため一部非表示');
+                if (result.partial) warnings.push('一部のカレンダーを取得できませんでした');
+                calendarLoadState = {
+                    kind: 'success',
+                    message: warnings.length
+                        ? `Google予定 ${result.events.length}件。${warnings.join('・')}。`
+                        : `Google予定 ${result.events.length}件を表示しています。`,
+                    updatedAt: calendarCache.fetchedAt
+                };
+            } catch (error) {
+                if (sequence !== calendarRequestSequence) return;
+                useCalendarCache(range);
+                const details = {
+                    code: String(error && error.code || error && error.name || 'CALENDAR_UNKNOWN_ERROR').slice(0, 100),
+                    message: String(error && error.message || '').slice(0, 200),
+                    hasCache,
+                    online: navigator.onLine
+                };
+                console.error('Calendar read failed', details);
+                if (details.code !== 'CALENDAR_GAS_UPDATE_REQUIRED') {
+                    reportDebug('calendar-read failed', JSON.stringify(details));
+                }
+                calendarLoadState = {
+                    kind: hasCache ? 'stale' : 'error',
+                    message: calendarErrorMessage(error, hasCache),
+                    updatedAt: hasCache && calendarCache ? calendarCache.fetchedAt : 0
+                };
+            }
+            renderCalendarView();
+        }
+        function calendarDuplicateKey(title, start) {
+            const date = new Date(start);
+            if (Number.isNaN(date.getTime())) return '';
+            date.setSeconds(0, 0);
+            return `${String(title || '').trim().toLocaleLowerCase('ja-JP')}|${date.getTime()}`;
+        }
+        function getUnifiedCalendarItems() {
+            const taskItems = tasks
+                .filter(task => task && task.dueDate)
+                .map(task => {
+                    const startDate = new Date(task.dueDate);
+                    if (Number.isNaN(startDate.getTime())) return null;
+                    return {
+                        key: `task-${task.id}`,
+                        source: 'task',
+                        taskId: task.id,
+                        title: task.text || '（無題のタスク）',
+                        start: startDate.toISOString(),
+                        end: new Date(startDate.getTime() + 60 * 60 * 1000).toISOString(),
+                        allDay: false,
+                        status: task.status || 'todo',
+                        calendarName: 'TaskJournal',
+                        color: '#d06a38',
+                        openUrl: ''
+                    };
+                })
+                .filter(Boolean);
+            const taskKeys = new Set(taskItems.map(item => calendarDuplicateKey(item.title, item.start)).filter(Boolean));
+            const googleItems = googleCalendarEvents.map(event => ({
+                ...event,
+                duplicateCandidate: !event.allDay && taskKeys.has(calendarDuplicateKey(event.title, event.start))
+            }));
+            return taskItems.concat(googleItems);
+        }
+        function calendarItemDates(item) {
+            if (item.allDay) {
+                return {
+                    start: calendarDateFromKey(item.start),
+                    end: calendarDateFromKey(item.end)
+                };
+            }
+            return { start: new Date(item.start), end: new Date(item.end) };
+        }
+        function getCalendarItemsForDay(day, allItems) {
+            const dayStart = calendarStartOfDay(day);
+            const dayEnd = calendarAddDays(dayStart, 1);
+            return allItems.filter(item => {
+                const dates = calendarItemDates(item);
+                return dates.start && dates.end
+                    && dates.start.getTime() < dayEnd.getTime()
+                    && dates.end.getTime() > dayStart.getTime();
+            }).sort((a, b) => {
+                if (a.allDay !== b.allDay) return a.allDay ? -1 : 1;
+                return calendarItemDates(a).start.getTime() - calendarItemDates(b).start.getTime();
+            });
+        }
+        function calendarItemTimeLabel(item) {
+            if (item.allDay) return '終日';
+            const date = new Date(item.start);
+            return date.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' });
+        }
+        function registerCalendarItem(item) {
+            calendarRenderedItems.push(item);
+            return calendarRenderedItems.length - 1;
+        }
+        function createCalendarItemHTML(item) {
+            const index = registerCalendarItem(item);
+            const sourceClass = item.source === 'google' ? ' is-google' : '';
+            const completedClass = item.status === 'done' ? ' is-completed' : '';
+            const style = item.source === 'google' ? ` style="--event-color:${safeCalendarColor(item.color)}"` : '';
+            const sourceName = item.source === 'google' ? item.calendarName : 'TaskJournal';
+            const duplicateBadge = item.duplicateCandidate
+                ? '<span class="calendar-duplicate-badge">重複候補</span>'
+                : '';
+            const completedLabel = item.status === 'done' ? '<span>完了</span>' : '';
+            return `
+                <button type="button" class="calendar-item${sourceClass}${completedClass}"${style} onclick="openCalendarItem(${index})">
+                    <span class="calendar-item-title">${escapeHtml(item.title)}</span>
+                    <span class="calendar-item-meta">
+                        <span>${escapeHtml(calendarItemTimeLabel(item))}</span>
+                        <span>${escapeHtml(sourceName)}</span>
+                        ${completedLabel}
+                        ${duplicateBadge}
+                    </span>
+                </button>`;
+        }
+        function isCalendarToday(day) {
+            return calendarDateKey(day) === calendarDateKey(new Date());
+        }
+        function createCalendarDayColumnHTML(day, items, compact = false) {
+            const weekday = day.toLocaleDateString('ja-JP', { weekday: 'short' });
+            const label = compact
+                ? `<span>${escapeHtml(weekday)}</span><strong>${day.getDate()}</strong>`
+                : `<span>${escapeHtml(day.toLocaleDateString('ja-JP', { month: 'long', day: 'numeric', weekday: 'short' }))}</span><strong>${items.length}件</strong>`;
+            return `
+                <section class="calendar-day-column${isCalendarToday(day) ? ' is-today' : ''}">
+                    <div class="calendar-day-heading">${label}</div>
+                    <div class="calendar-items">
+                        ${items.length ? items.map(createCalendarItemHTML).join('') : '<div class="calendar-empty">予定なし</div>'}
+                    </div>
+                </section>`;
+        }
+        function renderCalendarDay(board, allItems) {
+            const day = calendarStartOfDay(calendarCursor);
+            board.innerHTML = `<div class="calendar-day-list">${createCalendarDayColumnHTML(day, getCalendarItemsForDay(day, allItems))}</div>`;
+        }
+        function renderCalendarWeek(board, allItems) {
+            const start = calendarStartOfWeek(calendarCursor);
+            const columns = Array.from({ length: 7 }, (_, index) => {
+                const day = calendarAddDays(start, index);
+                return createCalendarDayColumnHTML(day, getCalendarItemsForDay(day, allItems), true);
+            });
+            board.innerHTML = `<div class="calendar-week-grid">${columns.join('')}</div>`;
+        }
+        function renderCalendarMonth(board, allItems) {
+            const monthStart = calendarStartOfMonth(calendarCursor);
+            const gridStart = calendarStartOfWeek(monthStart);
+            const weekdays = ['月', '火', '水', '木', '金', '土', '日']
+                .map(day => `<div class="calendar-month-weekday">${day}</div>`).join('');
+            const cells = Array.from({ length: 42 }, (_, index) => {
+                const day = calendarAddDays(gridStart, index);
+                const items = getCalendarItemsForDay(day, allItems);
+                const previews = items.slice(0, 3).map(item => {
+                    const style = item.source === 'google' ? ` style="--event-color:${safeCalendarColor(item.color)}"` : '';
+                    return `<span class="calendar-month-preview-item">
+                        <span class="calendar-month-preview-dot${item.source === 'google' ? ' is-google' : ''}"${style}></span>
+                        <span class="calendar-month-preview-title">${escapeHtml(item.title)}</span>
+                    </span>`;
+                }).join('');
+                const more = items.length > 3 ? `<span class="calendar-month-more">ほか${items.length - 3}件</span>` : '';
+                const classes = [
+                    'calendar-month-cell',
+                    day.getMonth() !== monthStart.getMonth() ? 'is-outside' : '',
+                    isCalendarToday(day) ? 'is-today' : ''
+                ].filter(Boolean).join(' ');
+                return `<button type="button" class="${classes}" onclick="openCalendarDay('${calendarDateKey(day)}')" aria-label="${escapeHtml(day.toLocaleDateString('ja-JP'))}、${items.length}件">
+                    <span class="calendar-month-day">${day.getDate()}</span>
+                    <span class="calendar-month-preview">${previews}${more}</span>
+                </button>`;
+            }).join('');
+            board.innerHTML = `
+                <div class="calendar-month-weekdays">${weekdays}</div>
+                <div class="calendar-month-grid">${cells}</div>`;
+        }
+        function calendarRangeTitle() {
+            if (calendarMode === 'day') {
+                return calendarCursor.toLocaleDateString('ja-JP', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'short' });
+            }
+            if (calendarMode === 'month') {
+                return calendarCursor.toLocaleDateString('ja-JP', { year: 'numeric', month: 'long' });
+            }
+            const start = calendarStartOfWeek(calendarCursor);
+            const end = calendarAddDays(start, 6);
+            return `${start.toLocaleDateString('ja-JP', { year: 'numeric', month: 'numeric', day: 'numeric' })} - ${end.toLocaleDateString('ja-JP', { month: 'numeric', day: 'numeric' })}`;
+        }
+        function renderCalendarView() {
+            const board = document.getElementById('calendar-board');
+            const title = document.getElementById('calendar-range-title');
+            const status = document.getElementById('calendar-status');
+            const refresh = document.getElementById('calendar-refresh');
+            if (!board || !title || !status || !refresh) return;
+            title.textContent = calendarRangeTitle();
+            document.querySelectorAll('[data-calendar-mode]').forEach(button => {
+                const active = button.dataset.calendarMode === calendarMode;
+                button.classList.toggle('is-active', active);
+                button.setAttribute('aria-pressed', String(active));
+            });
+            status.className = `calendar-status${calendarLoadState.kind === 'success' ? ' is-success' : ''}${['error', 'stale'].includes(calendarLoadState.kind) ? ' is-error' : ''}`;
+            const updatedText = calendarLoadState.updatedAt
+                ? ` 最終更新 ${new Date(calendarLoadState.updatedAt).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })}`
+                : '';
+            status.textContent = `${calendarLoadState.message}${updatedText}`;
+            refresh.disabled = calendarLoadState.kind === 'loading';
+            refresh.setAttribute('aria-busy', String(calendarLoadState.kind === 'loading'));
+            calendarRenderedItems = [];
+            const allItems = getUnifiedCalendarItems();
+            if (calendarMode === 'day') renderCalendarDay(board, allItems);
+            else if (calendarMode === 'month') renderCalendarMonth(board, allItems);
+            else renderCalendarWeek(board, allItems);
+            lucide.createIcons();
+        }
+        function applyAppView(loadRemote = false) {
+            const showingCalendar = appView === 'calendar';
+            const taskView = document.getElementById('task-view');
+            const calendarView = document.getElementById('calendar-view');
+            const toggle = document.getElementById('view-mode-toggle');
+            if (!taskView || !calendarView || !toggle) return;
+            taskView.classList.toggle('hidden', showingCalendar);
+            calendarView.classList.toggle('hidden', !showingCalendar);
+            toggle.setAttribute('aria-pressed', String(showingCalendar));
+            toggle.setAttribute('aria-label', showingCalendar ? 'タスク一覧を開く' : 'カレンダーを開く');
+            toggle.setAttribute('title', showingCalendar ? 'タスク一覧を開く' : 'カレンダーを開く');
+            toggle.innerHTML = showingCalendar
+                ? '<svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"></path></svg>'
+                : '<svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"></rect><path d="M16 3v4M8 3v4M3 10h18"></path></svg>';
+            try { localStorage.setItem(APP_VIEW_KEY, appView); } catch { /* 保存不可でも切替は継続 */ }
+            if (showingCalendar) {
+                renderCalendarView();
+                if (loadRemote) loadCalendarRange(false);
+            }
+            lucide.createIcons();
+        }
+        window.setAppView = (nextView) => {
+            appView = nextView === 'calendar' ? 'calendar' : 'tasks';
+            applyAppView(appView === 'calendar');
+        };
+        window.setCalendarMode = (nextMode) => {
+            if (!['day', 'week', 'month'].includes(nextMode)) return;
+            calendarMode = nextMode;
+            try { localStorage.setItem(CALENDAR_MODE_KEY, calendarMode); } catch { /* 保存不可でも切替は継続 */ }
+            renderCalendarView();
+            loadCalendarRange(false);
+        };
+        window.moveCalendar = (direction) => {
+            if (calendarMode === 'month') {
+                const next = new Date(calendarCursor);
+                next.setDate(1);
+                next.setMonth(next.getMonth() + direction);
+                calendarCursor = next;
+            } else {
+                calendarCursor = calendarAddDays(calendarCursor, direction * (calendarMode === 'week' ? 7 : 1));
+            }
+            renderCalendarView();
+            loadCalendarRange(false);
+        };
+        window.openCalendarDay = (dateKey) => {
+            const date = calendarDateFromKey(dateKey);
+            if (!date) return;
+            calendarCursor = date;
+            window.setCalendarMode('day');
+        };
+        window.openCalendarItem = (index) => {
+            const item = calendarRenderedItems[Number(index)];
+            if (!item) return;
+            if (item.source === 'task') {
+                window.openScheduleModal(item.taskId);
+                return;
+            }
+            const url = item.openUrl || `https://calendar.google.com/calendar/u/0/r/day/${calendarDateKey(calendarItemDates(item).start).replace(/-/g, '/')}`;
+            window.open(url, '_blank', 'noopener,noreferrer');
+        };
+
         function sortTasks() {
             // 状態グループ(進行中→未着手→完了) を最優先に、各グループ内でピン留めを上に、
             // 同条件なら作成日時の新しい順。
@@ -2947,7 +3899,7 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
                 error.code = 'SYNC_PROTOCOL_MISMATCH';
                 throw attachConnectionDetails(error, { ...common, stage: 'protocol' });
             }
-            return { ...common, stage: 'completed' };
+            return { ...common, stage: 'completed', capabilities: data.capabilities };
         }
 
         window.testSyncConnection = async () => {
@@ -2963,8 +3915,17 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
                         ? '確認1/3：同期APIへ接続しています...'
                         : '一時エラーのため、もう一度確認しています...');
                     try {
-                        await probeSyncConnection(endpoint, token, requestId, attempt);
-                        setConnectionTestState('sync', 'success', '接続成功：GAS到達・同期キー・同期方式v3を確認しました。');
+                        const result = await probeSyncConnection(endpoint, token, requestId, attempt);
+                        const calendarReady = !!(result.capabilities
+                            && result.capabilities.calendarRead
+                            && result.capabilities.calendarTokenDerivation === 'hmac-sha256-v1');
+                        setConnectionTestState(
+                            'sync',
+                            'success',
+                            calendarReady
+                                ? '接続成功：タスク同期とGoogleカレンダー読み取りに対応しています。'
+                                : '接続成功：タスク同期は利用できます。Googleカレンダー表示にはGASの更新が必要です。'
+                        );
                         return;
                     } catch (error) {
                         lastError = error;
@@ -3090,17 +4051,32 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
         };
 
         window.saveSettings = async () => {
+            const previousWebhookUrl = settings.webhookUrl;
+            const previousSyncToken = settings.syncToken;
             settings.webhookUrl = document.getElementById('webhook-input').value.trim();
             settings.syncToken = document.getElementById('sync-token-input').value.trim();
             settings.aiEndpointUrl = document.getElementById('ai-endpoint-input').value.trim();
             settings.aiModelName = document.getElementById('ai-model-input').value.trim() || 'local-model';
             settings.aiApiKey = document.getElementById('ai-apikey-input').value.trim();
             await persistConfig();
+            if (settings.webhookUrl !== previousWebhookUrl || settings.syncToken !== previousSyncToken) {
+                calendarCapabilityState = 'unknown';
+                calendarCache = null;
+                googleCalendarEvents = [];
+                await dbPutMeta({
+                    key: CALENDAR_CACHE_META_KEY,
+                    fetchedAt: 0,
+                    rangeStart: '',
+                    rangeEnd: '',
+                    events: []
+                });
+            }
             closeSettingsModal();
             updateSyncStatus(isSyncConfigured() ? 'idle' : 'off');
             if (isSyncConfigured()) {
                 await pullFromCloud(true);
                 triggerDriveSync();
+                if (appView === 'calendar') loadCalendarRange(true);
             }
         };
 
@@ -3721,6 +4697,7 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
             } else {
                 deletedTaskArchive.forEach(entry => { deletedList.innerHTML += createDeletedTaskHTML(entry); });
             }
+            if (appView === 'calendar') renderCalendarView();
             lucide.createIcons();
             applyCompletedSectionState();
             applyDeletedSectionState();
@@ -3746,6 +4723,23 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
                 clearTimeout(syncRetryTimer);
                 syncDiagnostic = { ...syncDiagnostic, requestId: '', stage: 'manual', errorCode: '' };
                 pullFromCloud(true);
+            });
+            document.getElementById('view-mode-toggle').addEventListener('click', () => {
+                window.setAppView(appView === 'calendar' ? 'tasks' : 'calendar');
+            });
+            document.querySelectorAll('[data-calendar-mode]').forEach(button => {
+                button.addEventListener('click', () => window.setCalendarMode(button.dataset.calendarMode));
+            });
+            document.getElementById('calendar-prev').addEventListener('click', () => window.moveCalendar(-1));
+            document.getElementById('calendar-next').addEventListener('click', () => window.moveCalendar(1));
+            document.getElementById('calendar-today').addEventListener('click', () => {
+                calendarCursor = new Date();
+                renderCalendarView();
+                loadCalendarRange(false);
+            });
+            document.getElementById('calendar-refresh').addEventListener('click', () => {
+                calendarCapabilityState = 'unknown';
+                loadCalendarRange(true);
             });
 
             // 確認ダイアログ（OK/キャンセル/背景クリック）
@@ -3782,8 +4776,15 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
                 const tag = (e.target.tagName || '').toLowerCase();
                 if (tag === 'input' || tag === 'textarea' || e.target.isContentEditable) return;
                 if (e.metaKey || e.ctrlKey || e.altKey) return;
-                if (e.key === 'n') { e.preventDefault(); document.getElementById('task-input').focus(); }
-                else if (e.key === '/') { e.preventDefault(); document.getElementById('task-search').focus(); }
+                if (e.key === 'n') {
+                    e.preventDefault();
+                    if (appView !== 'tasks') window.setAppView('tasks');
+                    document.getElementById('task-input').focus();
+                } else if (e.key === '/') {
+                    e.preventDefault();
+                    if (appView !== 'tasks') window.setAppView('tasks');
+                    document.getElementById('task-search').focus();
+                }
             });
 
             // スワイプ操作（タッチ端末）: 右スワイプ=完了/未完了の切替、左スワイプ=削除（元に戻すトースト付き）
@@ -3833,14 +4834,24 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
                 syncRetryAttempt = 0;
                 clearTimeout(syncRetryTimer);
                 refreshFromCloudIfStale();
+                if (appView === 'calendar') loadCalendarRange(false);
             });
             document.addEventListener('visibilitychange', () => {
-                if (document.visibilityState === 'visible') refreshFromCloudIfStale();
+                if (document.visibilityState === 'visible') {
+                    refreshFromCloudIfStale();
+                    if (appView === 'calendar') loadCalendarRange(false);
+                }
             });
 
             // カレンダー遷移などから「戻る」で復帰した際(bfcache復帰)に再描画し、白紙化を防ぐ
-            window.addEventListener('pageshow', (e) => { if (e.persisted && db) render(); });
+            window.addEventListener('pageshow', (e) => {
+                if (e.persisted && db) {
+                    render();
+                    if (appView === 'calendar') loadCalendarRange(false);
+                }
+            });
 
+            applyAppView(false);
             lucide.createIcons();
             applyCompletedSectionState();
             applyDeletedSectionState();
@@ -3904,18 +4915,30 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
                 syncV3MigrationCompleted = !!(migrationMeta && migrationMeta.completedAt);
                 const lastSyncMeta = await dbGetMeta('lastSyncSuccess');
                 lastSyncSuccessAt = Number(lastSyncMeta && lastSyncMeta.at) || 0;
+                const calendarCacheMeta = await dbGetMeta(CALENDAR_CACHE_META_KEY);
+                calendarCache = normalizeCalendarCache(calendarCacheMeta);
+                if (calendarCache && Date.now() - calendarCache.fetchedAt <= CALENDAR_CACHE_MAX_AGE_MS) {
+                    useCalendarCache(getCalendarVisibleRange());
+                    calendarLoadState = {
+                        kind: 'stale',
+                        message: '前回取得したGoogle予定を表示しています。',
+                        updatedAt: calendarCache.fetchedAt
+                    };
+                }
                 const deletedIds = new Set(taskTombstones.map(t => t.id));
                 const storedTasks = (await dbGetAllTasks()).map(normalizeTask);
                 tasks = storedTasks.filter(task => !deletedIds.has(task.id));
                 if (tasks.length !== storedTasks.length) await dbReplaceTasks(tasks);
                 sortTasks();
                 render();
+                applyAppView(false);
                 renderSyncRecoveryState();
 
                 if (isSyncConfigured()) {
                     // ローカルデータを先に使える状態にし、同期は画面を遮らず裏側で行う。
                     pullFromCloud(false);
                 }
+                if (appView === 'calendar') loadCalendarRange(false);
 
             } catch (err) {
                 console.error('Init error', err);

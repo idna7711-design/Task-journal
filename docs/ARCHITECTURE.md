@@ -14,7 +14,7 @@
   ├──(1) GAS Webhook (POST) ──→ Google Apps Script
   │                                   ├─ Google Drive: TaskData.json（同期DB）
   │                                   ├─ Google Docs: 固定IDのTaskJournal（NotebookLM用）
-  │                                   └─ Google カレンダー: 期日付きタスクを登録
+  │                                   └─ Googleカレンダー: 選択中の予定を読み取り専用で表示
   │
   ├──(2) https://api.edaaiapps.com/v1/chat/completions
   │        └→ Cloudflare Worker（worker-openai-proxy.js）
@@ -84,6 +84,21 @@ SafariからGASへの直接通信で`Load failed`が安全実装後も続く場�
 - POST限定、本文1MB以下、上流タイムアウト、回数制限を設ける
 - タスク本文、同期キー、Authorization、URLクエリをログへ残さない
 - 旧GAS直接接続へ戻せる復旧手順を維持する
+
+### カレンダー表示
+
+- ヘッダーからタスク一覧とカレンダーを切り替え、日・週・月単位で表示する
+- TaskJournalは予定日時があるタスク、Google側はカレンダー画面で選択中のカレンダーを表示する
+- Google予定はGASの`CalendarApp`で読み取るだけで、作成・変更・削除しない
+- Google予定から取得するのは予定名・開始・終了・終日・カレンダー名・表示色だけ。本文・場所・参加者・メールアドレス・生の予定IDは取得しない
+- ブラウザは同期キーそのものをカレンダー取得に送らず、Web CryptoのHMAC-SHA256で生成した用途限定トークンを送る
+- GASはクライアント指定のカレンダーIDを受け付けず、GASを実行する本人が選択中のカレンダーだけを最大20個読む
+- 取得範囲は最大45日、返却予定は最大300件。GASは3分、端末は24時間までキャッシュする
+- 通信失敗時もTaskJournalの予定表示とタスク操作は続け、24時間以内のGoogle予定キャッシュがあれば前回分を表示する
+- 同じ予定名・同じ開始分のTaskJournalタスクとGoogle予定は削除・統合せず、「重複候補」と表示する
+- 月表示では最大3件を省略表示し、残りの件数を示す。日付を押すと日表示へ移る
+- Google予定の詳細を押すとGoogleカレンダーの日表示を新しいタブで開く
+- GASのOAuth権限は`calendar.readonly`に限定する。既存のDrive・Googleドキュメント更新権限は従来どおり必要
 
 ### NotebookLM 自動更新
 1. GASがタスク変更のたびに、同じIDのGoogleドキュメント本文を上書き
