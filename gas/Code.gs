@@ -5,7 +5,8 @@
  *   doPost … アプリから { tasks, categories } を受け取り
  *            - TaskData.json … 同期用DB（tasks配列）を Drive に保存
  *            - 固定IDのGoogleドキュメント … NotebookLM用のタスク一覧を上書き
- *            （カレンダー登録はアプリの「カレンダーに追加」ボタンからのみ。GAS自動同期は廃止）
+ *            - 選択中のGoogleカレンダー … アプリのカレンダー画面へ読み取り専用で返す
+ *            （予定の作成はアプリの「カレンダーに追加」ボタンからのみ。GAS自動登録は廃止）
  *   doGet  … TaskData.json の中身（tasks配列）をJSONで返す（他デバイスからのpull用）
  *
  * 修正点（オリジナルからの差分）:
@@ -37,6 +38,12 @@ const NOTEBOOK_REFRESH_PENDING_PROPERTY = 'NOTEBOOK_REFRESH_PENDING_AT';
 const NOTEBOOK_REFRESH_ATTEMPTS_PROPERTY = 'NOTEBOOK_REFRESH_ATTEMPTS';
 const NOTEBOOK_REFRESH_DELAY_MS = 10000;
 const NOTEBOOK_REFRESH_MAX_ATTEMPTS = 3;
+const CALENDAR_TOKEN_CONTEXT = 'TaskJournal calendar read v1';
+const CALENDAR_MAX_RANGE_DAYS = 45;
+const CALENDAR_MAX_CALENDARS = 20;
+const CALENDAR_MAX_EVENTS = 300;
+const CALENDAR_CACHE_SECONDS = 180;
+const CALENDAR_CACHE_MAX_BYTES = 90000;
 
 function doPost(e) {
   if (!e || !e.postData) {
@@ -54,10 +61,6 @@ function doPost(e) {
     return ContentService.createTextOutput('Error: invalid JSON');
   }
 
-  const queryToken = e && e.parameter ? e.parameter.syncToken : '';
-  if (!isAuthorized(data.syncToken || queryToken)) {
-    return ContentService.createTextOutput('Unauthorized');
-  }
   const requestId = safeRequestId(data.requestId);
   const requestStartedAt = Date.now();
   console.log(JSON.stringify({
@@ -66,6 +69,31 @@ function doPost(e) {
     action: String(data.action || 'legacy').slice(0, 30),
     attempt: positiveIntegerOrZero(data.attempt)
   }));
+
+  if (data.action === 'calendar-range') {
+    if (Number(data.protocolVersion) !== PROTOCOL_VERSION) {
+      return jsonOutput({
+        protocolVersion: PROTOCOL_VERSION,
+        requestId: requestId,
+        error: 'Calendar protocol mismatch',
+        errorCode: 'CALENDAR_PROTOCOL_MISMATCH'
+      });
+    }
+    if (!isCalendarReadAuthorized(data.calendarToken)) {
+      return jsonOutput({
+        protocolVersion: PROTOCOL_VERSION,
+        requestId: requestId,
+        error: 'Unauthorized',
+        errorCode: 'CALENDAR_UNAUTHORIZED'
+      });
+    }
+    return handleCalendarRange(data, requestId, requestStartedAt);
+  }
+
+  const queryToken = e && e.parameter ? e.parameter.syncToken : '';
+  if (!isAuthorized(data.syncToken || queryToken)) {
+    return ContentService.createTextOutput('Unauthorized');
+  }
 
   if (data.action === 'capabilities') {
     console.log(JSON.stringify({
@@ -77,7 +105,13 @@ function doPost(e) {
     return jsonOutput({
       protocolVersion: PROTOCOL_VERSION,
       requestId: requestId,
-      capabilities: { mutationSync: true, conflictPreservation: true, postOnlyToken: true }
+      capabilities: {
+        mutationSync: true,
+        conflictPreservation: true,
+        postOnlyToken: true,
+        calendarRead: true,
+        calendarTokenDerivation: 'hmac-sha256-v1'
+      }
     });
   }
 
@@ -495,6 +529,211 @@ function normalizeConflictVariant(task) {
 function jsonOutput(value) {
   return ContentService.createTextOutput(JSON.stringify(value))
     .setMimeType(ContentService.MimeType.JSON);
+}
+
+/**
+ * GASエディタから初回に1度実行し、Googleカレンダーの読み取り権限を承認する。
+ * 予定の作成・変更・削除は行わない。
+ */
+function authorizeCalendarRead() {
+  const calendars = CalendarApp.getAllCalendars();
+  console.log(JSON.stringify({
+    event: 'taskjournal_calendar_authorized',
+    calendarCount: calendars.length
+  }));
+  return calendars.length;
+}
+
+function isCalendarReadAuthorized(candidate) {
+  const expectedSyncToken = PropertiesService.getScriptProperties().getProperty(SYNC_TOKEN_PROPERTY);
+  if (!expectedSyncToken || typeof candidate !== 'string' || !/^[A-Za-z0-9_-]{40,100}$/.test(candidate)) {
+    return false;
+  }
+  const signature = Utilities.computeHmacSha256Signature(
+    CALENDAR_TOKEN_CONTEXT,
+    expectedSyncToken,
+    Utilities.Charset.UTF_8
+  );
+  const expected = Utilities.base64EncodeWebSafe(signature).replace(/=+$/g, '');
+  return constantTimeStringEquals(candidate, expected);
+}
+
+function constantTimeStringEquals(left, right) {
+  const a = String(left || '');
+  const b = String(right || '');
+  let difference = a.length ^ b.length;
+  const maxLength = Math.max(a.length, b.length);
+  for (let index = 0; index < maxLength; index++) {
+    difference |= (a.charCodeAt(index) || 0) ^ (b.charCodeAt(index) || 0);
+  }
+  return difference === 0;
+}
+
+function handleCalendarRange(data, requestId, requestStartedAt) {
+  let range;
+  try {
+    range = validateCalendarRange(data.start, data.end);
+  } catch (err) {
+    return jsonOutput({
+      protocolVersion: PROTOCOL_VERSION,
+      requestId: requestId,
+      error: err && err.message ? err.message : 'Invalid calendar range',
+      errorCode: 'CALENDAR_INVALID_RANGE'
+    });
+  }
+
+  const cacheKey = 'calendar-v1-' + range.start.getTime() + '-' + range.end.getTime();
+  const cache = CacheService.getScriptCache();
+  const cachedText = cache.get(cacheKey);
+  if (cachedText) {
+    try {
+      const cached = JSON.parse(cachedText);
+      cached.protocolVersion = PROTOCOL_VERSION;
+      cached.requestId = requestId;
+      cached.cached = true;
+      console.log(JSON.stringify({
+        event: 'taskjournal_calendar_completed',
+        requestId: requestId,
+        elapsedMs: Date.now() - requestStartedAt,
+        eventCount: Array.isArray(cached.events) ? cached.events.length : 0,
+        cached: true
+      }));
+      return jsonOutput(cached);
+    } catch (err) {
+      cache.remove(cacheKey);
+    }
+  }
+
+  let calendars;
+  try {
+    calendars = CalendarApp.getAllCalendars()
+      .filter(function(calendar) { return calendar.isSelected(); })
+      .slice(0, CALENDAR_MAX_CALENDARS);
+    if (calendars.length === 0) calendars = [CalendarApp.getDefaultCalendar()];
+  } catch (err) {
+    console.error('Calendar list read failed');
+    return jsonOutput({
+      protocolVersion: PROTOCOL_VERSION,
+      requestId: requestId,
+      error: 'Google Calendar permission or connection failed',
+      errorCode: 'CALENDAR_READ_FAILED'
+    });
+  }
+
+  const events = [];
+  let successfulCalendars = 0;
+  let failedCalendars = 0;
+  calendars.some(function(calendar, calendarIndex) {
+    if (events.length >= CALENDAR_MAX_EVENTS) return true;
+    try {
+      const timeZone = calendar.getTimeZone() || Session.getScriptTimeZone();
+      const calendarName = String(calendar.getName() || 'Googleカレンダー').slice(0, 100);
+      const calendarColor = safeCalendarHexColor(calendar.getColor());
+      const remaining = CALENDAR_MAX_EVENTS - events.length;
+      const calendarEvents = calendar.getEvents(range.start, range.end, { max: remaining });
+      calendarEvents.slice(0, remaining).forEach(function(event) {
+        const allDay = event.isAllDayEvent();
+        const startTime = event.getStartTime();
+        const endTime = event.getEndTime();
+        const scriptTimeZone = Session.getScriptTimeZone();
+        const start = allDay
+          ? Utilities.formatDate(event.getAllDayStartDate(), scriptTimeZone, 'yyyy-MM-dd')
+          : startTime.toISOString();
+        const end = allDay
+          ? Utilities.formatDate(event.getAllDayEndDate(), scriptTimeZone, 'yyyy-MM-dd')
+          : endTime.toISOString();
+        const dayPath = allDay
+          ? start.replace(/-/g, '/')
+          : Utilities.formatDate(startTime, timeZone, 'yyyy/M/d');
+        events.push({
+          key: simpleHash(calendar.getId() + '|' + event.getId() + '|' + start),
+          title: String(event.getTitle() || '（無題の予定）').slice(0, 300),
+          start: start,
+          end: end,
+          allDay: allDay,
+          calendarName: calendarName,
+          color: calendarColor,
+          openUrl: 'https://calendar.google.com/calendar/u/0/r/day/' + dayPath
+        });
+      });
+      successfulCalendars += 1;
+    } catch (err) {
+      failedCalendars += 1;
+      console.error(JSON.stringify({
+        event: 'taskjournal_calendar_partial_failure',
+        requestId: requestId,
+        calendarIndex: calendarIndex
+      }));
+    }
+    return events.length >= CALENDAR_MAX_EVENTS;
+  });
+
+  if (successfulCalendars === 0 && failedCalendars > 0) {
+    return jsonOutput({
+      protocolVersion: PROTOCOL_VERSION,
+      requestId: requestId,
+      error: 'Google Calendar read failed',
+      errorCode: 'CALENDAR_READ_FAILED'
+    });
+  }
+
+  events.sort(function(left, right) {
+    return String(left.start).localeCompare(String(right.start))
+      || String(left.title).localeCompare(String(right.title));
+  });
+  const response = {
+    protocolVersion: PROTOCOL_VERSION,
+    requestId: requestId,
+    events: events,
+    calendarCount: successfulCalendars,
+    partial: failedCalendars > 0,
+    truncated: events.length >= CALENDAR_MAX_EVENTS,
+    cached: false
+  };
+  const cacheValue = JSON.stringify({
+    protocolVersion: PROTOCOL_VERSION,
+    events: events,
+    calendarCount: successfulCalendars,
+    partial: failedCalendars > 0,
+    truncated: events.length >= CALENDAR_MAX_EVENTS
+  });
+  if (Utilities.newBlob(cacheValue).getBytes().length <= CALENDAR_CACHE_MAX_BYTES) {
+    try {
+      cache.put(cacheKey, cacheValue, CALENDAR_CACHE_SECONDS);
+    } catch (err) {
+      console.warn('Calendar cache write skipped');
+    }
+  }
+  console.log(JSON.stringify({
+    event: 'taskjournal_calendar_completed',
+    requestId: requestId,
+    elapsedMs: Date.now() - requestStartedAt,
+    eventCount: events.length,
+    calendarCount: successfulCalendars,
+    failedCalendars: failedCalendars,
+    cached: false
+  }));
+  return jsonOutput(response);
+}
+
+function validateCalendarRange(startValue, endValue) {
+  if (typeof startValue !== 'string' || typeof endValue !== 'string'
+      || startValue.length > 40 || endValue.length > 40) {
+    throw new Error('Invalid calendar range');
+  }
+  const start = new Date(startValue);
+  const end = new Date(endValue);
+  const rangeMs = end.getTime() - start.getTime();
+  if (isNaN(start.getTime()) || isNaN(end.getTime())
+      || rangeMs <= 0 || rangeMs > CALENDAR_MAX_RANGE_DAYS * 24 * 60 * 60 * 1000) {
+    throw new Error('Invalid calendar range');
+  }
+  return { start: start, end: end };
+}
+
+function safeCalendarHexColor(value) {
+  const color = String(value || '');
+  return /^#[0-9a-f]{6}$/i.test(color) ? color : '#4285f4';
 }
 
 /**

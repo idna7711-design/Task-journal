@@ -299,12 +299,53 @@ for (const requiredExclusiveStorageBoxFeature of [
     else { failed++; console.error(`NG  格納ボックス排他開閉が不完全です: ${requiredExclusiveStorageBoxFeature}`); }
 }
 const serviceWorkerCode = readFileSync(join(root, 'sw.js'), 'utf8');
-if (indexHtml.includes("const SW_CACHE_NAME = 'taskjournal-cache-v9';")
-    && serviceWorkerCode.includes("const CACHE = 'taskjournal-cache-v9';")) {
+if (indexHtml.includes("const SW_CACHE_NAME = 'taskjournal-cache-v10';")
+    && serviceWorkerCode.includes("const CACHE = 'taskjournal-cache-v10';")) {
     console.log('OK  Service Workerキャッシュ名が一致');
 } else {
     failed++;
     console.error('NG  Service Workerキャッシュ名が一致していません');
+}
+const gasManifest = JSON.parse(readFileSync(join(root, 'gas', 'appsscript.json'), 'utf8'));
+for (const requiredCalendarFeature of [
+    'id="calendar-view"',
+    'data-calendar-mode="day"',
+    'data-calendar-mode="week"',
+    'data-calendar-mode="month"',
+    "action: 'calendar-range'",
+    "const CALENDAR_TOKEN_CONTEXT = 'TaskJournal calendar read v1';",
+    'async function deriveCalendarReadToken(',
+    'const CALENDAR_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000;',
+    '重複候補',
+]) {
+    if (indexHtml.includes(requiredCalendarFeature)) console.log(`OK  カレンダー表示: ${requiredCalendarFeature}`);
+    else { failed++; console.error(`NG  カレンダー表示が不完全です: ${requiredCalendarFeature}`); }
+}
+for (const requiredCalendarBackendFeature of [
+    "data.action === 'calendar-range'",
+    'function authorizeCalendarRead()',
+    'function isCalendarReadAuthorized(',
+    'function handleCalendarRange(',
+    'const CALENDAR_MAX_RANGE_DAYS = 45;',
+    'const CALENDAR_MAX_EVENTS = 300;',
+    "calendarTokenDerivation: 'hmac-sha256-v1'",
+]) {
+    if (gasCode.includes(requiredCalendarBackendFeature)) console.log(`OK  カレンダーGAS: ${requiredCalendarBackendFeature}`);
+    else { failed++; console.error(`NG  カレンダーGASが不完全です: ${requiredCalendarBackendFeature}`); }
+}
+if (Array.isArray(gasManifest.oauthScopes)
+    && gasManifest.oauthScopes.includes('https://www.googleapis.com/auth/calendar.readonly')) {
+    console.log('OK  Googleカレンダー権限は読み取り専用');
+} else {
+    failed++;
+    console.error('NG  Googleカレンダーの読み取り専用権限がありません');
+}
+const executableGas = gasCode.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
+if (!/\b(?:CalendarApp|calendar|event)\.(?:create|set|delete)[A-Z]\w*\s*\(/.test(executableGas)) {
+    console.log('OK  GASはGoogleカレンダーを書き換えない');
+} else {
+    failed++;
+    console.error('NG  GASにGoogleカレンダーの書き換え処理があります');
 }
 if (!indexHtml.includes('id="trivia-bar"') && !indexHtml.includes('id="trivia-modal"')) console.log('OK  豆知識UIを撤去');
 else { failed++; console.error('NG  豆知識UIが残っています'); }
