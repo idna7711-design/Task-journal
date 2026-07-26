@@ -614,15 +614,15 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
 
             <div class="bg-white rounded-2xl md:rounded-[2rem] p-3 md:p-6 shadow-sm border border-zinc-200/60 shrink-0">
                 <form id="task-form">
-                    <div class="flex gap-3">
-                        <div class="relative flex-1 group">
-                            <div class="absolute inset-y-0 left-4 flex items-center pointer-events-none">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="plus-circle" aria-hidden="true" class="lucide lucide-plus-circle w-5 h-5 text-zinc-300 group-focus-within:text-violet-500 transition-colors"><circle cx="12" cy="12" r="10"></circle><path d="M8 12h8"></path><path d="M12 8v8"></path></svg>
-                            </div>
-                            <input type="text" id="task-input" placeholder="今日やるべきことは何ですか？" autocomplete="off" class="w-full bg-zinc-50 border-2 border-zinc-100 rounded-2xl pl-12 pr-4 py-3.5 text-sm font-medium text-zinc-800 placeholder-zinc-400 focus:outline-none focus:border-violet-300 focus:bg-white transition-all shadow-inner">
+                    <div class="flex gap-2">
+                        <div class="relative flex-1 min-w-0">
+                            <input type="text" id="task-input" placeholder="今日やるべきことは何ですか？" autocomplete="off" class="w-full bg-zinc-50 border-2 border-zinc-100 rounded-2xl px-4 py-3.5 text-sm font-medium text-zinc-800 placeholder-zinc-400 focus:outline-none focus:border-violet-300 focus:bg-white transition-all shadow-inner">
                         </div>
-                        <button type="submit" id="add-task-btn" class="bg-zinc-900 hover:bg-violet-600 text-white px-6 py-3.5 rounded-2xl text-sm font-bold transition-all shadow-sm hover:shadow-md active:scale-95 flex items-center gap-2">
+                        <button type="submit" id="add-task-btn" class="shrink-0 bg-zinc-900 hover:bg-violet-600 text-white px-4 sm:px-6 py-3.5 rounded-2xl text-sm font-bold transition-all shadow-sm hover:shadow-md active:scale-95">
                             <span>追加</span>
+                        </button>
+                        <button type="button" id="detailed-task-btn" aria-haspopup="dialog" class="shrink-0 bg-white hover:bg-violet-50 text-zinc-700 hover:text-violet-700 border border-zinc-200 px-4 sm:px-5 py-3.5 rounded-2xl text-sm font-bold transition-all shadow-sm hover:shadow-md active:scale-95">
+                            <span>詳細</span>
                         </button>
                     </div>
                 </form>
@@ -804,15 +804,15 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
         </div>
     </div>
 
-    <!-- タスク編集・カレンダー追加モーダル -->
-    <div id="schedule-modal" class="hidden fixed inset-0 bg-zinc-900/40 backdrop-blur-md flex items-center justify-center z-50 p-4">
+    <!-- タスク詳細追加・編集・カレンダー追加モーダル -->
+    <div id="schedule-modal" class="hidden fixed inset-0 bg-zinc-900/40 backdrop-blur-md flex items-center justify-center z-50 p-4" role="dialog" aria-modal="true" aria-labelledby="schedule-modal-title">
         <div class="bg-white rounded-[2rem] shadow-2xl w-full max-w-lg p-6 md:p-8 overflow-y-auto max-h-[90vh] transform transition-all border border-white/20">
             <div class="flex items-center gap-3 mb-6">
                 <div class="w-10 h-10 rounded-2xl bg-blue-50 flex items-center justify-center text-blue-500">
                     <i data-lucide="calendar-plus" class="w-5 h-5"></i>
                 </div>
                 <div>
-                    <h3 class="font-bold text-zinc-900 text-lg">タスクを編集</h3>
+                    <h3 id="schedule-modal-title" class="font-bold text-zinc-900 text-lg">タスクを編集</h3>
                     <p id="schedule-task-name" class="text-xs text-zinc-500 font-medium truncate max-w-[300px]"></p>
                 </div>
             </div>
@@ -837,9 +837,9 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
             <div id="schedule-logs-editor" class="space-y-3 mb-6"></div>
 
             <div class="flex flex-col sm:flex-row sm:justify-end gap-2 sm:gap-3">
-                <button onclick="closeScheduleModal()" class="px-5 py-3 text-sm font-bold text-zinc-500 hover:bg-zinc-100 rounded-2xl transition-colors">キャンセル</button>
-                <button onclick="saveSchedule(false)" class="px-5 py-3 text-sm font-bold text-zinc-700 bg-zinc-100 hover:bg-zinc-200 rounded-2xl transition-colors">保存</button>
-                <button onclick="saveSchedule(true)" class="px-6 py-3 text-sm font-bold bg-zinc-900 text-white hover:bg-blue-600 rounded-2xl transition-all shadow-md hover:shadow-lg active:scale-95 flex items-center justify-center gap-2"><i data-lucide="calendar-plus" class="w-4 h-4"></i>保存してカレンダーへ</button>
+                <button type="button" onclick="closeScheduleModal()" class="px-5 py-3 text-sm font-bold text-zinc-500 hover:bg-zinc-100 rounded-2xl transition-colors">キャンセル</button>
+                <button type="button" id="schedule-save-btn" onclick="saveSchedule(false)" class="px-5 py-3 text-sm font-bold text-zinc-700 bg-zinc-100 hover:bg-zinc-200 rounded-2xl transition-colors">保存</button>
+                <button type="button" id="schedule-calendar-btn" onclick="saveSchedule(true)" class="px-6 py-3 text-sm font-bold bg-zinc-900 text-white hover:bg-blue-600 rounded-2xl transition-all shadow-md hover:shadow-lg active:scale-95 flex items-center justify-center gap-2"><i data-lucide="calendar-plus" class="w-4 h-4"></i><span id="schedule-calendar-btn-label">保存してカレンダーへ</span></button>
             </div>
         </div>
     </div>
@@ -1047,8 +1047,8 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
         // - pull: 起動時・復帰時・同期アイコンクリック時に取得し、削除優先でローカルへ反映
 
         // ---- State ----
-        const APP_BUILD = '2026-07-25-google-calendar-view';
-        const SW_CACHE_NAME = 'taskjournal-cache-v10';
+        const APP_BUILD = '2026-07-26-detailed-task-add';
+        const SW_CACHE_NAME = 'taskjournal-cache-v11';
         const SYNC_ACK_MISS_LIMIT = 3;
         const SYNC_RECOVERY_MAX = 1;
         const SYNC_RECOVERY_ARCHIVE_LIMIT = 50;
@@ -1081,6 +1081,7 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
         };
         let currentTaskIdForMemo = null;
         let currentTaskIdForSchedule = null;
+        let scheduleModalMode = 'edit';
         let editingTaskLogs = [];
         let activeGenreFilters = new Set(); // 空=すべて。要素は ジャンルID または '__none__'(未分類)
         const COMPLETED_COLLAPSE_KEY = 'taskjournal:completedCollapsed';
@@ -3404,21 +3405,16 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
             if (!settings.deviceName) settings.deviceName = `${detectDeviceName()} (${settings.deviceId.slice(0, 4).toUpperCase()})`;
         }
 
-        window.addTask = async (e) => {
-            e.preventDefault();
-            const input = document.getElementById('task-input');
-            const textValue = input.value.trim();
-            if (!textValue) return;
-
-            const task = {
+        function createTaskRecord(textValue, options = {}) {
+            return {
                 id: uid(),
                 text: textValue,
-                dueDate: null,
+                dueDate: options.dueDate || null,
                 category: null,
                 status: 'todo',
                 pinned: false,
-                logs: [],
-                createdAt: now(),
+                logs: Array.isArray(options.logs) ? options.logs : [],
+                createdAt: Number.isFinite(options.createdAt) ? options.createdAt : now(),
                 createdDeviceId: settings.deviceId,
                 createdDeviceName: settings.deviceName,
                 updatedAt: now(),
@@ -3426,16 +3422,28 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
                 serverVersion: 0,
                 lastMutationId: ''
             };
+        }
+
+        async function persistNewTask(task) {
             tasks.push(task);
             await dbPersistLocalMutation(task, 'create');
             sortTasks();
             render();
             triggerDriveSync();
+            classifySingleTask(task.id, task.text); // ベストエフォート（AI未設定なら何もしない）
+        }
+
+        window.addTask = async (e) => {
+            e.preventDefault();
+            const input = document.getElementById('task-input');
+            const textValue = input.value.trim();
+            if (!textValue) return;
+
+            const task = createTaskRecord(textValue);
+            await persistNewTask(task);
 
             input.value = '';
             input.blur();
-
-            classifySingleTask(task.id, textValue); // ベストエフォート（AI未設定なら何もしない）
         };
 
         window.updateDueDate = async (id, newDate) => {
@@ -3705,10 +3713,37 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
             if (inputs.length) inputs[inputs.length - 1].focus();
         };
 
+        function configureScheduleModal(mode) {
+            scheduleModalMode = mode;
+            const isCreate = mode === 'create';
+            document.getElementById('schedule-modal-title').textContent = isCreate ? 'タスクを詳しく追加' : 'タスクを編集';
+            document.getElementById('schedule-save-btn').textContent = isCreate ? '追加' : '保存';
+            document.getElementById('schedule-calendar-btn-label').textContent = isCreate ? '追加してカレンダーへ' : '保存してカレンダーへ';
+        }
+
+        // 詳細追加：入力中のタイトルを引き継ぎ、保存するまでタスクを作成しない
+        window.openDetailedTaskModal = () => {
+            ensureDeviceIdentity();
+            currentTaskIdForSchedule = null;
+            configureScheduleModal('create');
+            const draftTitle = document.getElementById('task-input').value.trim();
+            document.getElementById('schedule-task-name').textContent = '日時やメモを指定してから追加できます';
+            document.getElementById('schedule-title-input').value = draftTitle;
+            document.getElementById('schedule-datetime-input').value = '';
+            document.getElementById('schedule-created-input').value = toDateTimeLocalValue(now());
+            document.getElementById('schedule-device-label').textContent = settings.deviceName || detectDeviceName();
+            editingTaskLogs = [];
+            renderTaskLogEditor();
+            document.getElementById('schedule-modal').classList.remove('hidden');
+            lucide.createIcons();
+            setTimeout(() => document.getElementById(draftTitle ? 'schedule-datetime-input' : 'schedule-title-input').focus(), 50);
+        };
+
         // タスク編集モーダル：タイトル、日時、履歴をまとめて変更する
         window.openScheduleModal = (id) => {
             const task = tasks.find(t => t.id === id);
             if (!task) return;
+            configureScheduleModal('edit');
             currentTaskIdForSchedule = id;
             document.getElementById('schedule-task-name').textContent = task.text;
             document.getElementById('schedule-title-input').value = task.text;
@@ -3721,13 +3756,17 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
             lucide.createIcons();
             setTimeout(() => document.getElementById('schedule-title-input').focus(), 50);
         };
-        window.closeScheduleModal = () => document.getElementById('schedule-modal').classList.add('hidden');
+        window.closeScheduleModal = () => {
+            document.getElementById('schedule-modal').classList.add('hidden');
+            currentTaskIdForSchedule = null;
+            scheduleModalMode = 'edit';
+        };
 
-        // addToCal=true なら保存後にGoogleカレンダーへ遷移する
+        // 新規追加と既存編集で同じ入力画面を使い、addToCal=trueなら保存後にGoogleカレンダーへ遷移する
         window.saveSchedule = async (addToCal) => {
-            if (!currentTaskIdForSchedule) return;
-            const t = tasks.find(x => x.id === currentTaskIdForSchedule);
-            if (!t) return;
+            const isCreate = scheduleModalMode === 'create';
+            let t = isCreate ? null : tasks.find(x => x.id === currentTaskIdForSchedule);
+            if (!isCreate && !t) return;
             const dt = document.getElementById('schedule-datetime-input').value;
             const createdValue = document.getElementById('schedule-created-input').value;
             const evTitle = document.getElementById('schedule-title-input').value.trim();
@@ -3745,15 +3784,22 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
                 window.showToast('メモ・履歴は200件まで、1件1000文字までです。', 'error');
                 return;
             }
-            t.text = evTitle;
-            t.dueDate = dt || null;
-            t.createdAt = createdAt;
-            t.logs = logs;
-            t.updatedAt = now();
-            await dbPersistLocalMutation(t, 'update');
-            sortTasks();
-            render();
-            triggerDriveSync();
+            if (isCreate) {
+                t = createTaskRecord(evTitle, { dueDate: dt, createdAt, logs });
+                await persistNewTask(t);
+                document.getElementById('task-input').value = '';
+                showToast('タスクを追加しました。', 'success');
+            } else {
+                t.text = evTitle;
+                t.dueDate = dt || null;
+                t.createdAt = createdAt;
+                t.logs = logs;
+                t.updatedAt = now();
+                await dbPersistLocalMutation(t, 'update');
+                sortTasks();
+                render();
+                triggerDriveSync();
+            }
             if (addToCal) {
                 // 同一タブで遷移（iOSで空白タブが残る問題を回避。戻る操作でアプリに復帰）
                 window.location.href = buildCalendarUrl(evTitle, t, dt);
@@ -4710,6 +4756,7 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
 
             // イベント登録
             document.getElementById('task-form').addEventListener('submit', window.addTask);
+            document.getElementById('detailed-task-btn').addEventListener('click', window.openDetailedTaskModal);
             document.getElementById('settings-btn').addEventListener('click', window.openSettingsModal);
             document.getElementById('memo-modal').addEventListener('click', (e) => { if (e.target.id === 'memo-modal') closeMemoModal(); });
             document.getElementById('schedule-modal').addEventListener('click', (e) => { if (e.target.id === 'schedule-modal') closeScheduleModal(); });
