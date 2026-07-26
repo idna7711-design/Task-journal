@@ -239,6 +239,22 @@ for (const requiredFeature of [
 if (!indexHtml.includes('id="task-datetime"')) console.log('OK  新規追加欄に予定日時なし');
 else { failed++; console.error('NG  新規追加欄に予定日時が残っています'); }
 
+for (const requiredDetailedTaskFeature of [
+    'id="detailed-task-btn"',
+    'window.openDetailedTaskModal = () =>',
+    "let scheduleModalMode = 'edit';",
+    "configureScheduleModal('create');",
+    "configureScheduleModal('edit');",
+    "const isCreate = scheduleModalMode === 'create';",
+    'タスクを詳しく追加',
+    '追加してカレンダーへ',
+]) {
+    if (indexHtml.includes(requiredDetailedTaskFeature)) console.log(`OK  詳細タスク追加: ${requiredDetailedTaskFeature}`);
+    else { failed++; console.error(`NG  詳細タスク追加が不完全です: ${requiredDetailedTaskFeature}`); }
+}
+if (!indexHtml.includes('data-lucide="plus-circle"')) console.log('OK  機能しない追加アイコンを削除');
+else { failed++; console.error('NG  機能しない追加アイコンが残っています'); }
+
 for (const requiredUxFeature of [
     'rel="manifest" href="manifest.webmanifest"',
     'id="confirm-modal"',
@@ -299,8 +315,8 @@ for (const requiredExclusiveStorageBoxFeature of [
     else { failed++; console.error(`NG  格納ボックス排他開閉が不完全です: ${requiredExclusiveStorageBoxFeature}`); }
 }
 const serviceWorkerCode = readFileSync(join(root, 'sw.js'), 'utf8');
-if (indexHtml.includes("const SW_CACHE_NAME = 'taskjournal-cache-v10';")
-    && serviceWorkerCode.includes("const CACHE = 'taskjournal-cache-v10';")) {
+if (indexHtml.includes("const SW_CACHE_NAME = 'taskjournal-cache-v11';")
+    && serviceWorkerCode.includes("const CACHE = 'taskjournal-cache-v11';")) {
     console.log('OK  Service Workerキャッシュ名が一致');
 } else {
     failed++;
