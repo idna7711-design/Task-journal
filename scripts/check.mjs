@@ -327,8 +327,8 @@ for (const requiredExclusiveStorageBoxFeature of [
     else { failed++; console.error(`NG  格納ボックス排他開閉が不完全です: ${requiredExclusiveStorageBoxFeature}`); }
 }
 const serviceWorkerCode = readFileSync(join(root, 'sw.js'), 'utf8');
-if (indexHtml.includes("const SW_CACHE_NAME = 'taskjournal-cache-v12';")
-    && serviceWorkerCode.includes("const CACHE = 'taskjournal-cache-v12';")) {
+if (indexHtml.includes("const SW_CACHE_NAME = 'taskjournal-cache-v13';")
+    && serviceWorkerCode.includes("const CACHE = 'taskjournal-cache-v13';")) {
     console.log('OK  Service Workerキャッシュ名が一致');
 } else {
     failed++;
@@ -350,6 +350,13 @@ for (const requiredCalendarFeature of [
 ]) {
     if (indexHtml.includes(requiredCalendarFeature)) console.log(`OK  カレンダー表示: ${requiredCalendarFeature}`);
     else { failed++; console.error(`NG  カレンダー表示が不完全です: ${requiredCalendarFeature}`); }
+}
+if (indexHtml.includes('.calendar-month-preview-title { display: block; }')
+    && !indexHtml.includes('.calendar-month-preview-title { display: none; }')) {
+    console.log('OK  iPhone月表示でタスク名を表示');
+} else {
+    failed++;
+    console.error('NG  iPhone月表示でタスク名が表示されません');
 }
 for (const requiredCalendarBackendFeature of [
     "data.action === 'calendar-range'",

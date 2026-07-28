@@ -626,18 +626,31 @@ html.dark .calendar-add-task {
     .calendar-status { max-width: 75%; }
     .calendar-week-grid { grid-template-columns: 1fr; }
     .calendar-day-column { min-height: 0; }
+    /* iPhoneの月表示でも、各日の予定名を最大3件まで読めるようにする。 */
     .calendar-month-cell {
-        min-height: 4.4rem;
-        padding: 0.25rem;
+        min-height: 5.4rem;
+        padding: 0.2rem;
     }
     .calendar-month-preview {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 0.18rem;
+        display: grid;
+        gap: 0.14rem;
     }
-    .calendar-month-preview-item { gap: 0; }
-    .calendar-month-preview-title { display: none; }
-    .calendar-month-more { width: 100%; }
+    .calendar-month-preview-item {
+        min-width: 0;
+        gap: 0.12rem;
+        font-size: 0.54rem;
+        line-height: 1.15;
+    }
+    .calendar-month-preview-dot {
+        width: 0.28rem;
+        height: 0.28rem;
+    }
+    .calendar-month-preview-title { display: block; }
+    .calendar-month-more {
+        width: 100%;
+        font-size: 0.54rem;
+        line-height: 1.15;
+    }
 }
 
 /* iPhoneノッチ・下部バー対応: 端末のセーフエリア分だけ余白を足す（非対応端末では0） */
@@ -1287,8 +1300,8 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
         // - pull: 起動時・復帰時・同期アイコンクリック時に取得し、削除優先でローカルへ反映
 
         // ---- State ----
-        const APP_BUILD = '2026-07-28-mobile-task-first';
-        const SW_CACHE_NAME = 'taskjournal-cache-v12';
+        const APP_BUILD = '2026-07-28-mobile-month-titles';
+        const SW_CACHE_NAME = 'taskjournal-cache-v13';
         const SYNC_ACK_MISS_LIMIT = 3;
         const SYNC_RECOVERY_MAX = 1;
         const SYNC_RECOVERY_ARCHIVE_LIMIT = 50;
