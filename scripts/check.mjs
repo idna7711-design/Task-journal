@@ -241,7 +241,7 @@ else { failed++; console.error('NG  新規追加欄に予定日時が残って�
 
 for (const requiredDetailedTaskFeature of [
     'id="detailed-task-btn"',
-    'window.openDetailedTaskModal = () =>',
+    "window.openDetailedTaskModal = (presetDateTime = '') =>",
     "let scheduleModalMode = 'edit';",
     "configureScheduleModal('create');",
     "configureScheduleModal('edit');",
@@ -261,7 +261,13 @@ for (const requiredUxFeature of [
     'function showConfirm(',
     'function showUndoToast(',
     'id="task-search"',
-    'function renderFocusCard(',
+    'id="app-view-switch"',
+    'data-app-view="tasks"',
+    'id="task-filter-panel"',
+    'function getTaskAttention(',
+    'function activeTaskDisplayRank(',
+    'class="task-actions-menu"',
+    'sync-status-label',
     'taskjournal:theme',
     'window.lucide = window.lucide || { createIcons() {} };',
     'id="sync-connection-test-btn"',
@@ -270,6 +276,12 @@ for (const requiredUxFeature of [
 ]) {
     if (indexHtml.includes(requiredUxFeature)) console.log(`OK  GUI/UX刷新: ${requiredUxFeature}`);
     else { failed++; console.error(`NG  GUI/UX機能がありません: ${requiredUxFeature}`); }
+}
+if (!indexHtml.includes('id="focus-card"') && !indexHtml.includes('function renderFocusCard(')) {
+    console.log('OK  独立したフォーカスカードを撤去');
+} else {
+    failed++;
+    console.error('NG  独立したフォーカスカードが残っています');
 }
 for (const requiredCompletedBoxFeature of [
     'aria-label="完了したタスクの格納ボックス"',
@@ -315,8 +327,8 @@ for (const requiredExclusiveStorageBoxFeature of [
     else { failed++; console.error(`NG  格納ボックス排他開閉が不完全です: ${requiredExclusiveStorageBoxFeature}`); }
 }
 const serviceWorkerCode = readFileSync(join(root, 'sw.js'), 'utf8');
-if (indexHtml.includes("const SW_CACHE_NAME = 'taskjournal-cache-v11';")
-    && serviceWorkerCode.includes("const CACHE = 'taskjournal-cache-v11';")) {
+if (indexHtml.includes("const SW_CACHE_NAME = 'taskjournal-cache-v12';")
+    && serviceWorkerCode.includes("const CACHE = 'taskjournal-cache-v12';")) {
     console.log('OK  Service Workerキャッシュ名が一致');
 } else {
     failed++;
@@ -329,6 +341,8 @@ for (const requiredCalendarFeature of [
     'data-calendar-mode="week"',
     'data-calendar-mode="month"',
     "action: 'calendar-range'",
+    'window.openDetailedTaskForDate = (dateKey) =>',
+    'この日に追加',
     "const CALENDAR_TOKEN_CONTEXT = 'TaskJournal calendar read v1';",
     'async function deriveCalendarReadToken(',
     'const CALENDAR_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000;',

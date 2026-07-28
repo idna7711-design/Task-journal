@@ -96,6 +96,170 @@
 <style>
 /* ===== UX強化スタイル（precompiled CSS の後に置き、上書きを効かせる） ===== */
 
+/* 毎日使う「タスク」と「カレンダー」を文字で判別できるヘッダー。 */
+.app-header {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    align-items: center;
+    gap: 0.75rem;
+}
+.app-brand {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    gap: 0.75rem;
+}
+.app-header-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.5rem;
+}
+.app-view-switch {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.2rem;
+    padding: 0.2rem;
+    border: 1px solid #e4e4e7;
+    border-radius: 0.9rem;
+    background: #f4f4f5;
+}
+.app-view-button {
+    min-width: 5.25rem;
+    min-height: 2.25rem;
+    border-radius: 0.7rem;
+    color: #71717a;
+    font-size: 0.75rem;
+    font-weight: 800;
+    transition: background-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+}
+.app-view-button.is-active {
+    background: #fff;
+    color: #18181b;
+    box-shadow: 0 1px 4px rgba(24, 24, 27, 0.12);
+}
+.sync-status-button {
+    display: inline-flex;
+    min-height: 2.5rem;
+    align-items: center;
+    justify-content: center;
+    gap: 0.35rem;
+    padding: 0.5rem 0.65rem;
+    border: 1px solid transparent;
+    border-radius: 0.75rem;
+    font-size: 0.68rem;
+    font-weight: 800;
+    white-space: nowrap;
+    transition: all 0.15s ease;
+}
+.sync-status-button:hover { border-color: #e4e4e7; }
+
+/* 検索とジャンルは、必要なときだけ1つの小さなパネルから開く。 */
+.task-filter-panel {
+    position: relative;
+    flex: 0 0 auto;
+}
+.task-filter-summary {
+    display: inline-flex;
+    min-height: 2.25rem;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.45rem 0.7rem;
+    border: 1px solid #e4e4e7;
+    border-radius: 0.75rem;
+    background: #fff;
+    color: #52525b;
+    font-size: 0.72rem;
+    font-weight: 800;
+    list-style: none;
+    cursor: pointer;
+}
+.task-filter-summary::-webkit-details-marker,
+.task-actions-summary::-webkit-details-marker { display: none; }
+.task-filter-panel[open] .task-filter-summary {
+    border-color: #d06a38;
+    color: #a8481e;
+    background: #fff8f2;
+}
+.task-filter-content {
+    position: absolute;
+    top: calc(100% + 0.5rem);
+    right: 0;
+    z-index: 30;
+    width: min(28rem, calc(100vw - 2rem));
+    padding: 0.75rem;
+    border: 1px solid #e4e4e7;
+    border-radius: 1rem;
+    background: #fff;
+    box-shadow: 0 16px 35px rgba(24, 24, 27, 0.14);
+}
+.genre-filter-scroll {
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 0.45rem;
+    margin-top: 0.65rem;
+    padding: 0.1rem 0 0.35rem;
+    overflow-x: auto;
+    overscroll-behavior-inline: contain;
+}
+.genre-filter-scroll > * { flex: 0 0 auto; }
+
+/* タスクカードは主要情報を優先し、副操作は開いたときだけ表示する。 */
+.task-actions-menu {
+    position: relative;
+    z-index: 10;
+    margin-top: 0.15rem;
+    padding-top: 0.55rem;
+    border-top: 1px solid #f4f4f5;
+}
+.task-actions-summary {
+    display: flex;
+    min-height: 2.25rem;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.35rem;
+    color: #71717a;
+    font-size: 0.72rem;
+    font-weight: 800;
+    list-style: none;
+    cursor: pointer;
+}
+.task-actions-menu[open] .task-actions-summary { color: #a8481e; }
+.task-action-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.45rem;
+    margin-top: 0.45rem;
+}
+.task-action-item {
+    display: flex;
+    min-height: 2.5rem;
+    align-items: center;
+    justify-content: center;
+    gap: 0.35rem;
+    padding: 0.45rem;
+    border-radius: 0.7rem;
+    background: #fafafa;
+    color: #52525b;
+    font-size: 0.7rem;
+    font-weight: 800;
+}
+.task-action-item:hover { background: #fff8f2; color: #a8481e; }
+.task-action-item.is-delete:hover { background: #fff1f2; color: #e11d48; }
+.settings-task-tools {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.5rem;
+}
+.task-log-preview {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.375rem;
+    margin-top: 0.55rem;
+    color: #71717a;
+    font-size: 0.75rem;
+}
+
 /* カレンダー表示はTailwind CDNに依存せず、オフラインでも同じ配置にする。 */
 .calendar-shell {
     border: 1px solid #e5e7eb;
@@ -225,6 +389,22 @@
     color: #111827;
     font-size: 0.95rem;
 }
+.calendar-add-task {
+    display: inline-flex;
+    width: 100%;
+    min-height: 2.25rem;
+    align-items: center;
+    justify-content: center;
+    gap: 0.3rem;
+    margin-top: 0.5rem;
+    border: 1px dashed #ed9b72;
+    border-radius: 0.7rem;
+    background: #fff8f2;
+    color: #a8481e;
+    font-size: 0.7rem;
+    font-weight: 800;
+}
+.calendar-add-task:hover { background: #fce8d8; }
 .calendar-items {
     display: grid;
     gap: 0.4rem;
@@ -381,7 +561,47 @@ html.dark .calendar-mode-button.is-active {
     background: #f9fafb;
     color: #111827;
 }
+html.dark .app-view-switch,
+html.dark .task-action-item {
+    border-color: #3d332a;
+    background: #332a22;
+}
+html.dark .app-view-button { color: #a49685; }
+html.dark .app-view-button.is-active,
+html.dark .task-filter-summary,
+html.dark .task-filter-content {
+    border-color: #3d332a;
+    background: #262019;
+    color: #e8e0d6;
+}
+html.dark .task-filter-panel[open] .task-filter-summary,
+html.dark .task-actions-menu[open] .task-actions-summary {
+    border-color: #8c3a18;
+    background: #33231a;
+    color: #e8a37e;
+}
+html.dark .task-actions-menu { border-color: #332a22; }
+html.dark .task-action-item { color: #d8ccbf; }
+html.dark .task-action-item:hover { background: #33231a; color: #e8a37e; }
+html.dark .calendar-add-task {
+    border-color: #8c3a18;
+    background: #33231a;
+    color: #e8a37e;
+}
 @media (max-width: 639px) {
+    .app-header {
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 0.55rem;
+    }
+    .app-view-switch {
+        grid-column: 1 / -1;
+        grid-row: 2;
+        width: 100%;
+    }
+    .app-view-button { min-width: 0; }
+    .sync-status-label { display: inline; }
+    .task-log-preview { display: none; }
+    .task-action-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .calendar-shell {
         border-radius: 1.2rem;
         padding: 0.75rem;
@@ -587,22 +807,31 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
             <p class="text-[10px] text-zinc-400 mt-2">進捗は完了した処理段階を示す目安です。操作は続けられます。</p>
         </div>
 
-        <header class="bg-white rounded-2xl md:rounded-[2rem] px-4 py-3 md:px-6 md:py-4 flex justify-between items-center shadow-sm border border-zinc-200/60 shrink-0">
-            <div class="flex items-center gap-3">
+        <header class="app-header bg-white rounded-2xl md:rounded-[2rem] px-4 py-3 md:px-6 md:py-4 shadow-sm border border-zinc-200/60 shrink-0">
+            <div class="app-brand">
                 <img src="icons/icon-192.png" alt="" class="w-10 h-10 rounded-2xl shadow-sm" aria-hidden="true">
-                <div>
+                <div class="min-w-0">
                     <h1 class="text-lg md:text-xl font-bold text-zinc-900 tracking-tight leading-none mb-1">タスクジャーナル</h1>
                     <p class="hidden sm:block text-[10px] md:text-xs font-medium text-zinc-400 uppercase tracking-widest">NotebookLM＆Googleカレンダー共有</p>
                 </div>
             </div>
-            
-            <div class="flex items-center gap-2 md:gap-4">
-                <button id="view-mode-toggle" type="button" class="flex items-center justify-center w-10 h-10 rounded-xl transition-all border border-zinc-200 bg-white text-zinc-500 hover:text-violet-600 hover:bg-violet-50 shadow-sm" aria-label="カレンダーを開く" aria-pressed="false" title="カレンダーを開く">
-                    <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"></rect><path d="M16 3v4M8 3v4M3 10h18"></path></svg>
+
+            <nav id="app-view-switch" class="app-view-switch" aria-label="表示する画面">
+                <button type="button" class="app-view-button" data-app-view="tasks" aria-pressed="true">
+                    タスク
                 </button>
-                <button id="sync-status" class="flex items-center justify-center w-10 h-10 rounded-xl transition-all cursor-help border text-zinc-400 hover:bg-zinc-50 border-transparent hover:border-zinc-200" title="同期未連携 (同期設定からURLを登録してください)"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="cloud-off" aria-hidden="true" class="lucide lucide-cloud-off w-5 h-5"><path d="M10.94 5.274A7 7 0 0 1 15.71 10h1.79a4.5 4.5 0 0 1 4.222 6.057"></path><path d="M18.796 18.81A4.5 4.5 0 0 1 17.5 19H9A7 7 0 0 1 5.79 5.78"></path><path d="m2 2 20 20"></path></svg></button>
-                
-                <button id="settings-btn" class="text-zinc-600 hover:text-violet-600 hover:bg-violet-50 flex items-center gap-2 bg-white border border-zinc-200 px-4 py-2 rounded-xl font-medium transition-all shadow-sm hover:shadow">
+                <button type="button" class="app-view-button" data-app-view="calendar" aria-pressed="false">
+                    カレンダー
+                </button>
+            </nav>
+
+            <div class="app-header-actions">
+                <button id="sync-status" class="sync-status-button text-zinc-400" title="同期未連携（同期設定からURLを登録してください）" aria-label="同期未連携">
+                    <i data-lucide="cloud-off" class="w-4 h-4" aria-hidden="true"></i>
+                    <span class="sync-status-label">未連携</span>
+                </button>
+
+                <button id="settings-btn" class="text-zinc-600 hover:text-violet-600 hover:bg-violet-50 flex items-center gap-2 bg-white border border-zinc-200 px-3 sm:px-4 py-2 rounded-xl font-medium transition-all shadow-sm hover:shadow" aria-label="同期・AI設定">
                     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="settings-2" aria-hidden="true" class="lucide lucide-settings-2 w-4 h-4"><path d="M14 17H5"></path><path d="M19 7h-9"></path><circle cx="17" cy="17" r="3"></circle><circle cx="7" cy="7" r="3"></circle></svg>
                     <span class="hidden sm:inline text-sm">同期・AI設定</span>
                 </button>
@@ -628,43 +857,34 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
                 </form>
             </div>
 
-            <!-- 今日のフォーカス（今日期日・期限切れ・進行中のタスクを要約。renderで動的生成） -->
-            <section id="focus-card" class="hidden bg-white rounded-2xl md:rounded-[2rem] px-4 py-3 md:px-6 md:py-4 shadow-sm border border-zinc-200/60 shrink-0">
-                <div class="flex items-center gap-2 mb-2">
-                    <i data-lucide="target" class="w-4 h-4 text-violet-600 shrink-0"></i>
-                    <h3 class="text-xs font-bold text-zinc-800 tracking-wide">今日のフォーカス</h3>
-                    <span id="focus-count" class="shrink-0 inline-flex items-center justify-center min-w-[1.25rem] h-5 px-1.5 rounded-full bg-violet-100 text-violet-700 text-[11px] font-bold">0</span>
-                </div>
-                <ul id="focus-list" class="space-y-1"></ul>
-            </section>
-
-            <div class="bg-white rounded-2xl md:rounded-[2rem] p-4 md:p-8 shadow-sm border border-zinc-200/60 flex flex-col gap-5 md:gap-8">
+            <div class="bg-white rounded-2xl md:rounded-[2rem] p-3 md:p-6 shadow-sm border border-zinc-200/60 flex flex-col gap-4 md:gap-6">
 
                 <div>
-                    <div class="flex items-center justify-between mb-4 md:mb-5 px-1 gap-2">
+                    <div class="flex items-center justify-between mb-3 px-1 gap-2">
                         <div class="flex items-center gap-3 min-w-0">
                             <div class="w-2 h-2 rounded-full bg-violet-500 shrink-0"></div>
                             <h3 class="text-sm font-bold text-zinc-800 tracking-wide whitespace-nowrap">進行中・未完了</h3>
                             <span id="active-count" class="shrink-0 inline-flex items-center justify-center min-w-[1.25rem] h-5 px-1.5 rounded-full bg-violet-100 text-violet-700 text-[11px] font-bold">0</span>
                         </div>
-                        <div class="flex items-center gap-2 shrink-0">
-                            <button id="genre-manage-btn" onclick="openGenreModal()" class="text-xs font-bold bg-white text-zinc-600 border border-zinc-200 hover:bg-zinc-50 hover:text-violet-600 px-2.5 py-1.5 rounded-xl transition-all shadow-sm active:scale-95 flex items-center gap-1.5" title="ジャンルの作成・編集・AI提案">
-                                <i data-lucide="tags" class="w-4 h-4"></i><span class="hidden sm:inline">ジャンル管理</span>
-                            </button>
-                            <button id="ai-classify-btn" onclick="classifyTasks()" class="text-xs font-bold bg-violet-100 text-violet-700 hover:bg-violet-200 px-2.5 py-1.5 rounded-xl transition-all shadow-sm active:scale-95 flex items-center gap-1.5" title="AIでタスクをジャンル自動分類">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-lucide="bot" aria-hidden="true" class="lucide lucide-bot w-4 h-4"><path d="M12 8V4H8"></path><rect width="16" height="12" x="4" y="8" rx="2"></rect><path d="M2 14h2"></path><path d="M20 14h2"></path><path d="M15 13v2"></path><path d="M9 13v2"></path></svg><span class="hidden sm:inline">AI自動分類</span>
-                            </button>
-                        </div>
+                        <details id="task-filter-panel" class="task-filter-panel">
+                            <summary class="task-filter-summary" aria-label="タスクを検索・絞り込み">
+                                <i data-lucide="sliders-horizontal" class="w-4 h-4" aria-hidden="true"></i>
+                                <span id="filter-summary-label">検索・絞り込み</span>
+                            </summary>
+                            <div class="task-filter-content">
+                                <div class="relative">
+                                    <div class="absolute inset-y-0 left-3 flex items-center pointer-events-none">
+                                        <i data-lucide="search" class="w-4 h-4 text-zinc-300"></i>
+                                    </div>
+                                    <input type="search" id="task-search" placeholder="タスクを検索（本文・メモ）" autocomplete="off" class="w-full bg-zinc-50 border-2 border-zinc-100 rounded-xl pl-10 pr-4 py-2.5 text-xs font-medium text-zinc-800 placeholder-zinc-400 focus:outline-none focus:border-violet-300 focus:bg-white transition-all">
+                                </div>
+                                <div id="genre-filter" class="genre-filter-scroll" aria-label="ジャンルで絞り込み"></div>
+                                <button type="button" id="clear-task-filters" onclick="clearTaskFilters()" class="hidden w-full mt-1 px-3 py-2 text-xs font-bold text-zinc-500 hover:text-violet-700 hover:bg-violet-50 rounded-xl transition-colors">
+                                    検索・絞り込みを解除
+                                </button>
+                            </div>
+                        </details>
                     </div>
-                    <!-- タスク検索（本文・メモを部分一致で絞り込み） -->
-                    <div class="relative mb-3">
-                        <div class="absolute inset-y-0 left-3 flex items-center pointer-events-none">
-                            <i data-lucide="search" class="w-4 h-4 text-zinc-300"></i>
-                        </div>
-                        <input type="search" id="task-search" placeholder="タスクを検索（本文・メモ）" autocomplete="off" class="w-full bg-zinc-50 border-2 border-zinc-100 rounded-xl pl-10 pr-4 py-2 text-xs font-medium text-zinc-800 placeholder-zinc-400 focus:outline-none focus:border-violet-300 focus:bg-white transition-all">
-                    </div>
-                    <!-- ジャンル絞り込み（renderで動的生成） -->
-                    <div id="genre-filter" class="flex flex-wrap items-center gap-2 mb-4"></div>
                     <!-- 起動直後はスケルトンを表示し、初回render()で実データに置き換わる -->
                     <div id="active-task-list" class="space-y-3">
                         <div class="skeleton-card"><div class="skeleton-line" style="width:55%"></div><div class="skeleton-line" style="width:30%"></div></div>
@@ -1001,6 +1221,26 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
                 <hr class="border-zinc-100 my-6">
 
                 <div class="flex items-center gap-3 mb-4">
+                    <div class="w-10 h-10 rounded-2xl bg-violet-50 flex items-center justify-center text-violet-600">
+                        <i data-lucide="list-filter" class="w-5 h-5"></i>
+                    </div>
+                    <h3 class="font-bold text-zinc-900 text-lg">タスク整理</h3>
+                </div>
+                <p class="text-xs text-zinc-500 mb-4 leading-relaxed">
+                    ジャンルの作成・変更や、AIによる未分類タスクの整理を行います。
+                </p>
+                <div class="settings-task-tools">
+                    <button type="button" id="genre-manage-btn" onclick="closeSettingsModal(); openGenreModal()" class="flex items-center justify-center gap-2 text-xs font-bold bg-white border-2 border-zinc-200 text-zinc-700 hover:bg-zinc-50 px-3 py-3 rounded-2xl transition-all active:scale-95">
+                        <i data-lucide="tags" class="w-4 h-4"></i>ジャンル管理
+                    </button>
+                    <button type="button" id="ai-classify-btn" onclick="closeSettingsModal(); classifyTasks()" class="flex items-center justify-center gap-2 text-xs font-bold bg-violet-100 border-2 border-violet-100 text-violet-700 hover:bg-violet-200 px-3 py-3 rounded-2xl transition-all active:scale-95">
+                        <i data-lucide="bot" class="w-4 h-4"></i>AI自動分類
+                    </button>
+                </div>
+
+                <hr class="border-zinc-100 my-6">
+
+                <div class="flex items-center gap-3 mb-4">
                     <div class="w-10 h-10 rounded-2xl bg-zinc-100 flex items-center justify-center text-zinc-600">
                         <i data-lucide="moon-star" class="w-5 h-5"></i>
                     </div>
@@ -1047,8 +1287,8 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
         // - pull: 起動時・復帰時・同期アイコンクリック時に取得し、削除優先でローカルへ反映
 
         // ---- State ----
-        const APP_BUILD = '2026-07-26-detailed-task-add';
-        const SW_CACHE_NAME = 'taskjournal-cache-v11';
+        const APP_BUILD = '2026-07-28-mobile-task-first';
+        const SW_CACHE_NAME = 'taskjournal-cache-v12';
         const SYNC_ACK_MISS_LIMIT = 3;
         const SYNC_RECOVERY_MAX = 1;
         const SYNC_RECOVERY_ARCHIVE_LIMIT = 50;
@@ -2178,6 +2418,9 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
                     <div class="calendar-items">
                         ${items.length ? items.map(createCalendarItemHTML).join('') : '<div class="calendar-empty">予定なし</div>'}
                     </div>
+                    <button type="button" class="calendar-add-task" onclick="openDetailedTaskForDate('${calendarDateKey(day)}')" aria-label="${escapeHtml(day.toLocaleDateString('ja-JP'))}にタスクを追加">
+                        <i data-lucide="plus" class="w-3.5 h-3.5" aria-hidden="true"></i>この日に追加
+                    </button>
                 </section>`;
         }
         function renderCalendarDay(board, allItems) {
@@ -2263,16 +2506,14 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
             const showingCalendar = appView === 'calendar';
             const taskView = document.getElementById('task-view');
             const calendarView = document.getElementById('calendar-view');
-            const toggle = document.getElementById('view-mode-toggle');
-            if (!taskView || !calendarView || !toggle) return;
+            if (!taskView || !calendarView) return;
             taskView.classList.toggle('hidden', showingCalendar);
             calendarView.classList.toggle('hidden', !showingCalendar);
-            toggle.setAttribute('aria-pressed', String(showingCalendar));
-            toggle.setAttribute('aria-label', showingCalendar ? 'タスク一覧を開く' : 'カレンダーを開く');
-            toggle.setAttribute('title', showingCalendar ? 'タスク一覧を開く' : 'カレンダーを開く');
-            toggle.innerHTML = showingCalendar
-                ? '<svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"></path></svg>'
-                : '<svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"></rect><path d="M16 3v4M8 3v4M3 10h18"></path></svg>';
+            document.querySelectorAll('[data-app-view]').forEach(button => {
+                const active = button.dataset.appView === appView;
+                button.classList.toggle('is-active', active);
+                button.setAttribute('aria-pressed', String(active));
+            });
             try { localStorage.setItem(APP_VIEW_KEY, appView); } catch { /* 保存不可でも切替は継続 */ }
             if (showingCalendar) {
                 renderCalendarView();
@@ -3029,36 +3270,40 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
         function updateSyncStatus(status) {
             const el = document.getElementById('sync-status');
             if (!el) return;
-            el.className = 'flex items-center justify-center w-10 h-10 rounded-xl transition-all cursor-pointer border';
+            el.className = 'sync-status-button cursor-pointer';
 
             if (status === 'off') {
-                el.innerHTML = '<i data-lucide="cloud-off" class="w-5 h-5"></i>';
-                el.title = '同期未連携 (同期設定からURLを登録してください)';
-                el.classList.add('text-zinc-400', 'hover:bg-zinc-50', 'border-transparent', 'hover:border-zinc-200');
+                el.innerHTML = '<i data-lucide="cloud-off" class="w-4 h-4"></i><span class="sync-status-label">未連携</span>';
+                el.title = '同期未連携（同期設定からURLを登録してください）';
+                el.classList.add('text-zinc-400', 'hover:bg-zinc-50', 'border-transparent');
             } else if (status === 'idle') {
-                el.innerHTML = '<i data-lucide="cloud" class="w-5 h-5"></i>';
-                el.title = '同期設定済み (クリックで手動取得)';
-                el.classList.add('text-zinc-400', 'hover:bg-zinc-50', 'border-transparent', 'hover:border-zinc-200');
+                const wasSynced = lastSyncSuccessAt > 0;
+                el.innerHTML = wasSynced
+                    ? '<i data-lucide="cloud-check" class="w-4 h-4"></i><span class="sync-status-label">同期済</span>'
+                    : '<i data-lucide="cloud" class="w-4 h-4"></i><span class="sync-status-label">同期</span>';
+                el.title = wasSynced ? '同期済み（クリックで更新）' : '同期設定済み（クリックで初回同期）';
+                el.classList.add(wasSynced ? 'text-emerald-600' : 'text-zinc-400', 'hover:bg-zinc-50', 'border-transparent');
             } else if (status === 'syncing') {
-                el.innerHTML = '<div class="w-5 h-5 border-2 border-violet-200 border-t-violet-600 rounded-full animate-spin"></div>';
+                el.innerHTML = '<div class="w-4 h-4 border-2 border-violet-200 border-t-violet-600 rounded-full animate-spin"></div><span class="sync-status-label">同期中</span>';
                 el.title = 'バックグラウンドで自動同期中...';
-                el.classList.add('bg-violet-50', 'border-violet-100');
+                el.classList.add('text-violet-700', 'bg-violet-50', 'border-violet-100');
             } else if (status === 'success') {
-                el.innerHTML = '<i data-lucide="cloud-check" class="w-5 h-5 text-emerald-500"></i>';
-                el.title = '同期完了';
-                el.classList.add('bg-emerald-50', 'border-emerald-100');
+                el.innerHTML = '<i data-lucide="cloud-check" class="w-4 h-4"></i><span class="sync-status-label">同期済</span>';
+                el.title = '同期完了（クリックで更新）';
+                el.classList.add('text-emerald-600', 'bg-emerald-50', 'border-emerald-100');
                 setTimeout(() => {
-                    if (el.title === '同期完了') updateSyncStatus('idle');
+                    if (el.title === '同期完了（クリックで更新）') updateSyncStatus('idle');
                 }, 3000);
             } else if (status === 'error') {
-                el.innerHTML = '<i data-lucide="cloud-alert" class="w-5 h-5 text-rose-500"></i>';
-                el.title = '同期エラー (URLが正しいか確認してください)';
-                el.classList.add('bg-rose-50', 'border-rose-100');
+                el.innerHTML = '<i data-lucide="cloud-alert" class="w-4 h-4"></i><span class="sync-status-label">未同期</span>';
+                el.title = '同期できませんでした（クリックで再試行）';
+                el.classList.add('text-rose-600', 'bg-rose-50', 'border-rose-100');
             } else if (status === 'warning') {
-                el.innerHTML = '<i data-lucide="cloud-alert" class="w-5 h-5 text-amber-600"></i>';
+                el.innerHTML = '<i data-lucide="cloud-alert" class="w-4 h-4"></i><span class="sync-status-label">確認待ち</span>';
                 el.title = '一部のタスクは端末内に保持して確認待ちです';
-                el.classList.add('bg-amber-50', 'border-amber-200');
+                el.classList.add('text-amber-700', 'bg-amber-50', 'border-amber-200');
             }
+            el.setAttribute('aria-label', el.title);
             lucide.createIcons();
         }
 
@@ -3721,15 +3966,15 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
             document.getElementById('schedule-calendar-btn-label').textContent = isCreate ? '追加してカレンダーへ' : '保存してカレンダーへ';
         }
 
-        // 詳細追加：入力中のタイトルを引き継ぎ、保存するまでタスクを作成しない
-        window.openDetailedTaskModal = () => {
+        // 詳細追加：入力中のタイトルと任意の予定日時を引き継ぎ、保存するまでタスクを作成しない
+        window.openDetailedTaskModal = (presetDateTime = '') => {
             ensureDeviceIdentity();
             currentTaskIdForSchedule = null;
             configureScheduleModal('create');
             const draftTitle = document.getElementById('task-input').value.trim();
             document.getElementById('schedule-task-name').textContent = '日時やメモを指定してから追加できます';
             document.getElementById('schedule-title-input').value = draftTitle;
-            document.getElementById('schedule-datetime-input').value = '';
+            document.getElementById('schedule-datetime-input').value = presetDateTime ? toDateTimeLocalValue(presetDateTime) : '';
             document.getElementById('schedule-created-input').value = toDateTimeLocalValue(now());
             document.getElementById('schedule-device-label').textContent = settings.deviceName || detectDeviceName();
             editingTaskLogs = [];
@@ -3737,6 +3982,18 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
             document.getElementById('schedule-modal').classList.remove('hidden');
             lucide.createIcons();
             setTimeout(() => document.getElementById(draftTitle ? 'schedule-datetime-input' : 'schedule-title-input').focus(), 50);
+        };
+
+        // カレンダーの日付から追加すると、その日の使いやすい時刻を初期値にする。
+        window.openDetailedTaskForDate = (dateKey) => {
+            const selected = calendarDateFromKey(dateKey);
+            if (!selected) return;
+            if (isCalendarToday(selected)) {
+                selected.setHours(Math.min(23, new Date().getHours() + 1), 0, 0, 0);
+            } else {
+                selected.setHours(9, 0, 0, 0);
+            }
+            window.openDetailedTaskModal(selected);
         };
 
         // タスク編集モーダル：タイトル、日時、履歴をまとめて変更する
@@ -4433,6 +4690,32 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
         };
 
         // ---- Render ----
+        function getTaskAttention(task) {
+            if (!task || task.status === 'done') return null;
+            if (task.status === 'doing') {
+                return { rank: 0, label: '進行中', className: 'text-violet-700 bg-violet-100' };
+            }
+            if (!task.dueDate) return null;
+            const due = new Date(task.dueDate);
+            if (Number.isNaN(due.getTime())) return null;
+            const dueKey = calendarDateKey(due);
+            const todayKey = calendarDateKey(new Date());
+            if (dueKey < todayKey) {
+                return { rank: 2, label: '期限切れ', className: 'text-rose-500 bg-rose-50' };
+            }
+            if (dueKey === todayKey) {
+                return { rank: 3, label: '今日', className: 'text-blue-600 bg-blue-50' };
+            }
+            return null;
+        }
+
+        function activeTaskDisplayRank(task) {
+            const attention = getTaskAttention(task);
+            if (attention && attention.rank === 0) return 0;
+            if (task.pinned) return 1;
+            return attention ? attention.rank : 4;
+        }
+
         function createTaskHTML(task) {
             const isCompleted = task.status === 'done';
             const isDoing = task.status === 'doing';
@@ -4471,6 +4754,10 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
                 const dueStr = `${dd.getMonth() + 1}/${dd.getDate()} ${pad(dd.getHours())}:${pad(dd.getMinutes())}`;
                 dueChip = `<button type="button" onclick="openScheduleModal('${task.id}')" class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-blue-50 text-blue-600 border border-blue-100 hover:opacity-75 transition-opacity" title="予定を編集"><i data-lucide="calendar-clock" class="w-3 h-3"></i>${dueStr}</button>`;
             }
+            const attention = getTaskAttention(task);
+            const attentionBadge = attention
+                ? `<span class="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold ${attention.className}">${attention.label}</span>`
+                : '';
 
             return `
                 <div class="${baseClass} ${stateClass}" data-task-id="${task.id}">
@@ -4480,38 +4767,44 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
                         <div class="flex-1 min-w-0">
                             <h3 class="text-[15px] font-semibold leading-snug break-words ${isCompleted ? 'text-zinc-400 line-through' : 'text-zinc-800'}">${safeText}</h3>
                             <div class="flex flex-wrap items-center gap-2 mt-2">
+                                ${attentionBadge}
                                 ${task.pinned ? `<button type="button" onclick="togglePin('${task.id}')" class="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-md text-[10px] font-bold cursor-pointer hover:opacity-75 transition-opacity" style="background:#fef3c7;color:#b45309" title="クリックでピン留めを解除"><i data-lucide="pin" class="w-3 h-3"></i>ピン</button>` : ''}
                                 ${categoryBadge}
                                 ${dueChip}
                             </div>
-                            <div class="mt-2.5 text-xs text-zinc-500 flex items-start gap-1.5">
+                            <div class="task-log-preview">
                                 <i data-lucide="align-left" class="w-3.5 h-3.5 mt-0.5 opacity-40 shrink-0"></i>
                                 <span class="truncate">${lastLog}</span>
                             </div>
                         </div>
                     </div>
-                    <div class="task-actions flex items-center gap-1 relative z-10 mt-1 pt-2.5 border-t border-zinc-100">
-                        <button onclick="togglePin('${task.id}')" class="p-2 ${task.pinned ? 'text-amber-500' : 'text-zinc-400'} hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors" title="${task.pinned ? 'ピン留めを解除' : '上にピン留め'}">
-                            <i data-lucide="pin" class="w-4 h-4 ${task.pinned ? 'fill-current' : ''}"></i>
-                        </button>
+                    <details class="task-actions-menu">
+                        <summary class="task-actions-summary" aria-label="${escapeHtml(task.text)}の操作を表示">
+                            <i data-lucide="ellipsis" class="w-4 h-4" aria-hidden="true"></i>操作
+                        </summary>
+                        <div class="task-action-grid">
+                            <button type="button" onclick="togglePin('${task.id}')" class="task-action-item" title="${task.pinned ? 'ピン留めを解除' : '上にピン留め'}">
+                                <i data-lucide="pin" class="w-4 h-4 ${task.pinned ? 'fill-current text-amber-500' : ''}"></i>${task.pinned ? 'ピン解除' : 'ピン留め'}
+                            </button>
                         ${!isCompleted && !isDoing ? `
-                        <button onclick="startTask('${task.id}')" class="p-2 text-zinc-400 hover:text-violet-600 hover:bg-violet-50 rounded-lg transition-colors" title="開始する">
-                            <i data-lucide="play" class="w-4 h-4 fill-current"></i>
+                        <button type="button" onclick="startTask('${task.id}')" class="task-action-item" title="開始する">
+                            <i data-lucide="play" class="w-4 h-4 fill-current"></i>開始
                         </button>` : ''}
                         ${isDoing ? `
-                        <button onclick="unstartTask('${task.id}')" class="p-2 text-zinc-400 hover:text-violet-600 hover:bg-violet-50 rounded-lg transition-colors" title="開始前に戻す">
-                            <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
+                        <button type="button" onclick="unstartTask('${task.id}')" class="task-action-item" title="開始前に戻す">
+                            <i data-lucide="rotate-ccw" class="w-4 h-4"></i>未着手へ
                         </button>` : ''}
-                        <button onclick="openScheduleModal('${task.id}')" class="p-2 text-zinc-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title="タイトル・日時・メモ・追加元を確認／編集">
-                            <i data-lucide="pencil" class="w-4 h-4"></i>
+                        <button type="button" onclick="openScheduleModal('${task.id}')" class="task-action-item" title="タイトル・日時・メモ・追加元を確認／編集">
+                            <i data-lucide="pencil" class="w-4 h-4"></i>詳細・編集
                         </button>
-                        <button onclick="openMemoModal('${task.id}')" class="p-2 text-zinc-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors" title="メモを追加">
-                            <i data-lucide="pen-tool" class="w-4 h-4"></i>
+                        <button type="button" onclick="openMemoModal('${task.id}')" class="task-action-item" title="メモを追加">
+                            <i data-lucide="pen-tool" class="w-4 h-4"></i>メモ追加
                         </button>
-                        <button onclick="deleteTask('${task.id}')" class="p-2 ml-auto text-zinc-300 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-colors" title="削除">
-                            <i data-lucide="trash-2" class="w-4 h-4"></i>
+                        <button type="button" onclick="deleteTask('${task.id}')" class="task-action-item is-delete" title="削除">
+                            <i data-lucide="trash-2" class="w-4 h-4"></i>削除
                         </button>
-                    </div>
+                        </div>
+                    </details>
                 </div>`;
         }
 
@@ -4531,6 +4824,14 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
             } else {
                 activeGenreFilters.add(val);
             }
+            render();
+        };
+
+        window.clearTaskFilters = () => {
+            activeGenreFilters.clear();
+            searchQuery = '';
+            const input = document.getElementById('task-search');
+            if (input) input.value = '';
             render();
         };
 
@@ -4564,6 +4865,11 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
             genres.forEach(g => { html += chip(escapeHtml(g.name), g.id, genreStyleAttr(g.color)); });
             if (tasks.some(t => !getGenre(t.category))) html += chip('未分類', '__none__');
             el.innerHTML = html;
+            const activeCount = activeGenreFilters.size + (searchQuery ? 1 : 0);
+            const label = document.getElementById('filter-summary-label');
+            const clearButton = document.getElementById('clear-task-filters');
+            if (label) label.textContent = activeCount > 0 ? `絞り込み中 ${activeCount}` : '検索・絞り込み';
+            if (clearButton) clearButton.classList.toggle('hidden', activeCount === 0);
         }
 
         function applyCompletedSectionState() {
@@ -4653,42 +4959,6 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
             return (t.logs || []).some(l => String(l).toLowerCase().includes(searchQuery));
         }
 
-        // 「今日のフォーカス」カード: 進行中＋今日期日＋期限切れの未完了タスクを要約表示
-        function renderFocusCard() {
-            const card = document.getElementById('focus-card');
-            const list = document.getElementById('focus-list');
-            const countEl = document.getElementById('focus-count');
-            if (!card || !list) return;
-            const d = new Date();
-            const pad = n => String(n).padStart(2, '0');
-            const todayKey = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-            const focusTasks = tasks.filter(t => {
-                if (!t || t.status === 'done') return false;
-                if (t.status === 'doing') return true;
-                if (!t.dueDate) return false;
-                const dueKey = String(t.dueDate).slice(0, 10);
-                return dueKey <= todayKey; // 今日期日＋期限切れ
-            }).slice(0, 5);
-            if (focusTasks.length === 0) {
-                card.classList.add('hidden');
-                return;
-            }
-            card.classList.remove('hidden');
-            if (countEl) countEl.textContent = focusTasks.length;
-            list.innerHTML = focusTasks.map(t => {
-                let chip;
-                if (t.status === 'doing') {
-                    chip = '<span class="shrink-0 text-[10px] font-bold text-violet-700 bg-violet-100 px-1.5 py-0.5 rounded-md">進行中</span>';
-                } else {
-                    const dueKey = String(t.dueDate).slice(0, 10);
-                    chip = dueKey < todayKey
-                        ? '<span class="shrink-0 text-[10px] font-bold text-rose-500 bg-rose-50 px-1.5 py-0.5 rounded-md">期限切れ</span>'
-                        : '<span class="shrink-0 text-[10px] font-bold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded-md">今日</span>';
-                }
-                return `<li class="flex items-center gap-2 text-xs text-zinc-600"><span class="w-1.5 h-1.5 rounded-full bg-violet-500 shrink-0"></span><span class="flex-1 min-w-0 truncate font-medium">${escapeHtml(t.text)}</span>${chip}</li>`;
-            }).join('');
-        }
-
         function render() {
             const activeList = document.getElementById('active-task-list');
             const completedList = document.getElementById('completed-task-list');
@@ -4699,12 +4969,13 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
 
             renderGenreFilter();
             renderConflicts();
-            renderFocusCard();
 
             const isSearching = !!searchQuery;
             const isFiltered = activeGenreFilters.size > 0 || isSearching;
             const visible = t => matchesGenreFilter(t) && matchesSearch(t);
-            const activeTasks = tasks.filter(t => t.status !== 'done' && visible(t));
+            const activeTasks = tasks
+                .filter(t => t.status !== 'done' && visible(t))
+                .sort((a, b) => activeTaskDisplayRank(a) - activeTaskDisplayRank(b));
             const doneTasks = tasks.filter(t => t.status === 'done' && visible(t));
 
             // 見出しの件数バッジ（表示中の件数）
@@ -4771,8 +5042,8 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
                 syncDiagnostic = { ...syncDiagnostic, requestId: '', stage: 'manual', errorCode: '' };
                 pullFromCloud(true);
             });
-            document.getElementById('view-mode-toggle').addEventListener('click', () => {
-                window.setAppView(appView === 'calendar' ? 'tasks' : 'calendar');
+            document.querySelectorAll('[data-app-view]').forEach(button => {
+                button.addEventListener('click', () => window.setAppView(button.dataset.appView));
             });
             document.querySelectorAll('[data-calendar-mode]').forEach(button => {
                 button.addEventListener('click', () => window.setCalendarMode(button.dataset.calendarMode));
@@ -4830,8 +5101,15 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
                 } else if (e.key === '/') {
                     e.preventDefault();
                     if (appView !== 'tasks') window.setAppView('tasks');
+                    document.getElementById('task-filter-panel').open = true;
                     document.getElementById('task-search').focus();
                 }
+            });
+
+            // 絞り込みパネル外を押したら閉じ、タスク操作を邪魔しない。
+            document.addEventListener('click', (e) => {
+                const panel = document.getElementById('task-filter-panel');
+                if (panel && panel.open && !panel.contains(e.target)) panel.open = false;
             });
 
             // スワイプ操作（タッチ端末）: 右スワイプ=完了/未完了の切替、左スワイプ=削除（元に戻すトースト付き）
