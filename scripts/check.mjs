@@ -247,10 +247,20 @@ for (const requiredDetailedTaskFeature of [
     "configureScheduleModal('edit');",
     "const isCreate = scheduleModalMode === 'create';",
     'タスクを詳しく追加',
-    '追加してカレンダーへ',
+    '追加してカレンダーで見る',
+    'function showTaskInAppCalendar(dueDate)',
+    "window.setAppView('calendar');",
+    'カレンダーで見るには予定日時を入力してください。',
 ]) {
     if (indexHtml.includes(requiredDetailedTaskFeature)) console.log(`OK  詳細タスク追加: ${requiredDetailedTaskFeature}`);
     else { failed++; console.error(`NG  詳細タスク追加が不完全です: ${requiredDetailedTaskFeature}`); }
+}
+if (!indexHtml.includes('calendar.google.com/calendar/render?action=TEMPLATE')
+    && !indexHtml.includes('function buildCalendarUrl(')) {
+    console.log('OK  タスク保存時に外部Googleカレンダーを開かない');
+} else {
+    failed++;
+    console.error('NG  タスク保存時の外部Googleカレンダー遷移が残っています');
 }
 if (!indexHtml.includes('data-lucide="plus-circle"')) console.log('OK  機能しない追加アイコンを削除');
 else { failed++; console.error('NG  機能しない追加アイコンが残っています'); }
@@ -327,8 +337,8 @@ for (const requiredExclusiveStorageBoxFeature of [
     else { failed++; console.error(`NG  格納ボックス排他開閉が不完全です: ${requiredExclusiveStorageBoxFeature}`); }
 }
 const serviceWorkerCode = readFileSync(join(root, 'sw.js'), 'utf8');
-if (indexHtml.includes("const SW_CACHE_NAME = 'taskjournal-cache-v13';")
-    && serviceWorkerCode.includes("const CACHE = 'taskjournal-cache-v13';")) {
+if (indexHtml.includes("const SW_CACHE_NAME = 'taskjournal-cache-v14';")
+    && serviceWorkerCode.includes("const CACHE = 'taskjournal-cache-v14';")) {
     console.log('OK  Service Workerキャッシュ名が一致');
 } else {
     failed++;
@@ -370,8 +380,11 @@ for (const requiredCalendarBackendFeature of [
     if (gasCode.includes(requiredCalendarBackendFeature)) console.log(`OK  カレンダーGAS: ${requiredCalendarBackendFeature}`);
     else { failed++; console.error(`NG  カレンダーGASが不完全です: ${requiredCalendarBackendFeature}`); }
 }
-if (Array.isArray(gasManifest.oauthScopes)
-    && gasManifest.oauthScopes.includes('https://www.googleapis.com/auth/calendar.readonly')) {
+const calendarOauthScopes = Array.isArray(gasManifest.oauthScopes)
+    ? gasManifest.oauthScopes.filter(scope => String(scope).includes('/auth/calendar'))
+    : [];
+if (calendarOauthScopes.length === 1
+    && calendarOauthScopes[0] === 'https://www.googleapis.com/auth/calendar.readonly') {
     console.log('OK  Googleカレンダー権限は読み取り専用');
 } else {
     failed++;

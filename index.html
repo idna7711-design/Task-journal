@@ -1072,7 +1072,7 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
             <div class="flex flex-col sm:flex-row sm:justify-end gap-2 sm:gap-3">
                 <button type="button" onclick="closeScheduleModal()" class="px-5 py-3 text-sm font-bold text-zinc-500 hover:bg-zinc-100 rounded-2xl transition-colors">キャンセル</button>
                 <button type="button" id="schedule-save-btn" onclick="saveSchedule(false)" class="px-5 py-3 text-sm font-bold text-zinc-700 bg-zinc-100 hover:bg-zinc-200 rounded-2xl transition-colors">保存</button>
-                <button type="button" id="schedule-calendar-btn" onclick="saveSchedule(true)" class="px-6 py-3 text-sm font-bold bg-zinc-900 text-white hover:bg-blue-600 rounded-2xl transition-all shadow-md hover:shadow-lg active:scale-95 flex items-center justify-center gap-2"><i data-lucide="calendar-plus" class="w-4 h-4"></i><span id="schedule-calendar-btn-label">保存してカレンダーへ</span></button>
+                <button type="button" id="schedule-calendar-btn" onclick="saveSchedule(true)" class="px-6 py-3 text-sm font-bold bg-zinc-900 text-white hover:bg-blue-600 rounded-2xl transition-all shadow-md hover:shadow-lg active:scale-95 flex items-center justify-center gap-2"><i data-lucide="calendar-check" class="w-4 h-4"></i><span id="schedule-calendar-btn-label">保存してカレンダーで見る</span></button>
             </div>
         </div>
     </div>
@@ -1300,8 +1300,8 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
         // - pull: 起動時・復帰時・同期アイコンクリック時に取得し、削除優先でローカルへ反映
 
         // ---- State ----
-        const APP_BUILD = '2026-07-28-mobile-month-titles';
-        const SW_CACHE_NAME = 'taskjournal-cache-v13';
+        const APP_BUILD = '2026-07-29-in-app-calendar-save';
+        const SW_CACHE_NAME = 'taskjournal-cache-v14';
         const SYNC_ACK_MISS_LIMIT = 3;
         const SYNC_RECOVERY_MAX = 1;
         const SYNC_RECOVERY_ARCHIVE_LIMIT = 50;
@@ -3855,33 +3855,6 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
             }
         };
 
-        function formatToGoogleCalendarDate(datetimeLocalStr) {
-            if (!datetimeLocalStr) return '';
-            const d = new Date(datetimeLocalStr);
-            const pad = n => String(n).padStart(2, '0');
-            return `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}T${pad(d.getHours())}${pad(d.getMinutes())}00`;
-        }
-
-        function buildCalendarUrl(eventTitle, task, dueDate) {
-            const title = encodeURIComponent(eventTitle || task.text);
-            let detailsStr = `文脈ログ:\n`;
-            if (task.logs && task.logs.length > 0) task.logs.forEach(l => detailsStr += `- ${l}\n`);
-            else detailsStr += `(まだログはありません)\n`;
-            detailsStr += `\n---\nTaskJournal for NotebookLM から作成`;
-            const details = encodeURIComponent(detailsStr);
-
-            let url = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&details=${details}`;
-            if (dueDate) {
-                const startStr = formatToGoogleCalendarDate(dueDate);
-                const d = new Date(dueDate);
-                d.setHours(d.getHours() + 1);
-                const pad = n => String(n).padStart(2, '0');
-                const endStr = `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}T${pad(d.getHours())}${pad(d.getMinutes())}00`;
-                url += `&dates=${startStr}/${endStr}`;
-            }
-            return url;
-        }
-
         function toDateTimeLocalValue(timestamp) {
             if (!timestamp) return '';
             const d = new Date(timestamp);
@@ -3976,7 +3949,7 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
             const isCreate = mode === 'create';
             document.getElementById('schedule-modal-title').textContent = isCreate ? 'タスクを詳しく追加' : 'タスクを編集';
             document.getElementById('schedule-save-btn').textContent = isCreate ? '追加' : '保存';
-            document.getElementById('schedule-calendar-btn-label').textContent = isCreate ? '追加してカレンダーへ' : '保存してカレンダーへ';
+            document.getElementById('schedule-calendar-btn-label').textContent = isCreate ? '追加してカレンダーで見る' : '保存してカレンダーで見る';
         }
 
         // 詳細追加：入力中のタイトルと任意の予定日時を引き継ぎ、保存するまでタスクを作成しない
@@ -4032,8 +4005,17 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
             scheduleModalMode = 'edit';
         };
 
-        // 新規追加と既存編集で同じ入力画面を使い、addToCal=trueなら保存後にGoogleカレンダーへ遷移する
-        window.saveSchedule = async (addToCal) => {
+        function showTaskInAppCalendar(dueDate) {
+            const targetDate = new Date(dueDate);
+            if (Number.isNaN(targetDate.getTime())) return;
+            calendarCursor = targetDate;
+            closeScheduleModal();
+            window.setAppView('calendar');
+            showToast('保存しました。予定日をアプリのカレンダーで表示しています。', 'success');
+        }
+
+        // 新規追加と既存編集で同じ入力画面を使い、予定日をアプリ内カレンダーで確認できる
+        window.saveSchedule = async (showInAppCalendar) => {
             const isCreate = scheduleModalMode === 'create';
             let t = isCreate ? null : tasks.find(x => x.id === currentTaskIdForSchedule);
             if (!isCreate && !t) return;
@@ -4042,6 +4024,11 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
             const evTitle = document.getElementById('schedule-title-input').value.trim();
             if (!evTitle) {
                 window.showToast('タスクのタイトルを入力してください。', 'error');
+                return;
+            }
+            if (showInAppCalendar && (!dt || Number.isNaN(new Date(dt).getTime()))) {
+                window.showToast('カレンダーで見るには予定日時を入力してください。', 'error');
+                document.getElementById('schedule-datetime-input').focus();
                 return;
             }
             const createdAt = new Date(createdValue).getTime();
@@ -4058,7 +4045,7 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
                 t = createTaskRecord(evTitle, { dueDate: dt, createdAt, logs });
                 await persistNewTask(t);
                 document.getElementById('task-input').value = '';
-                showToast('タスクを追加しました。', 'success');
+                if (!showInAppCalendar) showToast('タスクを追加しました。', 'success');
             } else {
                 t.text = evTitle;
                 t.dueDate = dt || null;
@@ -4070,12 +4057,8 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
                 render();
                 triggerDriveSync();
             }
-            if (addToCal) {
-                // 同一タブで遷移（iOSで空白タブが残る問題を回避。戻る操作でアプリに復帰）
-                window.location.href = buildCalendarUrl(evTitle, t, dt);
-            } else {
-                closeScheduleModal();
-            }
+            if (showInAppCalendar) showTaskInAppCalendar(dt);
+            else closeScheduleModal();
         };
 
         // ---- Modal controls ----
