@@ -279,6 +279,7 @@
     padding: 0.05rem 0;
 }
 .genre-filter-scroll > * { flex: 0 0 auto; }
+.task-search-input { font-size: 0.875rem; }
 
 @media (min-width: 768px) {
     .task-filter-content {
@@ -710,7 +711,7 @@ html.dark .calendar-add-task {
         min-height: 2.75rem;
         padding-inline: 0.55rem;
     }
-    .task-search-input { font-size: 1rem; }
+    .task-search-input { font-size: 16px; }
     .task-filter-footer {
         align-items: stretch;
         flex-direction: column;
@@ -1018,7 +1019,7 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
                                 <div class="absolute inset-y-0 left-3 flex items-center pointer-events-none">
                                     <i data-lucide="search" class="w-4 h-4 text-zinc-300" aria-hidden="true"></i>
                                 </div>
-                                <input type="search" id="task-search" placeholder="タイトル・メモを検索" autocomplete="off" class="task-search-input w-full bg-white border-2 border-zinc-100 rounded-xl pl-10 pr-4 py-2.5 text-sm font-medium text-zinc-800 placeholder-zinc-400 focus:outline-none focus:border-violet-300 transition-all">
+                                <input type="search" id="task-search" placeholder="タイトル・メモを検索" autocomplete="off" class="task-search-input w-full bg-white border-2 border-zinc-100 rounded-xl pl-10 pr-4 py-2.5 font-medium text-zinc-800 placeholder-zinc-400 focus:outline-none focus:border-violet-300 transition-all">
                             </div>
                         </div>
                         <div class="task-filter-group">

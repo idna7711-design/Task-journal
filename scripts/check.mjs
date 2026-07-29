@@ -310,6 +310,15 @@ if (genreFilterCss.includes('flex-wrap: wrap') && !genreFilterCss.includes('over
     failed++;
     console.error('NG  ジャンル絞り込みの一覧性が不足しています');
 }
+if (
+    indexHtml.includes('.task-search-input { font-size: 16px; }')
+    && !indexHtml.match(/id="task-search"[^>]*class="[^"]*\btext-sm\b/)
+) {
+    console.log('OK  iPhone検索入力は自動拡大しない16px');
+} else {
+    failed++;
+    console.error('NG  iPhone検索入力が16px未満になる可能性があります');
+}
 if (!indexHtml.includes('id="focus-card"') && !indexHtml.includes('function renderFocusCard(')) {
     console.log('OK  独立したフォーカスカードを撤去');
 } else {
