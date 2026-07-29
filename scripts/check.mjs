@@ -287,6 +287,29 @@ for (const requiredUxFeature of [
     if (indexHtml.includes(requiredUxFeature)) console.log(`OK  GUI/UX刷新: ${requiredUxFeature}`);
     else { failed++; console.error(`NG  GUI/UX機能がありません: ${requiredUxFeature}`); }
 }
+for (const requiredFilterUxFeature of [
+    'id="task-genre-manage-btn"',
+    'id="task-filter-content"',
+    'id="filter-active-summary"',
+    'id="filter-summary-count"',
+    'onclick="openGenreManagementFromTaskList()"',
+    'window.openGenreManagementFromTaskList = () =>',
+    'function applyTaskFilterPanelState()',
+    '全条件を解除',
+]) {
+    if (indexHtml.includes(requiredFilterUxFeature)) console.log(`OK  検索・絞り込み明瞭化: ${requiredFilterUxFeature}`);
+    else { failed++; console.error(`NG  検索・絞り込みUIが不完全です: ${requiredFilterUxFeature}`); }
+}
+const filterContentCss = indexHtml.match(/\.task-filter-content\s*\{([^}]*)\}/)?.[1] || '';
+const genreFilterCss = indexHtml.match(/\.genre-filter-scroll\s*\{([^}]*)\}/)?.[1] || '';
+if (!filterContentCss.includes('position: absolute')) console.log('OK  検索パネルはタスクカードへ重ならない');
+else { failed++; console.error('NG  検索パネルが絶対配置のままです'); }
+if (genreFilterCss.includes('flex-wrap: wrap') && !genreFilterCss.includes('overflow-x: auto')) {
+    console.log('OK  ジャンル絞り込みは横スクロールせず折り返す');
+} else {
+    failed++;
+    console.error('NG  ジャンル絞り込みの一覧性が不足しています');
+}
 if (!indexHtml.includes('id="focus-card"') && !indexHtml.includes('function renderFocusCard(')) {
     console.log('OK  独立したフォーカスカードを撤去');
 } else {
