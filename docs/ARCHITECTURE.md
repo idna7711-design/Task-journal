@@ -14,7 +14,8 @@
   ├──(1) GAS Webhook (POST) ──→ Google Apps Script
   │                                   ├─ Google Drive: TaskData.json（同期DB）
   │                                   ├─ Google Docs: 固定IDのTaskJournal（NotebookLM用）
-  │                                   └─ Googleカレンダー: 選択中の予定を読み取り専用で表示
+  │                                   ├─ Googleカレンダー: 選択中の予定を読み取り専用で表示
+  │                                   └─ TaskJournal専用カレンダー: 明示的に連携したタスクだけ同期
   │
   ├──(2) https://api.edaaiapps.com/v1/chat/completions
   │        └→ Cloudflare Worker（worker-openai-proxy.js）
@@ -85,11 +86,11 @@ SafariからGASへの直接通信で`Load failed`が安全実装後も続く場�
 - タスク本文、同期キー、Authorization、URLクエリをログへ残さない
 - 旧GAS直接接続へ戻せる復旧手順を維持する
 
-### カレンダー表示
+### カレンダー表示・TaskJournal専用カレンダー同期
 
 - ヘッダーからタスク一覧とカレンダーを切り替え、日・週・月単位で表示する
 - TaskJournalは予定日時があるタスク、Google側はカレンダー画面で選択中のカレンダーを表示する
-- Google予定はGASの`CalendarApp`で読み取るだけで、作成・変更・削除しない
+- 選択中の既存GoogleカレンダーはGASの`CalendarApp`で読み取るだけで、TaskJournalから書き換えない
 - Google予定から取得するのは予定名・開始・終了・終日・カレンダー名・表示色だけ。本文・場所・参加者・メールアドレス・生の予定IDは取得しない
 - ブラウザは同期キーそのものをカレンダー取得に送らず、Web CryptoのHMAC-SHA256で生成した用途限定トークンを送る
 - GASはクライアント指定のカレンダーIDを受け付けず、GASを実行する本人が選択中のカレンダーだけを最大20個読む
@@ -98,8 +99,14 @@ SafariからGASへの直接通信で`Load failed`が安全実装後も続く場�
 - 同じ予定名・同じ開始分のTaskJournalタスクとGoogle予定は削除・統合せず、「重複候補」と表示する
 - 月表示では最大3件を省略表示し、残りの件数を示す。日付を押すと日表示へ移る
 - Google予定の詳細を押すとGoogleカレンダーの日表示を新しいタブで開く
-- タスク編集画面の「カレンダーで見る」は、日時付きタスクを保存してアプリ内カレンダーの該当日へ移る。Googleカレンダーへの予定作成ページは開かない
-- GASのOAuth権限は`calendar.readonly`に限定する。既存のDrive・Googleドキュメント更新権限は従来どおり必要
+- タスク編集画面の「Googleカレンダーにも追加」は、GASが`TaskJournal`という専用の第2カレンダーを初回だけ作り、日時付きタスクを60分の予定として登録する。外部のログイン画面は開かない
+- 連携済みタスクのタイトル・予定日時・メモを編集すると同じ予定を更新する。説明へ送るのは`📝`付きメモだけで、開始・完了などの操作履歴は送らない
+- タスク削除時は「Google予定も削除」「Google予定は残す」「キャンセル」から選ぶ。予定削除に失敗してもタスク同期は取り消さず、GAS側に削除待ちを残して次回同期で再試行する
+- TaskJournal専用カレンダーから連携予定が消えた場合、次回の正常な同期で対応タスクも削除する。削除した端末では復元用コピーを削除ボックスへ30日保存する
+- Google側削除の判定は、専用カレンダーの全予定を最後まで正常取得できた場合だけ行う。権限切れ、API障害、専用カレンダー自体の消失は一括削除として扱わない
+- Google側でのタイトル・日時変更はTaskJournalへ逆同期しない。TaskJournal側を次に編集した時点で、TaskJournalの内容を正として予定を更新する
+- GASのOAuth権限は既存予定を読む`calendar.readonly`と、アプリが作成した専用カレンダーだけを管理する`calendar.app.created`に限定する。全カレンダー書き込み権限は要求しない
+- タスクには互換性を壊さない任意項目として`calendarLinked`、`calendarEventId`、`calendarSyncVersion`、`calendarSyncedAt`を保持する。既存タスクは未連携のまま変わらない
 
 ### NotebookLM 自動更新
 1. GASがタスク変更のたびに、同じIDのGoogleドキュメント本文を上書き

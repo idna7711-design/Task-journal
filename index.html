@@ -1009,8 +1009,9 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
                 <h3 id="confirm-title" class="font-bold text-zinc-900 text-base"></h3>
             </div>
             <p id="confirm-message" class="text-xs text-zinc-500 leading-relaxed whitespace-pre-line mb-5"></p>
-            <div class="flex justify-end gap-2">
+            <div class="flex flex-col sm:flex-row sm:justify-end gap-2">
                 <button id="confirm-cancel-btn" type="button" class="px-4 py-2.5 text-sm font-bold text-zinc-500 hover:bg-zinc-100 rounded-xl transition-colors">キャンセル</button>
+                <button id="confirm-secondary-btn" type="button" class="hidden px-4 py-2.5 text-sm font-bold text-zinc-700 bg-zinc-100 hover:bg-zinc-200 rounded-xl transition-colors"></button>
                 <button id="confirm-ok-btn" type="button" class="px-5 py-2.5 text-sm font-bold bg-rose-600 text-white hover:bg-rose-700 rounded-xl transition-all shadow-md active:scale-95"></button>
             </div>
         </div>
@@ -1061,8 +1062,9 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
 
             <div class="flex items-center justify-between gap-3 mb-2 ml-1">
                 <label class="text-xs font-bold text-zinc-400 uppercase tracking-wider">メモ・履歴</label>
-                <button type="button" onclick="addTaskLogEditor()" class="text-xs font-bold text-violet-700 hover:bg-violet-50 rounded-lg px-2 py-1">＋ 1件追加</button>
+                <button type="button" onclick="addTaskLogEditor()" class="text-xs font-bold text-violet-700 hover:bg-violet-50 rounded-lg px-2 py-1">＋ メモを追加</button>
             </div>
+            <p class="text-[11px] text-zinc-400 mb-3 ml-1">📝 メモだけがGoogleカレンダーの説明へ反映されます。操作履歴は送りません。</p>
             <div class="bg-violet-50 border border-violet-100 rounded-xl p-3 mb-3">
                 <label for="schedule-created-input" class="block text-xs font-bold text-violet-700 mb-2">追加日時（最初の記録）</label>
                 <input type="datetime-local" id="schedule-created-input" class="w-full bg-white border-2 border-violet-100 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-violet-300 text-zinc-700">
@@ -1072,7 +1074,7 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
             <div class="flex flex-col sm:flex-row sm:justify-end gap-2 sm:gap-3">
                 <button type="button" onclick="closeScheduleModal()" class="px-5 py-3 text-sm font-bold text-zinc-500 hover:bg-zinc-100 rounded-2xl transition-colors">キャンセル</button>
                 <button type="button" id="schedule-save-btn" onclick="saveSchedule(false)" class="px-5 py-3 text-sm font-bold text-zinc-700 bg-zinc-100 hover:bg-zinc-200 rounded-2xl transition-colors">保存</button>
-                <button type="button" id="schedule-calendar-btn" onclick="saveSchedule(true)" class="px-6 py-3 text-sm font-bold bg-zinc-900 text-white hover:bg-blue-600 rounded-2xl transition-all shadow-md hover:shadow-lg active:scale-95 flex items-center justify-center gap-2"><i data-lucide="calendar-check" class="w-4 h-4"></i><span id="schedule-calendar-btn-label">保存してカレンダーで見る</span></button>
+                <button type="button" id="schedule-calendar-btn" onclick="saveSchedule(true)" class="px-6 py-3 text-sm font-bold bg-zinc-900 text-white hover:bg-blue-600 rounded-2xl transition-all shadow-md hover:shadow-lg active:scale-95 flex items-center justify-center gap-2"><i data-lucide="calendar-check" class="w-4 h-4"></i><span id="schedule-calendar-btn-label">Googleカレンダーにも追加</span></button>
             </div>
         </div>
     </div>
@@ -1300,8 +1302,8 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
         // - pull: 起動時・復帰時・同期アイコンクリック時に取得し、削除優先でローカルへ反映
 
         // ---- State ----
-        const APP_BUILD = '2026-07-29-in-app-calendar-save';
-        const SW_CACHE_NAME = 'taskjournal-cache-v14';
+        const APP_BUILD = '2026-07-29-google-calendar-two-way-sync';
+        const SW_CACHE_NAME = 'taskjournal-cache-v15';
         const SYNC_ACK_MISS_LIMIT = 3;
         const SYNC_RECOVERY_MAX = 1;
         const SYNC_RECOVERY_ARCHIVE_LIMIT = 50;
@@ -1350,6 +1352,7 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
         let calendarCache = null;
         let googleCalendarEvents = [];
         let calendarCapabilityState = 'unknown';
+        let syncCapabilities = {};
         let calendarRequestSequence = 0;
         let calendarRenderedItems = [];
         let calendarLoadState = {
@@ -1855,6 +1858,7 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
                             resolvesConflictId,
                             task: { ...normalizeTask(task), deleted: operation === 'delete' },
                             createdAt: now(),
+                            deleteGoogleCalendarEvent: operation === 'delete' && !!options.deleteGoogleCalendarEvent,
                             ackMisses: 0,
                             recoveryCount: 0,
                             blocked: false
@@ -1983,14 +1987,27 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
             return result;
         }
         async function ensureSyncV3(requestId, attempt) {
-            if (syncCapabilityVerified) return;
+            if (syncCapabilityVerified) return syncCapabilities;
             const result = await postSyncRequest({ action: 'capabilities' }, 60000, { requestId, attempt });
             if (!result.capabilities || !result.capabilities.mutationSync) {
                 const error = new Error('SYNC_PROTOCOL_MISMATCH');
                 error.code = 'SYNC_PROTOCOL_MISMATCH';
                 throw error;
             }
+            syncCapabilities = { ...result.capabilities };
             syncCapabilityVerified = true;
+            return syncCapabilities;
+        }
+        async function ensureCalendarWriteCapability() {
+            const capabilities = await ensureSyncV3(createRequestId('calendar-write-capability'), 0);
+            if (!capabilities.calendarWrite
+                || !capabilities.calendarDeleteSync
+                || capabilities.calendarWriteTarget !== 'dedicated-calendar') {
+                const error = new Error('CALENDAR_WRITE_NOT_AVAILABLE');
+                error.code = 'CALENDAR_WRITE_NOT_AVAILABLE';
+                throw error;
+            }
+            return capabilities;
         }
         function syncErrorMessage(error) {
             if (error && error.code === 'SYNC_PROTOCOL_MISMATCH') {
@@ -2116,6 +2133,27 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
             if (Date.now() - calendarCache.fetchedAt > CALENDAR_CACHE_MAX_AGE_MS) return false;
             googleCalendarEvents = calendarCache.events;
             return true;
+        }
+        async function invalidateCalendarEventCache() {
+            calendarCache = null;
+            googleCalendarEvents = [];
+            if (!db) return;
+            try {
+                await dbPutMeta({
+                    key: CALENDAR_CACHE_META_KEY,
+                    fetchedAt: 0,
+                    rangeStart: '',
+                    rangeEnd: '',
+                    calendarCount: 0,
+                    partial: false,
+                    truncated: false,
+                    events: []
+                });
+            } catch (error) {
+                console.warn('Calendar local cache reset failed', {
+                    name: error && error.name ? error.name : 'Error'
+                });
+            }
         }
         async function deriveCalendarReadToken(syncToken) {
             if (!globalThis.crypto || !crypto.subtle) {
@@ -2600,6 +2638,10 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
                 baseUpdatedAt: Number.isFinite(t.baseUpdatedAt) ? t.baseUpdatedAt : 0,
                 serverVersion: Number.isFinite(t.serverVersion) ? t.serverVersion : 0,
                 lastMutationId: typeof t.lastMutationId === 'string' ? t.lastMutationId : '',
+                calendarLinked: !!t.calendarLinked,
+                calendarEventId: typeof t.calendarEventId === 'string' ? t.calendarEventId : '',
+                calendarSyncVersion: Number.isFinite(t.calendarSyncVersion) ? t.calendarSyncVersion : 0,
+                calendarSyncedAt: Number.isFinite(t.calendarSyncedAt) ? t.calendarSyncedAt : 0,
                 deleted: !!t.deleted
             };
         }
@@ -2660,6 +2702,7 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
                 resolvesConflictId: String(item.resolvesConflictId || ''),
                 task: normalizeTask(item.task || { id: item.taskId }),
                 createdAt: Number(item.createdAt) || 0,
+                deleteGoogleCalendarEvent: !!item.deleteGoogleCalendarEvent,
                 ackMisses: Math.max(0, Math.min(100, Number(item.ackMisses) || 0)),
                 recoveryCount: Math.max(0, Math.min(SYNC_RECOVERY_MAX, Number(item.recoveryCount) || 0)),
                 blocked: !!item.blocked
@@ -2681,7 +2724,8 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
         function taskContentSignature(task) {
             return JSON.stringify([
                 task.text || '', task.dueDate || null, task.category || null,
-                task.status || 'todo', !!task.pinned, Array.isArray(task.logs) ? task.logs : []
+                task.status || 'todo', !!task.pinned, Array.isArray(task.logs) ? task.logs : [],
+                !!task.calendarLinked
             ]);
         }
 
@@ -2690,7 +2734,8 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
             return JSON.stringify([
                 normalized.text, normalized.dueDate, normalized.category, normalized.status,
                 normalized.pinned, normalized.logs, normalized.createdAt,
-                normalized.createdDeviceId, normalized.createdDeviceName, normalized.updatedAt
+                normalized.createdDeviceId, normalized.createdDeviceName, normalized.updatedAt,
+                normalized.calendarLinked
             ]);
         }
 
@@ -2848,7 +2893,13 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
                         id: String(item.id),
                         deletedAt: item.deletedAt,
                         serverVersion: Number(item.serverVersion) || 0,
-                        lastMutationId: String(item.lastMutationId || '')
+                        lastMutationId: String(item.lastMutationId || ''),
+                        calendarEventId: String(item.calendarEventId || ''),
+                        calendarDeleteRequested: !!item.calendarDeleteRequested,
+                        calendarDeletedAt: Number(item.calendarDeletedAt) || 0,
+                        deleteSource: ['taskjournal', 'google'].includes(item.deleteSource)
+                            ? item.deleteSource
+                            : ''
                     });
                 }
             });
@@ -2915,7 +2966,44 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
         }
 
         // ---- Cloud sync v3 ----
+        async function archiveTasksDeletedFromGoogle(remoteTombstones) {
+            const googleDeletions = normalizeTombstones(remoteTombstones)
+                .filter(item => item.deleteSource === 'google');
+            if (!googleDeletions.length) return 0;
+            const localById = new Map(tasks.map(task => [task.id, task]));
+            const existingArchiveIds = new Set(deletedTaskArchive.map(item => item.archiveId));
+            const additions = [];
+            googleDeletions.forEach(tombstone => {
+                const localTask = localById.get(tombstone.id);
+                if (!localTask) return;
+                const archiveId = `google-${simpleHash(`${tombstone.id}|${tombstone.deletedAt}`)}`;
+                if (existingArchiveIds.has(archiveId)) return;
+                const archivedTask = normalizeTask({
+                    ...localTask,
+                    calendarLinked: false,
+                    calendarEventId: '',
+                    calendarSyncVersion: 0,
+                    calendarSyncedAt: 0,
+                    logs: [
+                        ...(localTask.logs || []),
+                        `${getTimeString()} Googleカレンダー側の予定削除を反映しました`
+                    ]
+                });
+                additions.push({
+                    ...createDeletedTaskArchiveEntry(archivedTask, tombstone.deletedAt),
+                    archiveId
+                });
+                existingArchiveIds.add(archiveId);
+            });
+            if (!additions.length) return 0;
+            const nextArchive = normalizeDeletedTaskArchive(deletedTaskArchive.concat(additions));
+            await dbPutMeta({ key: DELETED_TASK_ARCHIVE_KEY, items: nextArchive });
+            deletedTaskArchive = nextArchive;
+            return additions.length;
+        }
+
         async function applySyncV3Result(remote, submittedMutationIds) {
+            const googleDeletedArchiveCount = await archiveTasksDeletedFromGoogle(remote.tombstones);
             const canonical = new Map((remote.tasks || []).map(task => [task.id, normalizeTask(task)]));
             const submittedIds = new Set(submittedMutationIds || []);
             const acknowledgedIds = new Set(Array.isArray(remote.ackedMutationIds) ? remote.ackedMutationIds : []);
@@ -3008,6 +3096,12 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
             }
             sortTasks();
             render();
+            if (googleDeletedArchiveCount > 0) {
+                showToast(
+                    `Googleカレンダーで削除された${googleDeletedArchiveCount}件を削除ボックスへ移しました。`,
+                    'success'
+                );
+            }
         }
 
         async function runSyncV3() {
@@ -3026,7 +3120,8 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
                 parentMutationId: item.parentMutationId,
                 resolvesConflictId: item.resolvesConflictId,
                 task: { ...item.task },
-                createdAt: item.createdAt
+                createdAt: item.createdAt,
+                deleteGoogleCalendarEvent: !!item.deleteGoogleCalendarEvent
             }));
             setSyncProgress(45, submitted.length ? `${submitted.length}件の変更を送信中...` : 'クラウドの最新データを取得中...');
             const result = await postSyncRequest({
@@ -3042,6 +3137,11 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
             setSyncProgress(70, '受信したデータを確認中...');
             result.submittedCategoryMutationId = settings.categoriesMutationId || '';
             await applySyncV3Result(result, submitted.map(item => item.mutationId));
+            const calendarSync = result.calendarSync || {};
+            const calendarChanged = (Number(calendarSync.upserted) || 0)
+                + (Number(calendarSync.deleted) || 0)
+                + (Number(calendarSync.externalDeleted) || 0);
+            if (calendarChanged > 0) await invalidateCalendarEventCache();
             setSyncProgress(90, 'この端末へ保存中...');
             lastCloudPullAt = Date.now();
             lastSyncSuccessAt = lastCloudPullAt;
@@ -3052,6 +3152,10 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
             syncDiagnostic = { ...syncDiagnostic, stage: 'completed', errorCode: '', httpStatus: 200 };
             const blockedCount = syncOutbox.filter(item => item.blocked).length;
             const activePendingCount = syncOutbox.length - blockedCount;
+            const calendarPendingCount = Math.max(
+                Number(calendarSync.pending) || 0,
+                Number(calendarSync.failed) || 0
+            );
             if (blockedCount > 0) {
                 updateSyncStatus('warning');
                 const activeText = activePendingCount > 0 ? `ほか${activePendingCount}件は自動確認中です。` : '';
@@ -3062,11 +3166,20 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
                 updateSyncStatus('syncing');
                 setSyncProgress(90, `${activePendingCount}件の受領を確認中です。自動で再確認します`, 'warning');
                 schedulePendingAckVerification();
+            } else if (calendarPendingCount > 0) {
+                updateSyncStatus('warning');
+                setSyncProgress(
+                    100,
+                    `タスク同期は完了しました。Googleカレンダー${calendarPendingCount}件は次回自動再試行します`,
+                    'warning'
+                );
+                scheduleSyncProgressHide(8000);
             } else {
                 updateSyncStatus('success');
                 setSyncProgress(100, '同期が完了しました');
                 scheduleSyncProgressHide(1500);
             }
+            return result;
         }
 
         function schedulePendingAckVerification() {
@@ -3200,6 +3313,33 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
                 }
             }, immediate ? 0 : 1500);
         };
+
+        async function runImmediateSync() {
+            if (!isSyncConfigured()) {
+                const error = new Error('SYNC_NOT_CONFIGURED');
+                error.code = 'SYNC_NOT_CONFIGURED';
+                throw error;
+            }
+            clearTimeout(syncTimeout);
+            try {
+                if (syncPromise) await syncPromise;
+                return await beginSyncRun();
+            } catch (error) {
+                console.error('Immediate sync error', error);
+                const retryDelay = scheduleSyncRetry(error);
+                if (retryDelay !== 0) showSyncRetrying(retryDelay);
+                else {
+                    updateSyncStatus('error');
+                    showSyncFailure(error, retryDelay);
+                }
+                throw error;
+            } finally {
+                const rerun = pushQueued;
+                pushQueued = false;
+                if (rerun) triggerDriveSync(true, true);
+                else if (syncOutbox.length === 0) queuedSyncReruns = 0;
+            }
+        }
 
         // ---- Cloud sync (pull) ----
         async function pullFromCloud(showOverlay) {
@@ -3404,7 +3544,7 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
         // ---- アプリ内確認ダイアログ（confirm()の置き換え） ----
         // 使い方: const ok = await showConfirm({ title, message, confirmLabel });
         let confirmResolve = null;
-        function showConfirm({ title, message, confirmLabel = '削除する' }) {
+        function showConfirm({ title, message, confirmLabel = '削除する', secondaryLabel = '' }) {
             return new Promise((resolve) => {
                 // 既に開いていたら前の呼び出しをキャンセル扱いにする
                 if (confirmResolve) confirmResolve(false);
@@ -3412,6 +3552,9 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
                 document.getElementById('confirm-title').textContent = String(title || '確認');
                 document.getElementById('confirm-message').textContent = String(message || '');
                 document.getElementById('confirm-ok-btn').textContent = String(confirmLabel);
+                const secondary = document.getElementById('confirm-secondary-btn');
+                secondary.textContent = String(secondaryLabel || '');
+                secondary.classList.toggle('hidden', !secondaryLabel);
                 document.getElementById('confirm-modal').classList.remove('hidden');
                 lucide.createIcons();
                 document.getElementById('confirm-cancel-btn').focus();
@@ -3419,6 +3562,7 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
         }
         function settleConfirm(result) {
             document.getElementById('confirm-modal').classList.add('hidden');
+            document.getElementById('confirm-secondary-btn').classList.add('hidden');
             if (confirmResolve) { confirmResolve(result); confirmResolve = null; }
         }
 
@@ -3678,7 +3822,11 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
                 updatedAt: now(),
                 baseUpdatedAt: 0,
                 serverVersion: 0,
-                lastMutationId: ''
+                lastMutationId: '',
+                calendarLinked: !!options.calendarLinked,
+                calendarEventId: '',
+                calendarSyncVersion: 0,
+                calendarSyncedAt: 0
             };
         }
 
@@ -3773,16 +3921,27 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
             triggerDriveSync();
         };
 
-        // 削除は確認ダイアログを出さず「即削除＋5秒間だけ元に戻せる」方式。
-        // 誤操作してもトーストの「元に戻す」で復元できる（Gmail等と同じUX）。
+        // 通常の削除は即削除＋Undo。Google予定と連携中のタスクだけは、
+        // 予定まで消すかを三択で確認し、意図しないカレンダー削除を防ぐ。
         window.deleteTask = async (id) => {
             const task = tasks.find(x => x.id === id);
             if (!task) return;
+            let deleteGoogleCalendarEvent = false;
+            if (task.calendarLinked && task.calendarEventId) {
+                const choice = await showConfirm({
+                    title: `「${task.text}」を削除しますか？`,
+                    message: 'このタスクはGoogleカレンダーと連携しています。Google側の予定を残すか、一緒に削除するか選んでください。',
+                    confirmLabel: 'Google予定も削除',
+                    secondaryLabel: 'Google予定は残す'
+                });
+                if (!choice) return;
+                deleteGoogleCalendarEvent = choice === true;
+            }
             const snapshot = { ...task, logs: [...(task.logs || [])] };
             tasks = tasks.filter(x => x.id !== id);
             let result;
             try {
-                result = await dbPersistLocalMutation(task, 'delete');
+                result = await dbPersistLocalMutation(task, 'delete', '', { deleteGoogleCalendarEvent });
             } catch (err) {
                 tasks.push(snapshot);
                 sortTasks();
@@ -3793,13 +3952,17 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
             }
             render();
             triggerDriveSync();
-            showUndoToast(`「${snapshot.text}」を削除しました`, () => undoDeleteTask(snapshot, result.deletedArchiveId));
+            const calendarText = deleteGoogleCalendarEvent ? '。Google予定も削除します' : '';
+            showUndoToast(
+                `「${snapshot.text}」を削除しました${calendarText}`,
+                () => undoDeleteTask(snapshot, result.deletedArchiveId, deleteGoogleCalendarEvent)
+            );
         };
 
         // 削除の取り消し。同期の墓標(tombstone)が旧IDに残るため、
         // 同じIDで復活させると次回同期で再び消えてしまう。新しいIDの
         // 新規タスクとして作り直すことで、全端末で安全に復元される。
-        async function undoDeleteTask(original, deletedArchiveId = '') {
+        async function undoDeleteTask(original, deletedArchiveId = '', calendarDeletionWasRequested = false) {
             const restored = normalizeTask({
                 ...original,
                 id: uid(),
@@ -3807,6 +3970,10 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
                 baseUpdatedAt: 0,
                 lastMutationId: '',
                 deleted: false,
+                calendarLinked: false,
+                calendarEventId: '',
+                calendarSyncVersion: 0,
+                calendarSyncedAt: 0,
                 logs: [...(original.logs || []), `${getTimeString()} ↩ 削除を取り消しました`],
                 updatedAt: now()
             });
@@ -3821,7 +3988,12 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
             sortTasks();
             render();
             triggerDriveSync();
-            showToast('タスクを元に戻しました。', 'success');
+            showToast(
+                calendarDeletionWasRequested
+                    ? 'タスクを元に戻しました。Google予定は再連携が必要です。'
+                    : 'タスクを元に戻しました。',
+                'success'
+            );
             return true;
         }
 
@@ -3866,19 +4038,34 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
         function parseTaskLogEntry(log) {
             const value = String(log || '');
             const datedMatch = value.match(/^\[(\d{4}-\d{2}-\d{2})\s+(\d{1,2}:\d{2})\]\s*([\s\S]*)$/);
-            if (datedMatch) return { date: datedMatch[1], time: datedMatch[2].padStart(5, '0'), text: datedMatch[3] };
+            if (datedMatch) {
+                const content = datedMatch[3];
+                const isMemo = /^📝\s*/.test(content);
+                return {
+                    date: datedMatch[1],
+                    time: datedMatch[2].padStart(5, '0'),
+                    text: content.replace(/^📝\s*/, ''),
+                    kind: isMemo ? 'memo' : 'history'
+                };
+            }
             const timeMatch = value.match(/^\[(\d{1,2}:\d{2})\]\s*([\s\S]*)$/);
-            return timeMatch
-                ? { date: '', time: timeMatch[1].padStart(5, '0'), text: timeMatch[2] }
-                : { date: '', time: '', text: value };
+            const content = timeMatch ? timeMatch[2] : value;
+            const isMemo = /^📝\s*/.test(content);
+            return {
+                date: '',
+                time: timeMatch ? timeMatch[1].padStart(5, '0') : '',
+                text: content.replace(/^📝\s*/, ''),
+                kind: isMemo ? 'memo' : 'history'
+            };
         }
 
         function serializeTaskLogEntry(entry) {
             const text = String(entry && entry.text || '').trim();
             const date = String(entry && entry.date || '').trim();
             const time = String(entry && entry.time || '').trim();
-            if (date && time) return `[${date} ${time}] ${text}`;
-            return time ? `[${time}] ${text}` : text;
+            const content = entry && entry.kind === 'memo' && text ? `📝 ${text}` : text;
+            if (date && time) return `[${date} ${time}] ${content}`;
+            return time ? `[${time}] ${content}` : content;
         }
 
         function renderTaskLogEditor() {
@@ -3894,24 +4081,31 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
             editingTaskLogs.forEach((log, index) => {
                 const row = document.createElement('div');
                 row.className = 'flex flex-col sm:flex-row items-start gap-2 bg-zinc-50 border border-zinc-100 rounded-xl p-2';
+                const kind = document.createElement('span');
+                const isMemo = log.kind === 'memo';
+                const recordLabel = isMemo ? 'メモ' : '履歴';
+                kind.className = isMemo
+                    ? 'shrink-0 inline-flex items-center rounded-lg bg-violet-100 px-2 py-1 text-[10px] font-bold text-violet-700'
+                    : 'shrink-0 inline-flex items-center rounded-lg bg-zinc-200 px-2 py-1 text-[10px] font-bold text-zinc-500';
+                kind.textContent = recordLabel;
                 const dateInput = document.createElement('input');
                 dateInput.type = 'date';
                 dateInput.className = 'w-full sm:w-auto bg-white border-2 border-zinc-100 rounded-lg px-2 py-2 text-xs focus:outline-none focus:border-violet-300 text-zinc-700';
                 dateInput.value = log.date || '';
-                dateInput.setAttribute('aria-label', `履歴${index + 1}の日付`);
+                dateInput.setAttribute('aria-label', `${recordLabel}${index + 1}の日付`);
                 dateInput.addEventListener('input', () => { editingTaskLogs[index].date = dateInput.value; });
                 const timeInput = document.createElement('input');
                 timeInput.type = 'time';
                 timeInput.className = 'w-full sm:w-auto bg-white border-2 border-zinc-100 rounded-lg px-2 py-2 text-xs focus:outline-none focus:border-violet-300 text-zinc-700';
                 timeInput.value = log.time || '';
-                timeInput.setAttribute('aria-label', `履歴${index + 1}の時刻`);
+                timeInput.setAttribute('aria-label', `${recordLabel}${index + 1}の時刻`);
                 timeInput.addEventListener('input', () => { editingTaskLogs[index].time = timeInput.value; });
                 const textarea = document.createElement('textarea');
                 textarea.rows = 2;
                 textarea.maxLength = 990;
                 textarea.className = 'flex-1 bg-zinc-50 border-2 border-zinc-100 rounded-xl p-3 text-xs focus:outline-none focus:border-violet-300 focus:bg-white resize-none text-zinc-700';
                 textarea.value = log.text || '';
-                textarea.setAttribute('aria-label', `履歴${index + 1}の内容`);
+                textarea.setAttribute('aria-label', `${recordLabel}${index + 1}の内容`);
                 textarea.addEventListener('input', () => { editingTaskLogs[index].text = textarea.value; });
                 const remove = document.createElement('button');
                 remove.type = 'button';
@@ -3922,7 +4116,7 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
                     editingTaskLogs.splice(index, 1);
                     renderTaskLogEditor();
                 });
-                row.append(dateInput, timeInput, textarea, remove);
+                row.append(kind, dateInput, timeInput, textarea, remove);
                 container.appendChild(row);
             });
         }
@@ -3937,19 +4131,23 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
             editingTaskLogs.push({
                 date: `${current.getFullYear()}-${pad(current.getMonth() + 1)}-${pad(current.getDate())}`,
                 time: `${pad(current.getHours())}:${pad(current.getMinutes())}`,
-                text: ''
+                text: '',
+                kind: 'memo'
             });
             renderTaskLogEditor();
             const inputs = document.querySelectorAll('#schedule-logs-editor textarea');
             if (inputs.length) inputs[inputs.length - 1].focus();
         };
 
-        function configureScheduleModal(mode) {
+        function configureScheduleModal(mode, task = null) {
             scheduleModalMode = mode;
             const isCreate = mode === 'create';
+            const isCalendarLinked = !!(task && task.calendarLinked);
             document.getElementById('schedule-modal-title').textContent = isCreate ? 'タスクを詳しく追加' : 'タスクを編集';
             document.getElementById('schedule-save-btn').textContent = isCreate ? '追加' : '保存';
-            document.getElementById('schedule-calendar-btn-label').textContent = isCreate ? '追加してカレンダーで見る' : '保存してカレンダーで見る';
+            document.getElementById('schedule-calendar-btn-label').textContent = isCalendarLinked
+                ? '保存してGoogle予定を更新'
+                : (isCreate ? 'Googleカレンダーにも追加' : '保存してGoogleカレンダーにも追加');
         }
 
         // 詳細追加：入力中のタイトルと任意の予定日時を引き継ぎ、保存するまでタスクを作成しない
@@ -3986,7 +4184,7 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
         window.openScheduleModal = (id) => {
             const task = tasks.find(t => t.id === id);
             if (!task) return;
-            configureScheduleModal('edit');
+            configureScheduleModal('edit', task);
             currentTaskIdForSchedule = id;
             document.getElementById('schedule-task-name').textContent = task.text;
             document.getElementById('schedule-title-input').value = task.text;
@@ -4005,20 +4203,23 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
             scheduleModalMode = 'edit';
         };
 
-        function showTaskInAppCalendar(dueDate) {
+        function showTaskInAppCalendar(dueDate, message, type = 'success') {
             const targetDate = new Date(dueDate);
             if (Number.isNaN(targetDate.getTime())) return;
             calendarCursor = targetDate;
             closeScheduleModal();
             window.setAppView('calendar');
-            showToast('保存しました。予定日をアプリのカレンダーで表示しています。', 'success');
+            showToast(message || '保存しました。予定日をアプリのカレンダーで表示しています。', type);
+            loadCalendarRange(true);
         }
 
-        // 新規追加と既存編集で同じ入力画面を使い、予定日をアプリ内カレンダーで確認できる
-        window.saveSchedule = async (showInAppCalendar) => {
+        // Google連携ボタンはGASへ予定を保存し、アプリ内カレンダーで結果を確認する。
+        // 通信が失敗してもTaskJournalへの保存は確定し、Google側だけ次回同期で再試行する。
+        window.saveSchedule = async (linkToGoogleCalendar) => {
             const isCreate = scheduleModalMode === 'create';
             let t = isCreate ? null : tasks.find(x => x.id === currentTaskIdForSchedule);
             if (!isCreate && !t) return;
+            const wasCalendarLinked = !!(t && t.calendarLinked);
             const dt = document.getElementById('schedule-datetime-input').value;
             const createdValue = document.getElementById('schedule-created-input').value;
             const evTitle = document.getElementById('schedule-title-input').value.trim();
@@ -4026,8 +4227,8 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
                 window.showToast('タスクのタイトルを入力してください。', 'error');
                 return;
             }
-            if (showInAppCalendar && (!dt || Number.isNaN(new Date(dt).getTime()))) {
-                window.showToast('カレンダーで見るには予定日時を入力してください。', 'error');
+            if ((linkToGoogleCalendar || wasCalendarLinked) && (!dt || Number.isNaN(new Date(dt).getTime()))) {
+                window.showToast('Googleカレンダーと連携中のタスクには予定日時が必要です。', 'error');
                 document.getElementById('schedule-datetime-input').focus();
                 return;
             }
@@ -4041,24 +4242,87 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
                 window.showToast('メモ・履歴は200件まで、1件1000文字までです。', 'error');
                 return;
             }
+            let calendarCapabilityReady = false;
+            let calendarCapabilityError = null;
+            if (linkToGoogleCalendar && !wasCalendarLinked) {
+                try {
+                    await ensureCalendarWriteCapability();
+                    calendarCapabilityReady = true;
+                } catch (error) {
+                    calendarCapabilityError = error;
+                    console.error('Google Calendar link capability check failed', {
+                        code: error && error.code ? error.code : '',
+                        name: error && error.name ? error.name : 'Error'
+                    });
+                    reportDebug('calendar-write capability failed', JSON.stringify({
+                        code: error && error.code ? error.code : '',
+                        name: error && error.name ? error.name : 'Error'
+                    }));
+                }
+            } else if (linkToGoogleCalendar && wasCalendarLinked) {
+                calendarCapabilityReady = true;
+            }
             if (isCreate) {
-                t = createTaskRecord(evTitle, { dueDate: dt, createdAt, logs });
+                t = createTaskRecord(evTitle, {
+                    dueDate: dt,
+                    createdAt,
+                    logs,
+                    calendarLinked: linkToGoogleCalendar && calendarCapabilityReady
+                });
                 await persistNewTask(t);
                 document.getElementById('task-input').value = '';
-                if (!showInAppCalendar) showToast('タスクを追加しました。', 'success');
+                if (!linkToGoogleCalendar) showToast('タスクを追加しました。', 'success');
             } else {
                 t.text = evTitle;
                 t.dueDate = dt || null;
                 t.createdAt = createdAt;
                 t.logs = logs;
+                t.calendarLinked = wasCalendarLinked || (linkToGoogleCalendar && calendarCapabilityReady);
                 t.updatedAt = now();
                 await dbPersistLocalMutation(t, 'update');
                 sortTasks();
                 render();
                 triggerDriveSync();
             }
-            if (showInAppCalendar) showTaskInAppCalendar(dt);
-            else closeScheduleModal();
+            if (!linkToGoogleCalendar) {
+                closeScheduleModal();
+                if (!isCreate) showToast('タスクを保存しました。', 'success');
+                return;
+            }
+            if (calendarCapabilityError) {
+                showTaskInAppCalendar(
+                    dt,
+                    'TaskJournalには保存しましたが、Googleカレンダー連携を利用できません。設定とGAS更新を確認してください。',
+                    'error'
+                );
+                return;
+            }
+            try {
+                const syncResult = await runImmediateSync();
+                const calendarSync = syncResult && syncResult.calendarSync ? syncResult.calendarSync : {};
+                const linkedTask = tasks.find(task => task.id === t.id);
+                const calendarSynced = !!(linkedTask
+                    && linkedTask.calendarLinked
+                    && linkedTask.calendarSyncVersion > 0
+                    && linkedTask.calendarSyncVersion >= linkedTask.serverVersion);
+                const calendarPending = (Number(calendarSync.pending) || 0) > 0
+                    || (Number(calendarSync.failed) || 0) > 0;
+                if (calendarSynced && !calendarPending) {
+                    showTaskInAppCalendar(dt, 'TaskJournalとGoogleカレンダーに保存しました。');
+                } else {
+                    showTaskInAppCalendar(
+                        dt,
+                        'TaskJournalには保存しました。Googleカレンダーは次回同期で自動再試行します。',
+                        'error'
+                    );
+                }
+            } catch (error) {
+                showTaskInAppCalendar(
+                    dt,
+                    'TaskJournalには保存しました。Googleカレンダーは通信回復後に自動再試行します。',
+                    'error'
+                );
+            }
         };
 
         // ---- Modal controls ----
@@ -4659,11 +4923,28 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
             const current = tasks.find(task => task.id === conflict.taskId);
             const chosenIndex = choice === 1 ? 1 : 0;
             const chosen = normalizeTask({ ...conflict.variants[chosenIndex], id: conflict.taskId });
-            tasks = tasks.filter(task => task.id !== conflict.taskId);
             if (chosen.deleted) {
                 const deleteBase = current || normalizeTask({ ...chosen, deleted: false });
-                await dbPersistLocalMutation(deleteBase, 'delete', conflictId);
+                let deleteGoogleCalendarEvent = false;
+                if (deleteBase.calendarLinked && deleteBase.calendarEventId) {
+                    const calendarChoice = await showConfirm({
+                        title: `「${deleteBase.text}」の削除を採用しますか？`,
+                        message: 'このタスクはGoogleカレンダーと連携しています。Google側の予定を残すか、一緒に削除するか選んでください。',
+                        confirmLabel: 'Google予定も削除',
+                        secondaryLabel: 'Google予定は残す'
+                    });
+                    if (!calendarChoice) return;
+                    deleteGoogleCalendarEvent = calendarChoice === true;
+                }
+                tasks = tasks.filter(task => task.id !== conflict.taskId);
+                await dbPersistLocalMutation(
+                    deleteBase,
+                    'delete',
+                    conflictId,
+                    { deleteGoogleCalendarEvent }
+                );
             } else {
+                tasks = tasks.filter(task => task.id !== conflict.taskId);
                 chosen.deleted = false;
                 chosen.serverVersion = current ? current.serverVersion : chosen.serverVersion;
                 chosen.lastMutationId = current ? current.lastMutationId : chosen.lastMutationId;
@@ -5058,6 +5339,7 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
 
             // 確認ダイアログ（OK/キャンセル/背景クリック）
             document.getElementById('confirm-ok-btn').addEventListener('click', () => settleConfirm(true));
+            document.getElementById('confirm-secondary-btn').addEventListener('click', () => settleConfirm('task-only'));
             document.getElementById('confirm-cancel-btn').addEventListener('click', () => settleConfirm(false));
             document.getElementById('confirm-modal').addEventListener('click', (e) => { if (e.target.id === 'confirm-modal') settleConfirm(false); });
 

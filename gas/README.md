@@ -29,8 +29,8 @@ GAS の `ContentService` ではレスポンスヘッダを自前で設定でき�
    - 次のユーザーとして実行: **自分**
    - アクセスできるユーザー: **全員（匿名含む）**
 6. 発行されたウェブアプリURLと`SYNC_TOKEN`をアプリの同期設定へ登録
-7. 初回は Drive / Googleドキュメント / Calendar（読み取り専用）の権限承認が必要
-8. GASエディタで関数`authorizeCalendarRead`を選び、1回だけ「実行」してカレンダーの読み取りを許可する
+7. 初回は Drive / Googleドキュメント / Calendar（既存予定の読み取り＋TaskJournal専用カレンダー）の権限承認が必要
+8. GASエディタで関数`authorizeCalendarIntegration`を選び、1回だけ「実行」する。`TaskJournal`専用カレンダーが作成され、権限確認と接続確認が完了する
 9. `NOTEBOOK_DOC_ID`に、NotebookLM用の固定GoogleドキュメントIDを設定する
 10. GASエディタで関数`setupNotebookDocument`を選び、1回だけ「実行」する
 11. 実行ログに表示された固定GoogleドキュメントをNotebookLMのソースとして追加する
@@ -58,6 +58,9 @@ GAS の `ContentService` ではレスポンスヘッダを自前で設定でき�
 - 成功確認済みの変更だけ端末の送信待ち箱から削除
 - 統合後の`tasks`と`categories`を固定IDのGoogleドキュメントへ反映（NotebookLM用）
 - JSON同期のロックとGoogleドキュメント更新のロックを分離し、複数端末の同時同期を妨げない
+- `calendarLinked`を明示したタスクだけ、GASが作成した`TaskJournal`専用カレンダーへ同じイベントIDで追加・更新する
+- タスク削除時の`deleteGoogleCalendarEvent`が真の場合だけ、対応するGoogle予定も削除する
+- 専用カレンダーから連携予定が消えた場合は、完全な一覧取得に成功した同期でTaskJournal側にもGoogle由来の削除墓標を作る
 - 同期キーはPOST本文だけに入れ、URL・履歴へ残さない
 - GETと同期方式v2は旧アプリの移行期間だけ維持
 
@@ -66,7 +69,7 @@ GAS の `ContentService` ではレスポンスヘッダを自前で設定でき�
 - Googleカレンダー画面で「選択中」のカレンダーを、最大20個までサーバー側で選ぶ
 - 取得範囲は最大45日、返却予定は最大300件
 - 返すのは予定名・日時・終日・カレンダー名・表示色だけ。本文・場所・参加者・メールアドレス・生の予定IDは返さない
-- Google予定の作成・変更・削除は行わない
+- 選択中の既存カレンダーの予定は作成・変更・削除しない
 - クライアントから任意のカレンダーIDは受け付けない
 - 通常の同期キーは送らず、同期キーからHMAC-SHA256で生成したカレンダー専用トークンを使う
 - 応答はGASで3分だけキャッシュし、アプリ側ではオフライン用に24時間まで保持する
@@ -82,8 +85,18 @@ GAS の `ContentService` ではレスポンスヘッダを自前で設定でき�
 }
 ```
 
-`appsscript.json`はカレンダー権限を`https://www.googleapis.com/auth/calendar.readonly`に限定しています。
-Google予定を表示できないときは、GASエディタで`authorizeCalendarRead`を再実行し、既存ウェブアプリを新しいバージョンへ更新してください。
+`appsscript.json`は、既存予定を読む`calendar.readonly`と、アプリが作成した専用カレンダーだけを管理する`calendar.app.created`を指定しています。全カレンダー書き込み権限は使いません。
+Google予定を表示・同期できないときは、GASエディタで`authorizeCalendarIntegration`を再実行し、既存ウェブアプリを新しいバージョンへ更新してください。
+
+### TaskJournal専用カレンダーへの同期
+
+- 「Googleカレンダーにも追加」を押したタスクだけが対象
+- 予定時間は指定時刻から60分
+- 予定名はタスク名、説明は`📝`付きメモだけ。操作履歴は送らない
+- 連携済みタスクの編集は同じGoogle予定を更新する
+- タスク削除時は、Google予定を残すか一緒に削除するかアプリで選ぶ
+- Googleカレンダー上で連携予定を削除すると、次回のTaskJournal同期でタスクも削除する
+- Calendar APIが失敗した場合はタスク保存を成功扱いにし、Google予定だけを次回同期で再試行する
 
 ## 複数端末同期の競合ルール
 

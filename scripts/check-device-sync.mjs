@@ -40,7 +40,11 @@ const scenarios = String.raw`
       logs: [],
       createdAt: 1,
       updatedAt: updatedAt,
-      baseUpdatedAt: baseUpdatedAt || 0
+      baseUpdatedAt: baseUpdatedAt || 0,
+      calendarLinked: false,
+      calendarEventId: '',
+      calendarSyncVersion: 0,
+      calendarSyncedAt: 0
     };
   }
   function incoming(tasks, tombstones, categories, categoriesUpdatedAt) {
@@ -88,7 +92,7 @@ const scenarios = String.raw`
   const legacy = normalizeStoredState([task('legacy', 5)]);
   assert(legacy.syncVersion === 2 && legacy.tasks.length === 1, '旧タスク配列をv2へ移行できない');
 
-  function mutation(id, taskId, operation, baseVersion, parentMutationId, text) {
+  function mutation(id, taskId, operation, baseVersion, parentMutationId, text, deleteGoogleCalendarEvent) {
     return {
       mutationId: id,
       taskId: taskId,
@@ -96,7 +100,8 @@ const scenarios = String.raw`
       baseVersion: baseVersion,
       parentMutationId: parentMutationId || '',
       task: task(taskId, 1, text || taskId, 0),
-      createdAt: 1
+      createdAt: 1,
+      deleteGoogleCalendarEvent: !!deleteGoogleCalendarEvent
     };
   }
   let v3 = normalizeProtocol3State(createEmptySyncState());
@@ -144,6 +149,91 @@ const scenarios = String.raw`
   }, []);
   assert(categoryResult.state.categoriesVersion === 1 && categoryResult.ackedCategoryMutationId === 'category-1', 'ジャンル版番号同期が動かない');
 
+  let calendarState = normalizeProtocol3State(createEmptySyncState());
+  const calendarCreate = mutation('calendar-create', 'calendar-task', 'create', 0, '', '予定タイトル');
+  calendarCreate.task.dueDate = '2026-07-29T10:00';
+  calendarCreate.task.calendarLinked = true;
+  let calendarResult = applyMutations(calendarState, [calendarCreate], null, []);
+  calendarState = calendarResult.state;
+  const linkedTask = calendarState.tasks[0];
+  assert(linkedTask.calendarLinked, 'Googleカレンダー連携フラグを保存できない');
+  assert(/^tj[0-9a-f]{40}$/.test(linkedTask.calendarEventId), '安全な決定的イベントIDを生成できない');
+  assert(linkedTask.calendarSyncVersion === 0, '未送信予定を同期済みとして扱っている');
+
+  const memoDescription = taskCalendarMemoDescription([
+    '[2026-07-29 09:00] 📝 予定の説明',
+    '[2026-07-29 09:05] ▶ 開始しました',
+    '[09:10] 📝 持ち物を確認'
+  ]);
+  assert(memoDescription.includes('予定の説明') && memoDescription.includes('持ち物を確認'), 'メモを予定説明へ変換できない');
+  assert(!memoDescription.includes('開始しました'), '操作履歴が予定説明へ混入する');
+
+  linkedTask.calendarSyncVersion = linkedTask.serverVersion;
+  linkedTask.calendarSyncedAt = 100;
+  const calendarDelete = mutation(
+    'calendar-delete',
+    'calendar-task',
+    'delete',
+    linkedTask.serverVersion,
+    linkedTask.lastMutationId,
+    linkedTask.text,
+    true
+  );
+  calendarResult = applyMutations(calendarState, [calendarDelete], null, []);
+  const calendarTombstone = calendarResult.state.tombstones.find(function(item) {
+    return item.id === 'calendar-task';
+  });
+  assert(calendarTombstone && calendarTombstone.calendarDeleteRequested, 'Google予定の削除希望を墓標へ保持できない');
+  assert(calendarTombstone.calendarEventId === linkedTask.calendarEventId, '削除対象のGoogle予定IDを保持できない');
+
+  let externalDeleteState = normalizeProtocol3State(createEmptySyncState());
+  externalDeleteState.tasks = [{
+    ...task('google-deleted-task', 10, 'Googleから削除'),
+    dueDate: '2026-07-29T10:00',
+    serverVersion: 2,
+    lastMutationId: 'calendar-synced',
+    calendarLinked: true,
+    calendarEventId: 'tj0123456789abcdef0123456789abcdef01234567',
+    calendarSyncVersion: 2,
+    calendarSyncedAt: 100
+  }];
+  const externalPatch = applyTaskJournalCalendarResults(externalDeleteState, {
+    operationResults: [],
+    reconciled: true,
+    activeEventIds: [],
+    reconciledTasks: [{
+      taskId: 'google-deleted-task',
+      eventId: 'tj0123456789abcdef0123456789abcdef01234567',
+      taskVersion: 2
+    }]
+  });
+  assert(externalPatch.changed && externalPatch.externalDeleted === 1, 'Google側の予定削除をTaskJournalへ反映できない');
+  assert(externalDeleteState.tasks.length === 0, 'Google側で削除されたタスクが残る');
+  assert(externalDeleteState.tombstones[0].deleteSource === 'google', 'Google由来の削除履歴を識別できない');
+
+  let concurrentState = normalizeProtocol3State(createEmptySyncState());
+  concurrentState.tasks = [{
+    ...task('concurrent-task', 20, '一覧取得後の更新'),
+    dueDate: '2026-07-29T11:00',
+    serverVersion: 3,
+    lastMutationId: 'newer-mutation',
+    calendarLinked: true,
+    calendarEventId: 'tj89abcdef0123456789abcdef0123456789abcdef',
+    calendarSyncVersion: 3,
+    calendarSyncedAt: 200
+  }];
+  const staleReconcilePatch = applyTaskJournalCalendarResults(concurrentState, {
+    operationResults: [],
+    reconciled: true,
+    activeEventIds: [],
+    reconciledTasks: [{
+      taskId: 'concurrent-task',
+      eventId: 'tj89abcdef0123456789abcdef0123456789abcdef',
+      taskVersion: 2
+    }]
+  });
+  assert(!staleReconcilePatch.changed && concurrentState.tasks.length === 1, '古い一覧取得結果が同時更新後のタスクを削除する');
+
   console.log('OK  端末A/Bの追加を保持');
   console.log('OK  古い全量送信による消失を防止');
   console.log('OK  削除タスクの復活を防止');
@@ -160,11 +250,22 @@ const scenarios = String.raw`
   console.log('OK  v3は削除と編集を競合保存');
   console.log('OK  v3競合解決をサーバーへ確定');
   console.log('OK  v3はジャンルを版番号同期');
+  console.log('OK  メモだけをGoogle予定の説明へ送る');
+  console.log('OK  TaskJournal削除時のGoogle予定削除を保持');
+  console.log('OK  Google予定削除をTaskJournalへ反映');
+  console.log('OK  古いGoogle一覧で同時更新タスクを削除しない');
 })();
 `;
 
 try {
-    vm.runInNewContext(`${gasSource}\n${scenarios}`, { console }, { timeout: 5000 });
+    vm.runInNewContext(`${gasSource}\n${scenarios}`, {
+        console,
+        Utilities: {
+            DigestAlgorithm: { SHA_256: 'SHA_256' },
+            Charset: { UTF_8: 'UTF_8' },
+            computeDigest: () => Array.from({ length: 32 }, (_, index) => index),
+        },
+    }, { timeout: 5000 });
     const clientFunctions = [
         extractFunction(htmlSource, 'uid'),
         extractFunction(htmlSource, 'normalizeTask'),
@@ -201,7 +302,7 @@ try {
       );
       if (sequential.conflicts.length !== 0) throw new Error('端末側で順次編集が競合になる');
       const parsedLog = parseTaskLogEntry('[16:54] Amazonで見つけた');
-      if (parsedLog.date !== '' || parsedLog.time !== '16:54' || parsedLog.text !== 'Amazonで見つけた') throw new Error('旧履歴の時刻と本文を分離できない');
+      if (parsedLog.date !== '' || parsedLog.time !== '16:54' || parsedLog.text !== 'Amazonで見つけた' || parsedLog.kind !== 'history') throw new Error('旧履歴の時刻と本文を分離できない');
       parsedLog.time = '17:20';
       parsedLog.text = '内容を編集';
       if (serializeTaskLogEntry(parsedLog) !== '[17:20] 内容を編集') throw new Error('編集した履歴を互換形式へ戻せない');
@@ -210,6 +311,9 @@ try {
       datedLog.date = '2026-07-06';
       datedLog.time = '10:45';
       if (serializeTaskLogEntry(datedLog) !== '[2026-07-06 10:45] 日付付きの記録') throw new Error('日付付き履歴を保存できない');
+      const memoLog = parseTaskLogEntry('[2026-07-05 11:30] 📝 Google予定の説明');
+      if (memoLog.kind !== 'memo' || memoLog.text !== 'Google予定の説明') throw new Error('メモと履歴を区別できない');
+      if (serializeTaskLogEntry(memoLog) !== '[2026-07-05 11:30] 📝 Google予定の説明') throw new Error('メモ種別を保ったまま保存できない');
 
       const canonicalLegacy = new Map([
         ['already-acknowledged', { id: 'already-acknowledged', text: 'クラウド版', createdAt: 1, updatedAt: 2, serverVersion: 1 }],
@@ -270,6 +374,9 @@ try {
       if (!recovery.outbox[0].blocked || recovery.newlyBlockedCount !== 1) throw new Error('復旧後も未受領の変更を自動停止できない');
 
       pending = [queued('delete-mutation', 'gone-task', 'delete', '削除対象')];
+      pending[0].deleteGoogleCalendarEvent = true;
+      const normalizedCalendarDelete = normalizeOutbox(pending)[0];
+      if (!normalizedCalendarDelete.deleteGoogleCalendarEvent) throw new Error('Google予定削除フラグを端末待ち箱へ保持できない');
       pending[0].ackMisses = 2;
       recovery = reconcileSyncOutbox(pending, ['delete-mutation'], [], [], [], () => 'unused', 40);
       if (recovery.outbox.length !== 0 || recovery.alreadySyncedCount !== 1) throw new Error('既に削除済みの残留変更を完了扱いできない');

@@ -8,7 +8,7 @@
 ## 主な機能
 
 - 📝 タスク管理（すぐ追加・日時を指定する詳細追加・ジャンル・メモ・アプリ内カレンダーでの予定確認）
-- 📅 カレンダー表示（日・週・月。TaskJournalとGoogleの予定を一緒に確認し、日付からタスクを追加）
+- 📅 カレンダー連携（日・週・月表示、Google予定の確認、専用カレンダーへの追加・更新・削除同期）
 - ☁️ Google Drive 自動同期（GAS Webhook 経由・複数端末OK）
 - 🛟 古い未同期タスクを失わず自動復旧（不一致は競合候補として保持）
 - 📚 固定Googleドキュメント経由のNotebookLM自動更新（同期後にGASがバックグラウンド更新）
@@ -26,7 +26,8 @@
 
 ```
 ブラウザ(index.html) ─┬─ GAS ──────── Google Drive（タスク同期）
-                      │                 └─ Googleカレンダー（読み取り専用）
+                      │                 ├─ Googleカレンダー（選択中の予定を読み取り）
+                      │                 └─ TaskJournal専用カレンダー（連携タスクを同期）
                       ├─ Cloudflare Worker ── LM Studio/Gemma（AI）
                       ├─ Cloudflare Worker ── GitHub debug/（エラーログ）
 ```
