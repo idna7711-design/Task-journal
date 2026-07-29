@@ -5,8 +5,8 @@
  *   doPost … アプリから { tasks, categories } を受け取り
  *            - TaskData.json … 同期用DB（tasks配列）を Drive に保存
  *            - 固定IDのGoogleドキュメント … NotebookLM用のタスク一覧を上書き
- *            - 選択中のGoogleカレンダー … アプリのカレンダー画面へ読み取り専用で返す
- *            （予定の作成はアプリの「カレンダーに追加」ボタンからのみ。GAS自動登録は廃止）
+ *            - 選択中のGoogleカレンダー … アプリのカレンダー画面へ返す
+ *            - TaskJournal専用カレンダー … 明示的に連携したタスクを予定として同期
  *   doGet  … TaskData.json の中身（tasks配列）をJSONで返す（他デバイスからのpull用）
  *
  * 修正点（オリジナルからの差分）:
@@ -44,6 +44,13 @@ const CALENDAR_MAX_CALENDARS = 20;
 const CALENDAR_MAX_EVENTS = 300;
 const CALENDAR_CACHE_SECONDS = 180;
 const CALENDAR_CACHE_MAX_BYTES = 90000;
+const TASKJOURNAL_CALENDAR_ID_PROPERTY = 'TASKJOURNAL_CALENDAR_ID';
+const TASKJOURNAL_CALENDAR_NAME = 'TaskJournal';
+const TASKJOURNAL_CALENDAR_RECONCILED_AT_PROPERTY = 'TASKJOURNAL_CALENDAR_RECONCILED_AT';
+const TASKJOURNAL_CALENDAR_CACHE_EPOCH_PROPERTY = 'TASKJOURNAL_CALENDAR_CACHE_EPOCH';
+const TASKJOURNAL_CALENDAR_RECONCILE_INTERVAL_MS = 60000;
+const TASKJOURNAL_CALENDAR_DURATION_MS = 60 * 60 * 1000;
+const TASKJOURNAL_CALENDAR_MAX_WRITES = 20;
 
 function doPost(e) {
   if (!e || !e.postData) {
@@ -110,6 +117,9 @@ function doPost(e) {
         conflictPreservation: true,
         postOnlyToken: true,
         calendarRead: true,
+        calendarWrite: true,
+        calendarDeleteSync: true,
+        calendarWriteTarget: 'dedicated-calendar',
         calendarTokenDerivation: 'hmac-sha256-v1'
       }
     });
@@ -207,6 +217,7 @@ function handleMutationSync(data) {
 
   const lock = LockService.getScriptLock();
   let result;
+  let taskStateChanged = false;
   try {
     lock.waitLock(30000);
     const folder = DriveApp.getFolderById(FOLDER_ID);
@@ -216,6 +227,7 @@ function handleMutationSync(data) {
       result.state.revision = finiteNumberOrZero(state.revision) + 1;
       result.state.updatedAt = Date.now();
       upsertFile(folder, JSON_FILE_NAME, JSON.stringify(result.state));
+      taskStateChanged = true;
     }
   } catch (err) {
     console.error(JSON.stringify({
@@ -230,8 +242,41 @@ function handleMutationSync(data) {
     if (lock.hasLock()) lock.releaseLock();
   }
 
+  // Driveのロック外でGoogle Calendar APIを呼び、他端末のタスク同期を待たせない。
+  const calendarSync = synchronizeTaskJournalCalendar(result.state, requestId);
+  let responseState = result.state;
+  let calendarStateChanged = false;
+  if (calendarSync.operationResults.length > 0 || calendarSync.reconciled) {
+    const patchLock = LockService.getScriptLock();
+    try {
+      patchLock.waitLock(30000);
+      const folder = DriveApp.getFolderById(FOLDER_ID);
+      const latestState = normalizeProtocol3State(readSyncState(folder));
+      const patch = applyTaskJournalCalendarResults(latestState, calendarSync);
+      calendarStateChanged = patch.changed;
+      calendarSync.externalDeleted = patch.externalDeleted;
+      if (patch.externalDeleted > 0) bumpTaskJournalCalendarCacheEpoch();
+      if (patch.changed) {
+        latestState.revision = finiteNumberOrZero(latestState.revision) + 1;
+        latestState.updatedAt = Date.now();
+        upsertFile(folder, JSON_FILE_NAME, JSON.stringify(latestState));
+      }
+      responseState = latestState;
+    } catch (err) {
+      calendarSync.failed += 1;
+      calendarSync.errorCode = calendarSync.errorCode || 'CALENDAR_STATE_PATCH_FAILED';
+      console.error(JSON.stringify({
+        event: 'taskjournal_calendar_state_patch_failed',
+        requestId: requestId,
+        error: err && err.message ? err.message : 'calendar state patch failed'
+      }));
+    } finally {
+      if (patchLock.hasLock()) patchLock.releaseLock();
+    }
+  }
+
   // NotebookLM用ドキュメント更新は応答後に行い、iPhone Safariの待ち時間を短縮する。
-  if (result.changed) scheduleNotebookDocumentRefresh();
+  if (taskStateChanged || calendarStateChanged) scheduleNotebookDocumentRefresh();
 
   console.log(JSON.stringify({
     event: 'taskjournal_request_completed',
@@ -239,21 +284,26 @@ function handleMutationSync(data) {
     action: 'sync',
     elapsedMs: Date.now() - requestStartedAt,
     mutationCount: mutations.length,
-    changed: result.changed
+    changed: taskStateChanged || calendarStateChanged,
+    calendarUpserted: calendarSync.upserted,
+    calendarDeleted: calendarSync.deleted,
+    calendarExternalDeleted: calendarSync.externalDeleted,
+    calendarFailed: calendarSync.failed
   }));
 
   return jsonOutput({
     protocolVersion: PROTOCOL_VERSION,
     requestId: requestId,
-    revision: result.state.revision,
-    tasks: result.state.tasks,
-    tombstones: result.state.tombstones,
-    conflicts: result.state.conflicts,
-    categories: result.state.categories,
-    categoriesVersion: result.state.categoriesVersion,
+    revision: responseState.revision,
+    tasks: responseState.tasks,
+    tombstones: responseState.tombstones,
+    conflicts: responseState.conflicts,
+    categories: responseState.categories,
+    categoriesVersion: responseState.categoriesVersion,
     ackedMutationIds: result.ackedMutationIds,
     mutationResults: result.mutationResults,
-    ackedCategoryMutationId: result.ackedCategoryMutationId
+    ackedCategoryMutationId: result.ackedCategoryMutationId,
+    calendarSync: publicCalendarSyncReport(calendarSync)
   });
 }
 
@@ -357,6 +407,18 @@ function normalizeProtocol3State(state) {
   state.tasks = validateTasks(state.tasks || []).map(function(task) {
     task.serverVersion = positiveIntegerOrZero(task.serverVersion) || 1;
     task.lastMutationId = safeIdOrEmpty(task.lastMutationId);
+    if (task.calendarLinked && task.dueDate) {
+      task.calendarEventId = safeIdOrEmpty(task.calendarEventId) || taskJournalCalendarEventId(task.id);
+      task.calendarSyncVersion = Math.min(
+        positiveIntegerOrZero(task.calendarSyncVersion),
+        task.serverVersion
+      );
+    } else {
+      task.calendarLinked = false;
+      task.calendarEventId = '';
+      task.calendarSyncVersion = 0;
+      task.calendarSyncedAt = 0;
+    }
     task.deleted = false;
     return task;
   });
@@ -422,18 +484,18 @@ function applyMutations(state, mutations, categoryMutation, resolvedConflictIds)
       resultVersion = nextVersion;
       if (mutation.operation === 'delete') {
         delete taskById[mutation.taskId];
-        tombstoneById[mutation.taskId] = {
-          id: mutation.taskId,
-          deletedAt: Date.now(),
-          serverVersion: nextVersion,
-          lastMutationId: mutation.mutationId
-        };
+        tombstoneById[mutation.taskId] = createTaskDeletionTombstone(
+          currentTask || mutation.task,
+          mutation,
+          nextVersion
+        );
       } else {
         const next = validateTasks([mutation.task])[0];
         next.id = mutation.taskId;
         next.serverVersion = nextVersion;
         next.lastMutationId = mutation.mutationId;
         next.deleted = false;
+        prepareCalendarTaskForMutation(next, currentTask);
         taskById[mutation.taskId] = next;
         delete tombstoneById[mutation.taskId];
       }
@@ -489,6 +551,52 @@ function applyMutations(state, mutations, categoryMutation, resolvedConflictIds)
   };
 }
 
+function prepareCalendarTaskForMutation(next, currentTask) {
+  if (!next.calendarLinked || !next.dueDate) {
+    next.calendarLinked = false;
+    next.calendarEventId = '';
+    next.calendarSyncVersion = 0;
+    next.calendarSyncedAt = 0;
+    return next;
+  }
+  const previousEventId = currentTask && currentTask.calendarLinked
+    ? safeIdOrEmpty(currentTask.calendarEventId)
+    : '';
+  next.calendarEventId = previousEventId || taskJournalCalendarEventId(next.id);
+  next.calendarSyncVersion = previousEventId
+    ? Math.min(positiveIntegerOrZero(currentTask.calendarSyncVersion), positiveIntegerOrZero(currentTask.serverVersion))
+    : 0;
+  next.calendarSyncedAt = previousEventId ? finiteNumberOrZero(currentTask.calendarSyncedAt) : 0;
+  return next;
+}
+
+function createTaskDeletionTombstone(task, mutation, nextVersion) {
+  const eventId = task && task.calendarLinked ? safeIdOrEmpty(task.calendarEventId) : '';
+  const deleteRequested = !!eventId && !!mutation.deleteGoogleCalendarEvent;
+  return {
+    id: mutation.taskId,
+    deletedAt: Date.now(),
+    serverVersion: nextVersion,
+    lastMutationId: mutation.mutationId,
+    calendarEventId: eventId,
+    calendarDeleteRequested: deleteRequested,
+    calendarDeletedAt: 0,
+    deleteSource: 'taskjournal'
+  };
+}
+
+function taskJournalCalendarEventId(taskId) {
+  const digest = Utilities.computeDigest(
+    Utilities.DigestAlgorithm.SHA_256,
+    String(taskId),
+    Utilities.Charset.UTF_8
+  );
+  const hex = digest.map(function(value) {
+    return ((value + 256) % 256).toString(16).padStart(2, '0');
+  }).join('');
+  return 'tj' + hex.slice(0, 40);
+}
+
 function deletionVariant(id, text, serverVersion, lastMutationId) {
   return {
     id: id,
@@ -503,6 +611,10 @@ function deletionVariant(id, text, serverVersion, lastMutationId) {
     baseUpdatedAt: 0,
     serverVersion: positiveIntegerOrZero(serverVersion),
     lastMutationId: safeIdOrEmpty(lastMutationId),
+    calendarLinked: false,
+    calendarEventId: '',
+    calendarSyncVersion: 0,
+    calendarSyncedAt: 0,
     deleted: true
   };
 }
@@ -532,8 +644,7 @@ function jsonOutput(value) {
 }
 
 /**
- * GASエディタから初回に1度実行し、Googleカレンダーの読み取り権限を承認する。
- * 予定の作成・変更・削除は行わない。
+ * 旧セットアップとの互換用。新規セットアップではauthorizeCalendarIntegrationを使う。
  */
 function authorizeCalendarRead() {
   const calendars = CalendarApp.getAllCalendars();
@@ -542,6 +653,23 @@ function authorizeCalendarRead() {
     calendarCount: calendars.length
   }));
   return calendars.length;
+}
+
+/**
+ * GASエディタから初回に1度実行する。
+ * 選択中カレンダーの読み取りと、TaskJournal専用カレンダーへの書き込みを承認する。
+ */
+function authorizeCalendarIntegration() {
+  const calendars = CalendarApp.getAllCalendars();
+  const calendarId = getTaskJournalCalendarId(true);
+  const createdCalendar = Calendar.Calendars.get(calendarId);
+  Calendar.Events.list(calendarId, { maxResults: 1, showDeleted: false });
+  console.log(JSON.stringify({
+    event: 'taskjournal_calendar_integration_authorized',
+    readableCalendarCount: calendars.length,
+    dedicatedCalendarIdSet: !!calendarId
+  }));
+  return String(createdCalendar.summary || TASKJOURNAL_CALENDAR_NAME);
 }
 
 function isCalendarReadAuthorized(candidate) {
@@ -582,7 +710,9 @@ function handleCalendarRange(data, requestId, requestStartedAt) {
     });
   }
 
-  const cacheKey = 'calendar-v1-' + range.start.getTime() + '-' + range.end.getTime();
+  const cacheEpoch = PropertiesService.getScriptProperties()
+    .getProperty(TASKJOURNAL_CALENDAR_CACHE_EPOCH_PROPERTY) || '0';
+  const cacheKey = 'calendar-v1-' + cacheEpoch + '-' + range.start.getTime() + '-' + range.end.getTime();
   const cache = CacheService.getScriptCache();
   const cachedText = cache.get(cacheKey);
   if (cachedText) {
@@ -734,6 +864,392 @@ function validateCalendarRange(startValue, endValue) {
 function safeCalendarHexColor(value) {
   const color = String(value || '');
   return /^#[0-9a-f]{6}$/i.test(color) ? color : '#4285f4';
+}
+
+function getTaskJournalCalendarId(createIfMissing) {
+  const properties = PropertiesService.getScriptProperties();
+  const existingId = String(properties.getProperty(TASKJOURNAL_CALENDAR_ID_PROPERTY) || '');
+  if (existingId) {
+    try {
+      Calendar.Calendars.get(existingId);
+      return existingId;
+    } catch (err) {
+      if (isCalendarApiMissing(err)) {
+        const missing = new Error('TaskJournal calendar is missing');
+        missing.code = 'CALENDAR_CONTAINER_MISSING';
+        throw missing;
+      }
+      throw err;
+    }
+  }
+  if (!createIfMissing) return '';
+  const creationLock = LockService.getScriptLock();
+  try {
+    creationLock.waitLock(30000);
+    const createdByOtherRequest = String(
+      properties.getProperty(TASKJOURNAL_CALENDAR_ID_PROPERTY) || ''
+    );
+    if (createdByOtherRequest) {
+      Calendar.Calendars.get(createdByOtherRequest);
+      return createdByOtherRequest;
+    }
+    const created = Calendar.Calendars.insert({
+      summary: TASKJOURNAL_CALENDAR_NAME,
+      description: 'TaskJournalから連携した予定専用',
+      timeZone: Session.getScriptTimeZone()
+    });
+    if (!created || !created.id) throw new Error('TaskJournal calendar could not be created');
+    properties.setProperty(TASKJOURNAL_CALENDAR_ID_PROPERTY, String(created.id));
+    return String(created.id);
+  } finally {
+    if (creationLock.hasLock()) creationLock.releaseLock();
+  }
+}
+
+function synchronizeTaskJournalCalendar(state, requestId) {
+  const report = {
+    upserted: 0,
+    deleted: 0,
+    externalDeleted: 0,
+    failed: 0,
+    pending: 0,
+    reconciled: false,
+    activeEventIds: [],
+    reconciledTasks: [],
+    operationResults: [],
+    errorCode: ''
+  };
+  const upserts = (state.tasks || []).filter(function(task) {
+    return task.calendarLinked
+      && task.calendarEventId
+      && task.dueDate
+      && positiveIntegerOrZero(task.calendarSyncVersion) < positiveIntegerOrZero(task.serverVersion);
+  }).map(function(task) {
+    return { action: 'upsert', task: task };
+  });
+  const deletions = (state.tombstones || []).filter(function(tombstone) {
+    return tombstone.calendarDeleteRequested
+      && tombstone.calendarEventId
+      && !finiteNumberOrZero(tombstone.calendarDeletedAt);
+  }).map(function(tombstone) {
+    return { action: 'delete', tombstone: tombstone };
+  });
+  const allOperations = deletions.concat(upserts);
+  report.pending = allOperations.length;
+
+  if (allOperations.length > 0) {
+    let calendarId;
+    try {
+      calendarId = getTaskJournalCalendarId(upserts.length > 0);
+      if (!calendarId) throw new Error('TaskJournal calendar is not configured');
+    } catch (err) {
+      report.failed = Math.min(allOperations.length, TASKJOURNAL_CALENDAR_MAX_WRITES);
+      report.errorCode = safeCalendarErrorCode(err);
+      console.error(JSON.stringify({
+        event: 'taskjournal_calendar_write_failed',
+        requestId: requestId,
+        stage: 'calendar',
+        errorCode: report.errorCode,
+        operationCount: allOperations.length
+      }));
+      return report;
+    }
+
+    allOperations.slice(0, TASKJOURNAL_CALENDAR_MAX_WRITES).forEach(function(operation) {
+      try {
+        if (operation.action === 'delete') {
+          deleteTaskJournalCalendarEvent(calendarId, operation.tombstone.calendarEventId);
+          report.deleted += 1;
+          report.operationResults.push({
+            action: 'delete',
+            status: 'success',
+            taskId: operation.tombstone.id,
+            eventId: operation.tombstone.calendarEventId
+          });
+        } else {
+          const result = upsertTaskJournalCalendarEvent(calendarId, operation.task);
+          if (result.status === 'external-deleted') {
+            report.operationResults.push({
+              action: 'upsert',
+              status: 'external-deleted',
+              taskId: operation.task.id,
+              eventId: operation.task.calendarEventId,
+              taskVersion: positiveIntegerOrZero(operation.task.serverVersion)
+            });
+          } else {
+            report.upserted += 1;
+            report.operationResults.push({
+              action: 'upsert',
+              status: 'success',
+              taskId: operation.task.id,
+              eventId: operation.task.calendarEventId,
+              taskVersion: positiveIntegerOrZero(operation.task.serverVersion)
+            });
+          }
+        }
+      } catch (err) {
+        report.failed += 1;
+        report.errorCode = report.errorCode || safeCalendarErrorCode(err);
+        report.operationResults.push({
+          action: operation.action,
+          status: 'failed',
+          taskId: operation.action === 'delete' ? operation.tombstone.id : operation.task.id,
+          eventId: operation.action === 'delete'
+            ? operation.tombstone.calendarEventId
+            : operation.task.calendarEventId
+        });
+        console.error(JSON.stringify({
+          event: 'taskjournal_calendar_write_failed',
+          requestId: requestId,
+          stage: operation.action,
+          errorCode: safeCalendarErrorCode(err)
+        }));
+      }
+    });
+    const externallyDeleted = report.operationResults.filter(function(item) {
+      return item.status === 'external-deleted';
+    }).length;
+    report.pending = Math.max(0, allOperations.length - report.upserted - report.deleted - externallyDeleted);
+    if (report.upserted > 0 || report.deleted > 0) bumpTaskJournalCalendarCacheEpoch();
+    return report;
+  }
+
+  const linkedTasks = (state.tasks || []).filter(function(task) {
+    return task.calendarLinked
+      && task.calendarEventId
+      && positiveIntegerOrZero(task.calendarSyncVersion) > 0
+      && positiveIntegerOrZero(task.calendarSyncVersion) >= positiveIntegerOrZero(task.serverVersion);
+  });
+  if (linkedTasks.length === 0 || !taskJournalCalendarReconcileIsDue()) return report;
+
+  try {
+    const calendarId = getTaskJournalCalendarId(false);
+    if (!calendarId) return report;
+    report.activeEventIds = listActiveTaskJournalCalendarEventIds(calendarId);
+    report.reconciledTasks = linkedTasks.map(function(task) {
+      return {
+        taskId: task.id,
+        eventId: task.calendarEventId,
+        taskVersion: positiveIntegerOrZero(task.serverVersion)
+      };
+    });
+    report.reconciled = true;
+    PropertiesService.getScriptProperties().setProperty(
+      TASKJOURNAL_CALENDAR_RECONCILED_AT_PROPERTY,
+      String(Date.now())
+    );
+  } catch (err) {
+    report.failed = 1;
+    report.errorCode = safeCalendarErrorCode(err);
+    console.error(JSON.stringify({
+      event: 'taskjournal_calendar_reconcile_failed',
+      requestId: requestId,
+      errorCode: report.errorCode
+    }));
+  }
+  return report;
+}
+
+function upsertTaskJournalCalendarEvent(calendarId, task) {
+  const start = new Date(task.dueDate);
+  if (isNaN(start.getTime())) throw new Error('Task calendar date is invalid');
+  const end = new Date(start.getTime() + TASKJOURNAL_CALENDAR_DURATION_MS);
+  const resource = {
+    summary: String(task.text || '（無題のタスク）').slice(0, 500),
+    description: taskCalendarMemoDescription(task.logs),
+    start: {
+      dateTime: start.toISOString(),
+      timeZone: Session.getScriptTimeZone()
+    },
+    end: {
+      dateTime: end.toISOString(),
+      timeZone: Session.getScriptTimeZone()
+    },
+    extendedProperties: {
+      private: {
+        taskJournal: '1'
+      }
+    }
+  };
+  const eventId = safeIdOrEmpty(task.calendarEventId);
+  if (!eventId) throw new Error('Task calendar event ID is missing');
+
+  if (positiveIntegerOrZero(task.calendarSyncVersion) > 0) {
+    let existing;
+    try {
+      existing = Calendar.Events.get(calendarId, eventId);
+    } catch (err) {
+      if (isCalendarApiMissing(err)) return { status: 'external-deleted' };
+      throw err;
+    }
+    if (!existing || existing.status === 'cancelled') return { status: 'external-deleted' };
+    Calendar.Events.patch(resource, calendarId, eventId);
+    return { status: 'success' };
+  }
+
+  try {
+    Calendar.Events.insert(Object.assign({ id: eventId }, resource), calendarId);
+  } catch (err) {
+    if (!isCalendarApiConflict(err)) throw err;
+    const existing = Calendar.Events.get(calendarId, eventId);
+    if (!existing || existing.status === 'cancelled') return { status: 'external-deleted' };
+    Calendar.Events.patch(resource, calendarId, eventId);
+  }
+  return { status: 'success' };
+}
+
+function deleteTaskJournalCalendarEvent(calendarId, eventId) {
+  try {
+    Calendar.Events.remove(calendarId, safeIdOrEmpty(eventId));
+  } catch (err) {
+    if (!isCalendarApiMissing(err)) throw err;
+  }
+}
+
+function taskCalendarMemoDescription(logs) {
+  if (!Array.isArray(logs)) return '';
+  return logs.map(function(log) {
+    const value = String(log || '');
+    const match = value.match(/^(\[(?:\d{4}-\d{2}-\d{2}\s+)?\d{1,2}:\d{2}\]\s*)?📝\s*([\s\S]*)$/);
+    if (!match || !String(match[2] || '').trim()) return '';
+    return String(match[1] || '') + String(match[2] || '').trim();
+  }).filter(Boolean).join('\n\n').slice(0, 8000);
+}
+
+function listActiveTaskJournalCalendarEventIds(calendarId) {
+  const ids = [];
+  let pageToken = '';
+  let pageCount = 0;
+  do {
+    const options = {
+      maxResults: 2500,
+      showDeleted: false
+    };
+    if (pageToken) options.pageToken = pageToken;
+    const response = Calendar.Events.list(calendarId, options);
+    (response.items || []).forEach(function(event) {
+      if (event && event.id && event.status !== 'cancelled') ids.push(String(event.id));
+    });
+    pageToken = String(response.nextPageToken || '');
+    pageCount += 1;
+    if (pageCount > 10) throw new Error('TaskJournal calendar pagination exceeded');
+  } while (pageToken);
+  return ids;
+}
+
+function taskJournalCalendarReconcileIsDue() {
+  const last = finiteNumberOrZero(
+    PropertiesService.getScriptProperties().getProperty(TASKJOURNAL_CALENDAR_RECONCILED_AT_PROPERTY)
+  );
+  return Date.now() - last >= TASKJOURNAL_CALENDAR_RECONCILE_INTERVAL_MS;
+}
+
+function applyTaskJournalCalendarResults(state, report) {
+  const taskById = {};
+  const tombstoneById = {};
+  let changed = false;
+  let externalDeleted = 0;
+  state.tasks.forEach(function(task) { taskById[task.id] = task; });
+  state.tombstones.forEach(function(tombstone) { tombstoneById[tombstone.id] = tombstone; });
+
+  function deleteTaskFromGoogle(task) {
+    if (!task || !taskById[task.id]) return;
+    delete taskById[task.id];
+    tombstoneById[task.id] = {
+      id: task.id,
+      deletedAt: Date.now(),
+      serverVersion: positiveIntegerOrZero(task.serverVersion) + 1,
+      lastMutationId: 'calendar-' + simpleHash(task.calendarEventId + '|' + Date.now()),
+      calendarEventId: task.calendarEventId,
+      calendarDeleteRequested: false,
+      calendarDeletedAt: Date.now(),
+      deleteSource: 'google'
+    };
+    changed = true;
+    externalDeleted += 1;
+  }
+
+  report.operationResults.forEach(function(result) {
+    if (result.status === 'failed') return;
+    if (result.action === 'delete') {
+      const tombstone = tombstoneById[result.taskId];
+      if (tombstone && tombstone.calendarEventId === result.eventId && !tombstone.calendarDeletedAt) {
+        tombstone.calendarDeletedAt = Date.now();
+        changed = true;
+      }
+      return;
+    }
+    const task = taskById[result.taskId];
+    if (!task || task.calendarEventId !== result.eventId) return;
+    if (result.status === 'external-deleted') {
+      if (positiveIntegerOrZero(task.serverVersion) !== positiveIntegerOrZero(result.taskVersion)) return;
+      deleteTaskFromGoogle(task);
+      return;
+    }
+    const syncedVersion = positiveIntegerOrZero(result.taskVersion);
+    if (syncedVersion > positiveIntegerOrZero(task.calendarSyncVersion)) {
+      task.calendarSyncVersion = Math.min(syncedVersion, positiveIntegerOrZero(task.serverVersion));
+      task.calendarSyncedAt = Date.now();
+      changed = true;
+    }
+  });
+
+  if (report.reconciled) {
+    const active = {};
+    report.activeEventIds.forEach(function(eventId) { active[eventId] = true; });
+    (report.reconciledTasks || []).forEach(function(snapshot) {
+      const task = taskById[snapshot.taskId];
+      if (!task
+          || task.calendarEventId !== snapshot.eventId
+          || positiveIntegerOrZero(task.serverVersion) !== positiveIntegerOrZero(snapshot.taskVersion)) {
+        return;
+      }
+      const calendarIsCurrent = task.calendarLinked
+        && task.calendarEventId
+        && positiveIntegerOrZero(task.calendarSyncVersion) > 0
+        && positiveIntegerOrZero(task.calendarSyncVersion) >= positiveIntegerOrZero(task.serverVersion);
+      if (calendarIsCurrent && !active[task.calendarEventId]) deleteTaskFromGoogle(task);
+    });
+  }
+
+  state.tasks = Object.keys(taskById).map(function(id) { return taskById[id]; });
+  state.tombstones = Object.keys(tombstoneById).map(function(id) { return tombstoneById[id]; });
+  return { changed: changed, externalDeleted: externalDeleted };
+}
+
+function bumpTaskJournalCalendarCacheEpoch() {
+  const properties = PropertiesService.getScriptProperties();
+  const current = positiveIntegerOrZero(properties.getProperty(TASKJOURNAL_CALENDAR_CACHE_EPOCH_PROPERTY));
+  properties.setProperty(TASKJOURNAL_CALENDAR_CACHE_EPOCH_PROPERTY, String(current + 1));
+}
+
+function publicCalendarSyncReport(report) {
+  return {
+    upserted: positiveIntegerOrZero(report.upserted),
+    deleted: positiveIntegerOrZero(report.deleted),
+    externalDeleted: positiveIntegerOrZero(report.externalDeleted),
+    failed: positiveIntegerOrZero(report.failed),
+    pending: positiveIntegerOrZero(report.pending),
+    reconciled: !!report.reconciled,
+    errorCode: optionalString(report.errorCode, 80, 'calendar error code') || ''
+  };
+}
+
+function safeCalendarErrorCode(err) {
+  if (err && err.code && /^[A-Z0-9_]{1,80}$/.test(String(err.code))) return String(err.code);
+  if (isCalendarApiMissing(err)) return 'CALENDAR_EVENT_NOT_FOUND';
+  if (isCalendarApiConflict(err)) return 'CALENDAR_EVENT_CONFLICT';
+  return 'CALENDAR_API_FAILED';
+}
+
+function isCalendarApiMissing(err) {
+  const message = String(err && err.message ? err.message : err || '').toLowerCase();
+  return /\b404\b|\b410\b|not found|gone/.test(message);
+}
+
+function isCalendarApiConflict(err) {
+  const message = String(err && err.message ? err.message : err || '').toLowerCase();
+  return /\b409\b|already exists|duplicate/.test(message);
 }
 
 /**
@@ -937,6 +1453,10 @@ function validateTasks(tasks) {
       baseUpdatedAt: finiteNumberOrZero(task.baseUpdatedAt),
       serverVersion: positiveIntegerOrZero(task.serverVersion),
       lastMutationId: safeIdOrEmpty(task.lastMutationId),
+      calendarLinked: !!task.calendarLinked,
+      calendarEventId: safeIdOrEmpty(task.calendarEventId),
+      calendarSyncVersion: positiveIntegerOrZero(task.calendarSyncVersion),
+      calendarSyncedAt: finiteNumberOrZero(task.calendarSyncedAt),
       deleted: !!task.deleted
     };
   });
@@ -955,7 +1475,13 @@ function validateTombstones(tombstones) {
       id: requireSafeId(tombstone.id, 'tombstone id'),
       deletedAt: deletedAt,
       serverVersion: positiveIntegerOrZero(tombstone.serverVersion),
-      lastMutationId: safeIdOrEmpty(tombstone.lastMutationId)
+      lastMutationId: safeIdOrEmpty(tombstone.lastMutationId),
+      calendarEventId: safeIdOrEmpty(tombstone.calendarEventId),
+      calendarDeleteRequested: !!tombstone.calendarDeleteRequested,
+      calendarDeletedAt: finiteNumberOrZero(tombstone.calendarDeletedAt),
+      deleteSource: ['taskjournal', 'google'].indexOf(tombstone.deleteSource) >= 0
+        ? tombstone.deleteSource
+        : ''
     };
   });
 }
@@ -982,7 +1508,8 @@ function validateConflicts(conflicts) {
 function taskContentSignature(task) {
   return JSON.stringify([
     task.text || '', task.dueDate || null, task.category || null,
-    task.status || 'todo', !!task.pinned, Array.isArray(task.logs) ? task.logs : [], !!task.deleted
+    task.status || 'todo', !!task.pinned, Array.isArray(task.logs) ? task.logs : [],
+    !!task.calendarLinked, !!task.deleted
   ]);
 }
 
@@ -1040,7 +1567,8 @@ function validateMutations(mutations) {
       parentMutationId: safeIdOrEmpty(mutation.parentMutationId),
       resolvesConflictId: mutation.resolvesConflictId ? requireSafeId(mutation.resolvesConflictId, 'resolved conflict id', 180) : '',
       task: task,
-      createdAt: finiteNumberOrZero(mutation.createdAt)
+      createdAt: finiteNumberOrZero(mutation.createdAt),
+      deleteGoogleCalendarEvent: !!mutation.deleteGoogleCalendarEvent
     };
   });
 }

@@ -151,7 +151,7 @@ for (const requiredGasDiagnostic of [
 }
 for (const lightweightPullSafety of [
     'if (result.changed) {',
-    'changed: result.changed',
+    'changed: taskStateChanged || calendarStateChanged',
 ]) {
     if (gasCode.includes(lightweightPullSafety)) console.log(`OK  変更なし同期を軽量化: ${lightweightPullSafety}`);
     else { failed++; console.error(`NG  変更なし同期の軽量化がありません: ${lightweightPullSafety}`); }
@@ -161,7 +161,7 @@ for (const requiredLockFix of [
     'const documentLock = LockService.getUserLock();',
     'function scheduleNotebookDocumentRefresh()',
     'function runPendingNotebookRefresh()',
-    'if (result.changed) scheduleNotebookDocumentRefresh();',
+    'if (taskStateChanged || calendarStateChanged) scheduleNotebookDocumentRefresh();',
     "console.error('Notebook document refresh failed:",
 ]) {
     if (gasCode.includes(requiredLockFix)) console.log(`OK  GASロック短縮: ${requiredLockFix}`);
@@ -244,13 +244,13 @@ for (const requiredDetailedTaskFeature of [
     "window.openDetailedTaskModal = (presetDateTime = '') =>",
     "let scheduleModalMode = 'edit';",
     "configureScheduleModal('create');",
-    "configureScheduleModal('edit');",
+    "configureScheduleModal('edit', task);",
     "const isCreate = scheduleModalMode === 'create';",
     'タスクを詳しく追加',
-    '追加してカレンダーで見る',
-    'function showTaskInAppCalendar(dueDate)',
+    'Googleカレンダーにも追加',
+    'function showTaskInAppCalendar(dueDate, message, type',
     "window.setAppView('calendar');",
-    'カレンダーで見るには予定日時を入力してください。',
+    'Googleカレンダーと連携中のタスクには予定日時が必要です。',
 ]) {
     if (indexHtml.includes(requiredDetailedTaskFeature)) console.log(`OK  詳細タスク追加: ${requiredDetailedTaskFeature}`);
     else { failed++; console.error(`NG  詳細タスク追加が不完全です: ${requiredDetailedTaskFeature}`); }
@@ -337,8 +337,9 @@ for (const requiredExclusiveStorageBoxFeature of [
     else { failed++; console.error(`NG  格納ボックス排他開閉が不完全です: ${requiredExclusiveStorageBoxFeature}`); }
 }
 const serviceWorkerCode = readFileSync(join(root, 'sw.js'), 'utf8');
-if (indexHtml.includes("const SW_CACHE_NAME = 'taskjournal-cache-v14';")
-    && serviceWorkerCode.includes("const CACHE = 'taskjournal-cache-v14';")) {
+const indexCacheName = indexHtml.match(/const SW_CACHE_NAME = '([^']+)';/)?.[1] || '';
+const workerCacheName = serviceWorkerCode.match(/const CACHE = '([^']+)';/)?.[1] || '';
+if (indexCacheName && indexCacheName === workerCacheName) {
     console.log('OK  Service Workerキャッシュ名が一致');
 } else {
     failed++;
@@ -376,6 +377,10 @@ for (const requiredCalendarBackendFeature of [
     'const CALENDAR_MAX_RANGE_DAYS = 45;',
     'const CALENDAR_MAX_EVENTS = 300;',
     "calendarTokenDerivation: 'hmac-sha256-v1'",
+    'function authorizeCalendarIntegration()',
+    'function synchronizeTaskJournalCalendar(',
+    'function taskCalendarMemoDescription(',
+    'function applyTaskJournalCalendarResults(',
 ]) {
     if (gasCode.includes(requiredCalendarBackendFeature)) console.log(`OK  カレンダーGAS: ${requiredCalendarBackendFeature}`);
     else { failed++; console.error(`NG  カレンダーGASが不完全です: ${requiredCalendarBackendFeature}`); }
@@ -383,19 +388,61 @@ for (const requiredCalendarBackendFeature of [
 const calendarOauthScopes = Array.isArray(gasManifest.oauthScopes)
     ? gasManifest.oauthScopes.filter(scope => String(scope).includes('/auth/calendar'))
     : [];
-if (calendarOauthScopes.length === 1
-    && calendarOauthScopes[0] === 'https://www.googleapis.com/auth/calendar.readonly') {
-    console.log('OK  Googleカレンダー権限は読み取り専用');
+if (calendarOauthScopes.length === 2
+    && calendarOauthScopes.includes('https://www.googleapis.com/auth/calendar.readonly')
+    && calendarOauthScopes.includes('https://www.googleapis.com/auth/calendar.app.created')
+    && !calendarOauthScopes.includes('https://www.googleapis.com/auth/calendar')
+    && !calendarOauthScopes.includes('https://www.googleapis.com/auth/calendar.events')) {
+    console.log('OK  Googleカレンダー権限は読取＋アプリ作成予定に限定');
 } else {
     failed++;
-    console.error('NG  Googleカレンダーの読み取り専用権限がありません');
+    console.error('NG  Googleカレンダー権限が必要最小限ではありません');
 }
-const executableGas = gasCode.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
-if (!/\b(?:CalendarApp|calendar|event)\.(?:create|set|delete)[A-Z]\w*\s*\(/.test(executableGas)) {
-    console.log('OK  GASはGoogleカレンダーを書き換えない');
+const calendarServices = gasManifest.dependencies && Array.isArray(gasManifest.dependencies.enabledAdvancedServices)
+    ? gasManifest.dependencies.enabledAdvancedServices
+    : [];
+if (calendarServices.some(service => service.serviceId === 'calendar'
+    && service.userSymbol === 'Calendar'
+    && service.version === 'v3')) {
+    console.log('OK  Google Calendar Advanced Serviceを明示');
 } else {
     failed++;
-    console.error('NG  GASにGoogleカレンダーの書き換え処理があります');
+    console.error('NG  Google Calendar Advanced Serviceの設定がありません');
+}
+for (const requiredCalendarWriteSafety of [
+    "const TASKJOURNAL_CALENDAR_NAME = 'TaskJournal';",
+    "calendarWriteTarget: 'dedicated-calendar'",
+    'Calendar.Calendars.insert({',
+    'Calendar.Events.insert(Object.assign({ id: eventId }, resource), calendarId);',
+    'Calendar.Events.remove(calendarId, safeIdOrEmpty(eventId));',
+    "deleteSource: 'google'",
+    "deleteSource: 'taskjournal'",
+    "match = value.match(/^(\\[(?:\\d{4}-\\d{2}-\\d{2}\\s+)?\\d{1,2}:\\d{2}\\]\\s*)?📝",
+]) {
+    if (gasCode.includes(requiredCalendarWriteSafety)) {
+        console.log(`OK  Googleカレンダー安全連携: ${requiredCalendarWriteSafety}`);
+    } else {
+        failed++;
+        console.error(`NG  Googleカレンダー安全連携が不完全です: ${requiredCalendarWriteSafety}`);
+    }
+}
+for (const requiredCalendarClientFeature of [
+    'id="confirm-secondary-btn"',
+    "secondaryLabel: 'Google予定は残す'",
+    'deleteGoogleCalendarEvent: operation ===',
+    'function archiveTasksDeletedFromGoogle(',
+    "item.deleteSource === 'google'",
+    "kind: isMemo ? 'memo' : 'history'",
+    "entry.kind === 'memo'",
+    'function runImmediateSync()',
+    'の削除を採用しますか？',
+]) {
+    if (indexHtml.includes(requiredCalendarClientFeature)) {
+        console.log(`OK  Googleカレンダー端末連携: ${requiredCalendarClientFeature}`);
+    } else {
+        failed++;
+        console.error(`NG  Googleカレンダー端末連携が不完全です: ${requiredCalendarClientFeature}`);
+    }
 }
 if (!indexHtml.includes('id="trivia-bar"') && !indexHtml.includes('id="trivia-modal"')) console.log('OK  豆知識UIを撤去');
 else { failed++; console.error('NG  豆知識UIが残っています'); }
