@@ -154,55 +154,140 @@
 }
 .sync-status-button:hover { border-color: #e4e4e7; }
 
-/* 検索とジャンルは、必要なときだけ1つの小さなパネルから開く。 */
+/* 検索とジャンル管理を同じ操作列に置き、絞り込み内容は一覧を押し下げて表示する。 */
+.task-section-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+}
+.task-tool-row {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.5rem;
+}
 .task-filter-panel {
-    position: relative;
     flex: 0 0 auto;
 }
-.task-filter-summary {
+.task-filter-summary,
+.task-genre-manage-button {
     display: inline-flex;
-    min-height: 2.25rem;
+    min-height: 2.75rem;
     align-items: center;
+    justify-content: center;
     gap: 0.4rem;
-    padding: 0.45rem 0.7rem;
+    padding: 0.55rem 0.8rem;
     border: 1px solid #e4e4e7;
     border-radius: 0.75rem;
     background: #fff;
     color: #52525b;
-    font-size: 0.72rem;
+    font-size: 0.75rem;
     font-weight: 800;
-    list-style: none;
     cursor: pointer;
+    white-space: nowrap;
+    transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+.task-filter-summary {
+    list-style: none;
 }
 .task-filter-summary::-webkit-details-marker,
 .task-actions-summary::-webkit-details-marker { display: none; }
+.task-filter-summary:hover,
+.task-genre-manage-button:hover {
+    border-color: #e8b894;
+    background: #fff8f2;
+    color: #a8481e;
+}
 .task-filter-panel[open] .task-filter-summary {
     border-color: #d06a38;
     color: #a8481e;
     background: #fff8f2;
 }
+.task-filter-count {
+    min-width: 1.25rem;
+    height: 1.25rem;
+    padding: 0 0.35rem;
+    border-radius: 9999px;
+    background: #d06a38;
+    color: #fff;
+    font-size: 0.66rem;
+    line-height: 1.25rem;
+    text-align: center;
+}
+.task-filter-chevron {
+    transition: transform 0.15s ease;
+}
+.task-filter-panel[open] .task-filter-chevron {
+    transform: rotate(180deg);
+}
 .task-filter-content {
-    position: absolute;
-    top: calc(100% + 0.5rem);
-    right: 0;
-    z-index: 30;
-    width: min(28rem, calc(100vw - 2rem));
-    padding: 0.75rem;
+    display: grid;
+    gap: 0.9rem;
+    margin-bottom: 1rem;
+    padding: 1rem;
     border: 1px solid #e4e4e7;
     border-radius: 1rem;
-    background: #fff;
-    box-shadow: 0 16px 35px rgba(24, 24, 27, 0.14);
+    background: #fafafa;
+}
+.task-filter-content[hidden] {
+    display: none;
+}
+.task-filter-group {
+    min-width: 0;
+}
+.task-filter-label {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    margin-bottom: 0.45rem;
+    color: #52525b;
+    font-size: 0.72rem;
+    font-weight: 800;
+}
+.task-filter-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid #e4e4e7;
+}
+.task-filter-active-summary {
+    min-width: 0;
+    color: #71717a;
+    font-size: 0.72rem;
+    font-weight: 700;
+    line-height: 1.5;
+}
+.clear-task-filters {
+    flex: 0 0 auto;
+    min-height: 2.5rem;
+    padding: 0.5rem 0.8rem;
+    border-radius: 0.75rem;
+    color: #a8481e;
+    font-size: 0.72rem;
+    font-weight: 800;
+}
+.clear-task-filters:hover {
+    background: #fff0e5;
 }
 .genre-filter-scroll {
     display: flex;
-    flex-wrap: nowrap;
+    flex-wrap: wrap;
     gap: 0.45rem;
-    margin-top: 0.65rem;
-    padding: 0.1rem 0 0.35rem;
-    overflow-x: auto;
-    overscroll-behavior-inline: contain;
+    padding: 0.05rem 0;
 }
 .genre-filter-scroll > * { flex: 0 0 auto; }
+
+@media (min-width: 768px) {
+    .task-filter-content {
+        grid-template-columns: minmax(14rem, 0.8fr) minmax(0, 1.4fr);
+    }
+    .task-filter-footer {
+        grid-column: 1 / -1;
+    }
+}
 
 /* タスクカードは主要情報を優先し、副操作は開いたときだけ表示する。 */
 .task-actions-menu {
@@ -569,7 +654,8 @@ html.dark .task-action-item {
 html.dark .app-view-button { color: #a49685; }
 html.dark .app-view-button.is-active,
 html.dark .task-filter-summary,
-html.dark .task-filter-content {
+html.dark .task-filter-content,
+html.dark .task-genre-manage-button {
     border-color: #3d332a;
     background: #262019;
     color: #e8e0d6;
@@ -580,6 +666,11 @@ html.dark .task-actions-menu[open] .task-actions-summary {
     background: #33231a;
     color: #e8a37e;
 }
+html.dark .task-filter-label,
+html.dark .task-filter-active-summary { color: #c7baac; }
+html.dark .task-filter-footer { border-color: #3d332a; }
+html.dark .clear-task-filters { color: #e8a37e; }
+html.dark .clear-task-filters:hover { background: #33231a; }
 html.dark .task-actions-menu { border-color: #332a22; }
 html.dark .task-action-item { color: #d8ccbf; }
 html.dark .task-action-item:hover { background: #33231a; color: #e8a37e; }
@@ -602,6 +693,29 @@ html.dark .calendar-add-task {
     .sync-status-label { display: inline; }
     .task-log-preview { display: none; }
     .task-action-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .task-section-toolbar {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+    .task-tool-row {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        width: 100%;
+    }
+    .task-filter-panel,
+    .task-filter-summary,
+    .task-genre-manage-button { width: 100%; }
+    .task-filter-summary,
+    .task-genre-manage-button {
+        min-height: 2.75rem;
+        padding-inline: 0.55rem;
+    }
+    .task-search-input { font-size: 1rem; }
+    .task-filter-footer {
+        align-items: stretch;
+        flex-direction: column;
+    }
+    .clear-task-filters { width: 100%; }
     .calendar-shell {
         border-radius: 1.2rem;
         padding: 0.75rem;
@@ -873,30 +987,53 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
             <div class="bg-white rounded-2xl md:rounded-[2rem] p-3 md:p-6 shadow-sm border border-zinc-200/60 flex flex-col gap-4 md:gap-6">
 
                 <div>
-                    <div class="flex items-center justify-between mb-3 px-1 gap-2">
+                    <div class="task-section-toolbar mb-3 px-1">
                         <div class="flex items-center gap-3 min-w-0">
                             <div class="w-2 h-2 rounded-full bg-violet-500 shrink-0"></div>
                             <h3 class="text-sm font-bold text-zinc-800 tracking-wide whitespace-nowrap">進行中・未完了</h3>
                             <span id="active-count" class="shrink-0 inline-flex items-center justify-center min-w-[1.25rem] h-5 px-1.5 rounded-full bg-violet-100 text-violet-700 text-[11px] font-bold">0</span>
                         </div>
-                        <details id="task-filter-panel" class="task-filter-panel">
-                            <summary class="task-filter-summary" aria-label="タスクを検索・絞り込み">
-                                <i data-lucide="sliders-horizontal" class="w-4 h-4" aria-hidden="true"></i>
-                                <span id="filter-summary-label">検索・絞り込み</span>
-                            </summary>
-                            <div class="task-filter-content">
-                                <div class="relative">
-                                    <div class="absolute inset-y-0 left-3 flex items-center pointer-events-none">
-                                        <i data-lucide="search" class="w-4 h-4 text-zinc-300"></i>
-                                    </div>
-                                    <input type="search" id="task-search" placeholder="タスクを検索（本文・メモ）" autocomplete="off" class="w-full bg-zinc-50 border-2 border-zinc-100 rounded-xl pl-10 pr-4 py-2.5 text-xs font-medium text-zinc-800 placeholder-zinc-400 focus:outline-none focus:border-violet-300 focus:bg-white transition-all">
+                        <div class="task-tool-row" aria-label="タスク一覧の表示設定">
+                            <details id="task-filter-panel" class="task-filter-panel">
+                                <summary class="task-filter-summary" aria-label="タスクを検索・絞り込み" aria-controls="task-filter-content" aria-expanded="false">
+                                    <i data-lucide="sliders-horizontal" class="w-4 h-4" aria-hidden="true"></i>
+                                    <span id="filter-summary-label">検索・絞り込み</span>
+                                    <span id="filter-summary-count" class="task-filter-count hidden" aria-hidden="true">0</span>
+                                    <i data-lucide="chevron-down" class="task-filter-chevron w-4 h-4" aria-hidden="true"></i>
+                                </summary>
+                            </details>
+                            <button type="button" id="task-genre-manage-btn" class="task-genre-manage-button" onclick="openGenreManagementFromTaskList()" aria-haspopup="dialog">
+                                <i data-lucide="tags" class="w-4 h-4" aria-hidden="true"></i>
+                                <span>ジャンル管理</span>
+                            </button>
+                        </div>
+                    </div>
+                    <div id="task-filter-content" class="task-filter-content" hidden>
+                        <div class="task-filter-group">
+                            <label for="task-search" class="task-filter-label">
+                                <i data-lucide="search" class="w-4 h-4" aria-hidden="true"></i>
+                                キーワード
+                            </label>
+                            <div class="relative">
+                                <div class="absolute inset-y-0 left-3 flex items-center pointer-events-none">
+                                    <i data-lucide="search" class="w-4 h-4 text-zinc-300" aria-hidden="true"></i>
                                 </div>
-                                <div id="genre-filter" class="genre-filter-scroll" aria-label="ジャンルで絞り込み"></div>
-                                <button type="button" id="clear-task-filters" onclick="clearTaskFilters()" class="hidden w-full mt-1 px-3 py-2 text-xs font-bold text-zinc-500 hover:text-violet-700 hover:bg-violet-50 rounded-xl transition-colors">
-                                    検索・絞り込みを解除
-                                </button>
+                                <input type="search" id="task-search" placeholder="タイトル・メモを検索" autocomplete="off" class="task-search-input w-full bg-white border-2 border-zinc-100 rounded-xl pl-10 pr-4 py-2.5 text-sm font-medium text-zinc-800 placeholder-zinc-400 focus:outline-none focus:border-violet-300 transition-all">
                             </div>
-                        </details>
+                        </div>
+                        <div class="task-filter-group">
+                            <div id="genre-filter-label" class="task-filter-label">
+                                <i data-lucide="tags" class="w-4 h-4" aria-hidden="true"></i>
+                                ジャンル
+                            </div>
+                            <div id="genre-filter" class="genre-filter-scroll" aria-labelledby="genre-filter-label"></div>
+                        </div>
+                        <div class="task-filter-footer">
+                            <p id="filter-active-summary" class="task-filter-active-summary" aria-live="polite">条件を選ぶと、表示するタスクを絞れます。</p>
+                            <button type="button" id="clear-task-filters" onclick="clearTaskFilters()" class="clear-task-filters hidden">
+                                全条件を解除
+                            </button>
+                        </div>
                     </div>
                     <!-- 起動直後はスケルトンを表示し、初回render()で実データに置き換わる -->
                     <div id="active-task-list" class="space-y-3">
@@ -1302,8 +1439,8 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
         // - pull: 起動時・復帰時・同期アイコンクリック時に取得し、削除優先でローカルへ反映
 
         // ---- State ----
-        const APP_BUILD = '2026-07-29-google-calendar-two-way-sync';
-        const SW_CACHE_NAME = 'taskjournal-cache-v15';
+        const APP_BUILD = '2026-07-29-filter-tools-clarity';
+        const SW_CACHE_NAME = 'taskjournal-cache-v16';
         const SYNC_ACK_MISS_LIMIT = 3;
         const SYNC_RECOVERY_MAX = 1;
         const SYNC_RECOVERY_ARCHIVE_LIMIT = 50;
@@ -4655,6 +4792,10 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
             document.getElementById('genre-modal').classList.remove('hidden');
             lucide.createIcons();
         };
+        window.openGenreManagementFromTaskList = () => {
+            setTaskFilterPanelOpen(false);
+            openGenreModal();
+        };
         window.closeGenreModal = () => document.getElementById('genre-modal').classList.add('hidden');
 
         function renderGenreList() {
@@ -5144,10 +5285,55 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
             el.innerHTML = html;
             const activeCount = activeGenreFilters.size + (searchQuery ? 1 : 0);
             const label = document.getElementById('filter-summary-label');
+            const countBadge = document.getElementById('filter-summary-count');
+            const activeSummary = document.getElementById('filter-active-summary');
+            const summary = document.querySelector('#task-filter-panel > summary');
             const clearButton = document.getElementById('clear-task-filters');
-            if (label) label.textContent = activeCount > 0 ? `絞り込み中 ${activeCount}` : '検索・絞り込み';
+            const conditions = [];
+            if (searchQuery) conditions.push(`検索「${searchQuery}」`);
+            for (const value of activeGenreFilters) {
+                if (value === '__none__') {
+                    conditions.push('ジャンル「未分類」');
+                    continue;
+                }
+                const genre = getGenre(value);
+                if (genre) conditions.push(`ジャンル「${genre.name}」`);
+            }
+            if (label) label.textContent = activeCount > 0 ? '絞り込み中' : '検索・絞り込み';
+            if (countBadge) {
+                countBadge.textContent = String(activeCount);
+                countBadge.classList.toggle('hidden', activeCount === 0);
+                countBadge.setAttribute('aria-hidden', String(activeCount === 0));
+            }
+            if (activeSummary) {
+                activeSummary.textContent = activeCount > 0
+                    ? `適用中：${conditions.join('、')}`
+                    : '条件を選ぶと、表示するタスクを絞れます。';
+            }
+            if (summary) {
+                summary.setAttribute('aria-label', activeCount > 0
+                    ? `タスクを検索・絞り込み。${conditions.join('、')}を適用中`
+                    : 'タスクを検索・絞り込み');
+            }
             if (clearButton) clearButton.classList.toggle('hidden', activeCount === 0);
         }
+
+        function applyTaskFilterPanelState() {
+            const panel = document.getElementById('task-filter-panel');
+            const content = document.getElementById('task-filter-content');
+            if (!panel || !content) return;
+            const isOpen = panel.open;
+            content.hidden = !isOpen;
+            const summary = panel.querySelector('summary');
+            if (summary) summary.setAttribute('aria-expanded', String(isOpen));
+        }
+
+        window.setTaskFilterPanelOpen = (open) => {
+            const panel = document.getElementById('task-filter-panel');
+            if (!panel) return;
+            panel.open = !!open;
+            applyTaskFilterPanelState();
+        };
 
         function applyCompletedSectionState() {
             const list = document.getElementById('completed-task-list');
@@ -5379,15 +5565,22 @@ html.dark input::placeholder, html.dark textarea::placeholder { color: #7a6e60; 
                 } else if (e.key === '/') {
                     e.preventDefault();
                     if (appView !== 'tasks') window.setAppView('tasks');
-                    document.getElementById('task-filter-panel').open = true;
+                    setTaskFilterPanelOpen(true);
                     document.getElementById('task-search').focus();
                 }
             });
 
-            // 絞り込みパネル外を押したら閉じ、タスク操作を邪魔しない。
+            const taskFilterPanel = document.getElementById('task-filter-panel');
+            taskFilterPanel.addEventListener('toggle', applyTaskFilterPanelState);
+            applyTaskFilterPanelState();
+
+            // 絞り込み領域外を押したら閉じ、タスク操作を邪魔しない。
             document.addEventListener('click', (e) => {
                 const panel = document.getElementById('task-filter-panel');
-                if (panel && panel.open && !panel.contains(e.target)) panel.open = false;
+                const content = document.getElementById('task-filter-content');
+                if (panel && panel.open && !panel.contains(e.target) && !content.contains(e.target)) {
+                    setTaskFilterPanelOpen(false);
+                }
             });
 
             // スワイプ操作（タッチ端末）: 右スワイプ=完了/未完了の切替、左スワイプ=削除（元に戻すトースト付き）
